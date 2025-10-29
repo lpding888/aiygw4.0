@@ -247,6 +247,298 @@ class AdminController {
       next(error);
     }
   }
+
+  /**
+   * 获取所有功能卡片（包括禁用的,但不包括软删除的）
+   * GET /api/admin/features
+   */
+  async getFeatures(req, res, next) {
+    try {
+      const features = await db('feature_definitions')
+        .whereNull('deleted_at')
+        .select('*')
+        .orderBy('created_at', 'desc');
+
+      // 反序列化 allowed_accounts 为数组
+      features.forEach(f => {
+        if (f.allowed_accounts) {
+          try {
+            f.allowed_accounts = JSON.parse(f.allowed_accounts);
+          } catch (e) {
+            f.allowed_accounts = [];
+          }
+        }
+      });
+
+      res.json({
+        success: true,
+        features
+      });
+
+    } catch (error) {
+      logger.error(`[AdminController] 获取功能列表失败: ${error.message}`, error);
+      next(error);
+    }
+  }
+
+  /**
+   * 创建新功能卡片
+   * POST /api/admin/features
+   */
+  async createFeature(req, res, next) {
+    try {
+      const { feature_definition, form_schema, pipeline_schema } = req.body;
+
+      if (!feature_definition || !form_schema || !pipeline_schema) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 4001, message: '缺少必要参数：feature_definition, form_schema, pipeline_schema' }
+        });
+      }
+
+      // 规范化 allowed_accounts 字段
+      let allowedAccounts = feature_definition.allowed_accounts;
+      if (allowedAccounts) {
+        if (typeof allowedAccounts === 'string') {
+          // 多行文本转数组
+          const accountArray = allowedAccounts
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0)
+            .filter((value, index, self) => self.indexOf(value) === index); // 去重
+          allowedAccounts = JSON.stringify(accountArray);
+        } else if (Array.isArray(allowedAccounts)) {
+          allowedAccounts = JSON.stringify(allowedAccounts);
+        }
+      }
+
+      // 在事务中插入
+      await db.transaction(async (trx) => {
+        // 插入 form_schema
+        await trx('form_schemas').insert({
+          schema_id: form_schema.schema_id,
+          fields: JSON.stringify(form_schema.fields),
+          created_at: new Date(),
+          updated_at: new Date()
+        });
+
+        // 插入 pipeline_schema
+        await trx('pipeline_schemas').insert({
+          pipeline_id: pipeline_schema.pipeline_id,
+          steps: JSON.stringify(pipeline_schema.steps),
+          created_at: new Date(),
+          updated_at: new Date()
+        });
+
+        // 插入 feature_definition
+        await trx('feature_definitions').insert({
+          ...feature_definition,
+          allowed_accounts: allowedAccounts,
+          form_schema_ref: form_schema.schema_id,
+          pipeline_schema_ref: pipeline_schema.pipeline_id,
+          created_at: new Date(),
+          updated_at: new Date()
+        });
+      });
+
+      logger.info(`[AdminController] 功能创建成功 featureId=${feature_definition.feature_id}`);
+
+      res.json({
+        success: true,
+        message: '功能创建成功',
+        feature_id: feature_definition.feature_id
+      });
+
+    } catch (error) {
+      logger.error(`[AdminController] 创建功能失败: ${error.message}`, error);
+      next(error);
+    }
+  }
+
+  /**
+   * 更新功能卡片
+   * PUT /api/admin/features/:featureId
+   */
+  async updateFeature(req, res, next) {
+    try {
+      const { featureId } = req.params;
+      const { feature_definition, form_schema, pipeline_schema } = req.body;
+
+      // 检查功能是否存在
+      const existing = await db('feature_definitions')
+        .where('feature_id', featureId)
+        .whereNull('deleted_at')
+        .first();
+
+      if (!existing) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 4004, message: '功能不存在' }
+        });
+      }
+
+      // 规范化 allowed_accounts 字段
+      let allowedAccounts = feature_definition?.allowed_accounts;
+      if (allowedAccounts) {
+        if (typeof allowedAccounts === 'string') {
+          const accountArray = allowedAccounts
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0)
+            .filter((value, index, self) => self.indexOf(value) === index);
+          allowedAccounts = JSON.stringify(accountArray);
+        } else if (Array.isArray(allowedAccounts)) {
+          allowedAccounts = JSON.stringify(allowedAccounts);
+        }
+      }
+
+      // 在事务中更新
+      await db.transaction(async (trx) => {
+        // 更新 form_schema（如果提供）
+        if (form_schema) {
+          await trx('form_schemas')
+            .where('schema_id', existing.form_schema_ref)
+            .update({
+              fields: JSON.stringify(form_schema.fields),
+              updated_at: new Date()
+            });
+        }
+
+        // 更新 pipeline_schema（如果提供）
+        if (pipeline_schema) {
+          await trx('pipeline_schemas')
+            .where('pipeline_id', existing.pipeline_schema_ref)
+            .update({
+              steps: JSON.stringify(pipeline_schema.steps),
+              updated_at: new Date()
+            });
+        }
+
+        // 更新 feature_definition（如果提供）
+        if (feature_definition) {
+          await trx('feature_definitions')
+            .where('feature_id', featureId)
+            .update({
+              ...feature_definition,
+              allowed_accounts: allowedAccounts,
+              updated_at: new Date()
+            });
+        }
+      });
+
+      logger.info(`[AdminController] 功能更新成功 featureId=${featureId}`);
+
+      res.json({
+        success: true,
+        message: '功能更新成功'
+      });
+
+    } catch (error) {
+      logger.error(`[AdminController] 更新功能失败: ${error.message}`, error);
+      next(error);
+    }
+  }
+
+  /**
+   * 快速切换功能启用状态
+   * PATCH /api/admin/features/:featureId
+   */
+  async toggleFeature(req, res, next) {
+    try {
+      const { featureId } = req.params;
+      const { is_enabled } = req.body;
+
+      if (typeof is_enabled !== 'boolean') {
+        return res.status(400).json({
+          success: false,
+          error: { code: 4001, message: 'is_enabled 必须为布尔值' }
+        });
+      }
+
+      // 检查功能
+      const feature = await db('feature_definitions')
+        .where('feature_id', featureId)
+        .whereNull('deleted_at')
+        .first();
+
+      if (!feature) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 4004, message: '功能不存在' }
+        });
+      }
+
+      // 风险提示：配额为0的功能不建议上线
+      if (is_enabled && feature.quota_cost === 0) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 4001, message: '配额为0的功能不建议上线' },
+          warning: '该功能不扣费,可能导致滥用和成本失控'
+        });
+      }
+
+      // 更新状态
+      await db('feature_definitions')
+        .where('feature_id', featureId)
+        .update({
+          is_enabled,
+          updated_at: new Date()
+        });
+
+      logger.info(`[AdminController] 功能状态切换成功 featureId=${featureId} is_enabled=${is_enabled}`);
+
+      res.json({
+        success: true,
+        message: `功能已${is_enabled ? '启用' : '禁用'}`
+      });
+
+    } catch (error) {
+      logger.error(`[AdminController] 切换功能状态失败: ${error.message}`, error);
+      next(error);
+    }
+  }
+
+  /**
+   * 软删除功能卡片
+   * DELETE /api/admin/features/:featureId
+   */
+  async deleteFeature(req, res, next) {
+    try {
+      const { featureId } = req.params;
+
+      // 检查功能是否存在
+      const feature = await db('feature_definitions')
+        .where('feature_id', featureId)
+        .whereNull('deleted_at')
+        .first();
+
+      if (!feature) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 4004, message: '功能不存在' }
+        });
+      }
+
+      // 软删除（设置 deleted_at）
+      await db('feature_definitions')
+        .where('feature_id', featureId)
+        .update({
+          deleted_at: new Date(),
+          updated_at: new Date()
+        });
+
+      logger.info(`[AdminController] 功能软删除成功 featureId=${featureId}`);
+
+      res.json({
+        success: true,
+        message: '功能已删除'
+      });
+
+    } catch (error) {
+      logger.error(`[AdminController] 删除功能失败: ${error.message}`, error);
+      next(error);
+    }
+  }
 }
 
 module.exports = new AdminController();

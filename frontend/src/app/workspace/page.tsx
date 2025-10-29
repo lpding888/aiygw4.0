@@ -2,52 +2,49 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  Card, 
-  Row, 
-  Col, 
-  Statistic, 
-  Button, 
-  Typography, 
+import {
+  Card,
+  Row,
+  Col,
+  Statistic,
+  Button,
+  Typography,
   Space,
   Badge,
   Divider,
   message,
-  Spin
+  Spin,
+  Empty
 } from 'antd';
 import {
   CrownOutlined,
   ThunderboltOutlined,
   ClockCircleOutlined,
-  PlusOutlined,
-  HistoryOutlined
+  PlusOutlined
 } from '@ant-design/icons';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
+import { MembershipStatus, Feature } from '@/types';
+import FeatureCard from '@/components/FeatureCard';
 
 const { Title, Text, Paragraph } = Typography;
-
-interface MembershipStatus {
-  isMember: boolean;
-  quotaRemaining: number;
-  quotaExpireAt: string | null;
-  totalUsed: number;
-}
 
 export default function WorkspacePage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const setUser = useAuthStore((state) => state.setUser);
-  
+
   const [loading, setLoading] = useState(true);
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null);
+  const [features, setFeatures] = useState<Feature[]>([]);
+  const [featuresLoading, setFeaturesLoading] = useState(true);
 
   // 获取会员状态
   const fetchMembershipStatus = async () => {
     try {
       setLoading(true);
       const response: any = await api.membership.status();
-      
+
       if (response.success && response.data) {
         setMembershipStatus(response.data);
         // 同步更新用户信息
@@ -55,8 +52,8 @@ export default function WorkspacePage() {
           setUser({
             ...user,
             isMember: response.data.isMember,
-            quota_remaining: response.data.quotaRemaining,
-            quota_expireAt: response.data.quotaExpireAt
+            quota_remaining: response.data.quotaRemaining || response.data.quota_remaining,
+            quota_expireAt: response.data.quotaExpireAt || response.data.quota_expireAt
           });
         }
       }
@@ -67,20 +64,39 @@ export default function WorkspacePage() {
     }
   };
 
+  // 获取功能卡片列表（艹，必须调用动态接口！）
+  const fetchFeatures = async () => {
+    try {
+      setFeaturesLoading(true);
+      const response: any = await api.features.getAll({ enabled: true });
+
+      if (response.success && response.features) {
+        setFeatures(response.features);
+      }
+    } catch (error: any) {
+      message.error('获取功能列表失败');
+      console.error('获取功能列表失败:', error);
+    } finally {
+      setFeaturesLoading(false);
+    }
+  };
+
   useEffect(() => {
     // 检查登录状态
     if (!user) {
       router.push('/login');
       return;
     }
-    
+
     fetchMembershipStatus();
+    fetchFeatures(); // 艹，同时获取功能列表
   }, [user, router]);
 
   // 计算剩余天数
   const getRemainingDays = () => {
-    if (!membershipStatus?.quotaExpireAt) return 0;
-    const expireDate = new Date(membershipStatus.quotaExpireAt);
+    const expireAt = (membershipStatus as any)?.quotaExpireAt || (membershipStatus as any)?.quota_expireAt;
+    if (!expireAt) return 0;
+    const expireDate = new Date(expireAt);
     const now = new Date();
     const diff = expireDate.getTime() - now.getTime();
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
@@ -88,23 +104,56 @@ export default function WorkspacePage() {
 
   // 格式化到期时间
   const formatExpireDate = () => {
-    if (!membershipStatus?.quotaExpireAt) return '-';
-    const date = new Date(membershipStatus.quotaExpireAt);
+    const expireAt = (membershipStatus as any)?.quotaExpireAt || (membershipStatus as any)?.quota_expireAt;
+    if (!expireAt) return '-';
+    const date = new Date(expireAt);
     return date.toLocaleDateString('zh-CN');
+  };
+
+  // 按 category 分组功能卡片
+  const groupFeaturesByCategory = () => {
+    const grouped: Record<string, Feature[]> = {};
+    features.forEach((feature) => {
+      if (!grouped[feature.category]) {
+        grouped[feature.category] = [];
+      }
+      grouped[feature.category].push(feature);
+    });
+    return grouped;
+  };
+
+  // 判断功能是否禁用（套餐不满足）
+  const isFeatureDisabled = (feature: Feature): boolean => {
+    // 如果不是会员，所有需要会员的功能都禁用
+    if (!membershipStatus?.isMember && feature.plan_required !== 'free') {
+      return true;
+    }
+    // 配额不足也禁用
+    if ((membershipStatus?.quotaRemaining || 0) < feature.quota_cost) {
+      return true;
+    }
+    return false;
+  };
+
+  // 处理升级会员
+  const handleUpgrade = () => {
+    router.push('/membership');
   };
 
   if (loading) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh' 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh'
       }}>
         <Spin size="large" tip="加载中..." />
       </div>
     );
   }
+
+  const groupedFeatures = groupFeaturesByCategory();
 
   return (
     <div style={{ 
@@ -132,11 +181,10 @@ export default function WorkspacePage() {
             <Text>
               欢迎, <strong>{user?.phone}</strong>
             </Text>
-            <Button 
+            <Button
               onClick={() => {
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                setUser(null);
+                const clearAuth = useAuthStore.getState().clearAuth;
+                clearAuth();
                 router.push('/login');
               }}
             >
@@ -227,81 +275,38 @@ export default function WorkspacePage() {
         </Col>
       </Row>
 
-      {/* 功能区域 */}
-      <Card 
-        title="AI处理功能"
-        style={{ marginBottom: '24px' }}
-      >
-        <Row gutter={[16, 16]}>
-          <Col xs={24} sm={12} md={8}>
-            <Card
-              hoverable
-              onClick={() => {
-                if (!membershipStatus?.isMember) {
-                  message.warning('请先开通会员');
-                  return;
-                }
-                if ((membershipStatus?.quotaRemaining || 0) < 1) {
-                  message.warning('配额不足,请先续费');
-                  return;
-                }
-                router.push('/task/basic');
-              }}
-              style={{ textAlign: 'center', cursor: 'pointer' }}
-            >
-              <ThunderboltOutlined style={{ fontSize: '48px', color: '#1890ff' }} />
-              <Title level={4} style={{ marginTop: '16px' }}>基础修图</Title>
-              <Paragraph type="secondary">
-                商品抠图、白底处理、智能增强
-                <br />
-                <Text strong>消耗: 1次/张</Text>
-              </Paragraph>
-            </Card>
-          </Col>
-
-          <Col xs={24} sm={12} md={8}>
-            <Card
-              hoverable
-              onClick={() => {
-                if (!membershipStatus?.isMember) {
-                  message.warning('请先开通会员');
-                  return;
-                }
-                if ((membershipStatus?.quotaRemaining || 0) < 1) {
-                  message.warning('配额不足,请先续费');
-                  return;
-                }
-                router.push('/task/model');
-              }}
-              style={{ textAlign: 'center', cursor: 'pointer' }}
-            >
-              <CrownOutlined style={{ fontSize: '48px', color: '#faad14' }} />
-              <Title level={4} style={{ marginTop: '16px' }}>AI模特上身</Title>
-              <Paragraph type="secondary">
-                12分镜场景、多种风格、专业模特
-                <br />
-                <Text strong>消耗: 1次/组</Text>
-              </Paragraph>
-            </Card>
-          </Col>
-
-          <Col xs={24} sm={12} md={8}>
-            <Card
-              hoverable
-              onClick={() => router.push('/task/history')}
-              style={{ textAlign: 'center', cursor: 'pointer' }}
-            >
-              <HistoryOutlined style={{ fontSize: '48px', color: '#52c41a' }} />
-              <Title level={4} style={{ marginTop: '16px' }}>历史记录</Title>
-              <Paragraph type="secondary">
-                查看所有处理记录和结果
-                <br />
-                <Text strong>累计使用: {membershipStatus?.totalUsed || 0}次</Text>
-              </Paragraph>
-            </Card>
-          </Col>
-        </Row>
-      </Card>
+      {/* 功能区域 - 动态渲染功能卡片（艹，不再硬编码！）*/}
+      {featuresLoading ? (
+        <Card style={{ marginBottom: '24px' }}>
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <Spin size="large" tip="加载功能列表..." />
+          </div>
+        </Card>
+      ) : features.length === 0 ? (
+        <Card style={{ marginBottom: '24px' }}>
+          <Empty description="暂无可用功能" />
+        </Card>
+      ) : (
+        Object.keys(groupedFeatures).map((category) => (
+          <Card
+            key={category}
+            title={category}
+            style={{ marginBottom: '24px' }}
+          >
+            <Row gutter={[16, 16]}>
+              {groupedFeatures[category].map((feature) => (
+                <Col key={feature.feature_id} xs={24} sm={12} lg={12} xl={6}>
+                  <FeatureCard
+                    feature={feature}
+                    disabled={isFeatureDisabled(feature)}
+                    onUpgrade={handleUpgrade}
+                  />
+                </Col>
+              ))}
+            </Row>
+          </Card>
+        ))
+      )}
 
       {/* 会员说明 */}
       {!membershipStatus?.isMember && (

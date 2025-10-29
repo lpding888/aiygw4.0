@@ -159,6 +159,7 @@ class AuthService {
       user: {
         id: user.id,
         phone: user.phone,
+        role: user.role || 'user', // 艹，怎么能忘记role字段！
         isMember: user.isMember,
         quota_remaining: user.quota_remaining,
         quota_expireAt: user.quota_expireAt
@@ -208,6 +209,7 @@ class AuthService {
     return {
       id: user.id,
       phone: user.phone,
+      role: user.role || 'user', // 艹，补上role字段！
       isMember: user.isMember,
       quota_remaining: user.quota_remaining,
       quota_expireAt: user.quota_expireAt,

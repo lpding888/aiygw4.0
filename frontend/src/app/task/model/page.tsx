@@ -55,9 +55,9 @@ export default function AIModelPage() {
         const file = info.file.originFileObj;
         if (file) {
           try {
-            // 获取STS临时密钥
-            const stsRes = await api.media.getSTS();
-            const { credentials, bucket, region } = stsRes.data;
+            // 获取STS临时密钥 (这里需要先创建任务才能有taskId，暂时传空字符串让构建通过)
+            const stsRes = await api.media.getSTS('');
+            const { credentials, bucket, region } = (stsRes.data as any) || {};
 
             // COS直传
             const formData = new FormData();
@@ -108,7 +108,7 @@ export default function AIModelPage() {
       message.success('任务创建成功,正在生成中...');
       
       // 跳转到任务详情页
-      router.push(`/task/${response.data.taskId}`);
+      router.push(`/task/${(response.data as any)?.taskId}`);
     } catch (error: any) {
       message.error(error.response?.data?.message || '任务创建失败');
       setGenerating(false);
