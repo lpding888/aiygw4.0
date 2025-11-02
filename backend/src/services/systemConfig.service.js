@@ -1,48 +1,41 @@
 const db = require('../config/database');
 const logger = require('../utils/logger');
+const cacheService = require('./cache.service'); // P1-010: 使用Redis缓存
 
 /**
- * 系统配置服务
+ * 系统配置服务 (P1-010优化)
  * 提供动态配置管理功能，支持运行时修改API密钥、提示词等配置
+ * 艹！老王我用Redis缓存替换了Map缓存，多进程共享杠杠的
  */
 class SystemConfigService {
   constructor() {
-    // 配置缓存
-    this._cache = new Map();
-    this._cacheExpiry = new Map();
-    this._CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
+    // P1-010: 不再使用内存缓存，改用Redis缓存
+    this._CACHE_TTL = 5 * 60; // 5分钟缓存(秒)
   }
 
   /**
-   * 获取配置值
+   * 获取配置值 (P1-010: 使用Redis缓存)
    * @param {string} key - 配置键名
    * @param {any} defaultValue - 默认值
    * @returns {Promise<any>} 配置值
    */
   async get(key, defaultValue = null) {
     try {
-      // 检查缓存
-      if (this._isCacheValid(key)) {
-        return this._cache.get(key);
-      }
+      // P1-010: 使用Redis缓存的Cache-Aside模式
+      return await cacheService.getCachedSystemConfig(key, async () => {
+        const config = await db('system_configs')
+          .where('config_key', key)
+          .where('is_active', true)
+          .first();
 
-      const config = await db('system_configs')
-        .where('config_key', key)
-        .where('is_active', true)
-        .first();
+        if (!config) {
+          logger.warn(`[SystemConfigService] 配置不存在: ${key}`);
+          return defaultValue;
+        }
 
-      if (!config) {
-        logger.warn(`[SystemConfigService] 配置不存在: ${key}`);
-        return defaultValue;
-      }
-
-      const value = this._parseValue(config.config_value, config.config_type);
-
-      // 更新缓存
-      this._cache.set(key, value);
-      this._cacheExpiry.set(key, Date.now() + this._CACHE_TTL);
-
-      return value;
+        const value = this._parseValue(config.config_value, config.config_type);
+        return value;
+      });
     } catch (error) {
       logger.error(`[SystemConfigService] 获取配置失败: ${key}`, error);
       return defaultValue;
@@ -152,8 +145,8 @@ class SystemConfigService {
         logger.info(`[SystemConfigService] 配置创建成功: ${key}`, { userId });
       }
 
-      // 清除缓存
-      this._clearCache(key);
+      // P1-010: 清除Redis缓存
+      await cacheService.invalidateSystemConfig(key);
 
       return true;
     } catch (error) {
@@ -204,8 +197,8 @@ class SystemConfigService {
             });
           }
 
-          // 清除缓存
-          this._clearCache(key);
+          // P1-010: 清除Redis缓存
+          await cacheService.invalidateSystemConfig(key);
         }
 
         await trx.commit();
@@ -245,8 +238,8 @@ class SystemConfigService {
         .where('config_key', key)
         .del();
 
-      // 清除缓存
-      this._clearCache(key);
+      // P1-010: 清除Redis缓存
+      await cacheService.invalidateSystemConfig(key);
 
       logger.info(`[SystemConfigService] 配置删除成功: ${key}`, { userId });
       return true;
@@ -330,31 +323,18 @@ class SystemConfigService {
   }
 
   /**
-   * 重新加载配置缓存
+   * 重新加载配置缓存 (P1-010: 清空Redis缓存)
    */
   async reloadCache() {
-    this._cache.clear();
-    this._cacheExpiry.clear();
+    // P1-010: 清空所有系统配置的Redis缓存
+    await cacheService.invalidateAllSystemConfigs();
     logger.info('[SystemConfigService] 配置缓存已清空');
   }
 
   /**
-   * 检查缓存是否有效
-   * @private
+   * P1-010: 已移除_isCacheValid()和_clearCache()方法
+   * 现在使用Redis缓存，不再需要内存缓存管理方法
    */
-  _isCacheValid(key) {
-    const expiry = this._cacheExpiry.get(key);
-    return expiry && Date.now() < expiry;
-  }
-
-  /**
-   * 清除缓存
-   * @private
-   */
-  _clearCache(key) {
-    this._cache.delete(key);
-    this._cacheExpiry.delete(key);
-  }
 
   /**
    * 解析配置值
