@@ -425,6 +425,166 @@ const swaggerDefinition = {
             format: 'date-time'
           }
         }
+      },
+
+      // 微信登录相关
+      WechatOAuthResponse: {
+        type: 'object',
+        properties: {
+          success: {
+            type: 'boolean'
+          },
+          data: {
+            type: 'object',
+            properties: {
+              authUrl: {
+                type: 'string',
+                description: '微信授权URL'
+              },
+              state: {
+                type: 'string',
+                description: '状态参数'
+              }
+            }
+          },
+          message: {
+            type: 'string'
+          },
+          timestamp: {
+            type: 'string',
+            format: 'date-time'
+          }
+        }
+      },
+
+      WechatLoginResponse: {
+        type: 'object',
+        properties: {
+          success: {
+            type: 'boolean'
+          },
+          data: {
+            type: 'object',
+            properties: {
+              user: {
+                type: 'object',
+                properties: {
+                  id: {
+                    type: 'string'
+                  },
+                  username: {
+                    type: 'string'
+                  },
+                  email: {
+                    type: 'string'
+                  },
+                  role: {
+                    type: 'string'
+                  },
+                  isMember: {
+                    type: 'boolean'
+                  },
+                  quota_remaining: {
+                    type: 'integer'
+                  },
+                  wechat_nickname: {
+                    type: 'string'
+                  },
+                  wechat_avatar: {
+                    type: 'string'
+                  }
+                }
+              },
+              tokens: {
+                type: 'object',
+                properties: {
+                  accessToken: {
+                    type: 'string'
+                  },
+                  refreshToken: {
+                    type: 'string'
+                  },
+                  expiresIn: {
+                    type: 'integer'
+                  },
+                  tokenType: {
+                    type: 'string'
+                  }
+                }
+              },
+              isNewUser: {
+                type: 'boolean'
+              },
+              platform: {
+                type: 'string',
+                enum: ['officialAccount', 'miniProgram', 'openPlatform']
+              }
+            }
+          },
+          message: {
+            type: 'string'
+          },
+          timestamp: {
+            type: 'string',
+            format: 'date-time'
+          }
+        }
+      },
+
+      WechatMiniProgramLoginRequest: {
+        type: 'object',
+        required: ['code'],
+        properties: {
+          code: {
+            type: 'string',
+            description: '小程序登录凭证'
+          },
+          userInfo: {
+            type: 'object',
+            description: '用户信息',
+            properties: {
+              nickName: {
+                type: 'string'
+              },
+              avatarUrl: {
+                type: 'string'
+              },
+              gender: {
+                type: 'integer'
+              },
+              city: {
+                type: 'string'
+              },
+              province: {
+                type: 'string'
+              },
+              country: {
+                type: 'string'
+              }
+            }
+          }
+        }
+      },
+
+      WechatBindingInfo: {
+        type: 'object',
+        properties: {
+          openid: {
+            type: 'string'
+          },
+          unionid: {
+            type: 'string'
+          },
+          nickname: {
+            type: 'string'
+          },
+          avatar: {
+            type: 'string'
+          },
+          lastLoginPlatform: {
+            type: 'string'
+          }
+        }
       }
     }
   },
@@ -440,6 +600,10 @@ const swaggerDefinition = {
     {
       name: '认证',
       description: '用户认证相关接口'
+    },
+    {
+      name: '微信登录',
+      description: '微信登录相关接口'
     },
     {
       name: '任务',
@@ -460,6 +624,10 @@ const swaggerDefinition = {
     {
       name: '通知',
       description: '通知管理相关接口'
+    },
+    {
+      name: '支付',
+      description: '支付相关接口'
     },
     {
       name: '管理',

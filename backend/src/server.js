@@ -28,6 +28,7 @@ const websocketService = require('./services/websocket.service');
 const taskProgressService = require('./services/task-progress.service');
 const swaggerService = require('./services/swagger.service');
 const paymentService = require('./services/payment.service');
+const wechatLoginService = require('./services/wechat-login.service');
 
 const PORT = process.env.PORT || 3000;
 
@@ -150,6 +151,14 @@ const server = app.listen(PORT, async () => {
   } catch (error) {
     logger.error('Failed to initialize payment service:', error);
   }
+
+  // 初始化微信登录服务
+  try {
+    await wechatLoginService.initialize();
+    logger.info('📱 WeChat login service initialized');
+  } catch (error) {
+    logger.error('Failed to initialize WeChat login service:', error);
+  }
 });
 
 // 优雅关闭
@@ -226,6 +235,14 @@ process.on('SIGTERM', async () => {
     logger.info('Payment service closed');
   } catch (error) {
     logger.error('Error closing payment service:', error);
+  }
+
+  // 关闭微信登录服务
+  try {
+    await wechatLoginService.close();
+    logger.info('WeChat login service closed');
+  } catch (error) {
+    logger.error('Error closing WeChat login service:', error);
   }
 
   server.close(() => {
@@ -307,6 +324,14 @@ process.on('SIGINT', async () => {
     logger.info('Payment service closed');
   } catch (error) {
     logger.error('Error closing payment service:', error);
+  }
+
+  // 关闭微信登录服务
+  try {
+    await wechatLoginService.close();
+    logger.info('WeChat login service closed');
+  } catch (error) {
+    logger.error('Error closing WeChat login service:', error);
   }
 
   server.close(() => {
