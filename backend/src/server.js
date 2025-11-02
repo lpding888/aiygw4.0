@@ -29,6 +29,7 @@ const taskProgressService = require('./services/task-progress.service');
 const swaggerService = require('./services/swagger.service');
 const paymentService = require('./services/payment.service');
 const wechatLoginService = require('./services/wechat-login.service');
+const unifiedLoginService = require('./services/unified-login.service');
 
 const PORT = process.env.PORT || 3000;
 
@@ -159,6 +160,14 @@ const server = app.listen(PORT, async () => {
   } catch (error) {
     logger.error('Failed to initialize WeChat login service:', error);
   }
+
+  // 初始化统一登录服务
+  try {
+    await unifiedLoginService.initialize();
+    logger.info('🔐 Unified login service initialized');
+  } catch (error) {
+    logger.error('Failed to initialize unified login service:', error);
+  }
 });
 
 // 优雅关闭
@@ -243,6 +252,14 @@ process.on('SIGTERM', async () => {
     logger.info('WeChat login service closed');
   } catch (error) {
     logger.error('Error closing WeChat login service:', error);
+  }
+
+  // 关闭统一登录服务
+  try {
+    await unifiedLoginService.close();
+    logger.info('Unified login service closed');
+  } catch (error) {
+    logger.error('Error closing unified login service:', error);
   }
 
   server.close(() => {
@@ -332,6 +349,14 @@ process.on('SIGINT', async () => {
     logger.info('WeChat login service closed');
   } catch (error) {
     logger.error('Error closing WeChat login service:', error);
+  }
+
+  // 关闭统一登录服务
+  try {
+    await unifiedLoginService.close();
+    logger.info('Unified login service closed');
+  } catch (error) {
+    logger.error('Error closing unified login service:', error);
   }
 
   server.close(() => {

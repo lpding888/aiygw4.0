@@ -144,6 +144,7 @@ app.use('/api/distribution', require('./routes/distribution.routes')); // 分销
 app.use('/api/circuit-breaker', require('./routes/circuitBreaker.routes')); // 熔断器监控路由
 app.use('/api/payment', require('./routes/payment.routes')); // 支付相关路由
 app.use('/api/auth/wechat', require('./routes/wechat-login.routes')); // 微信登录路由
+app.use('/api/auth', require('./routes/unified-login.routes')); // 统一登录路由
 app.use('/api/docs', require('./routes/docs.routes')); // API文档路由
 
 // 404处理
