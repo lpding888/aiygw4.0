@@ -5,6 +5,7 @@ const morgan = require('morgan');
 const mongoSanitize = require('express-mongo-sanitize');
 const logger = require('./utils/logger');
 const { errorHandler, notFoundHandler } = require('./middlewares/errorHandler.middleware');
+const cacheMiddleware = require('./middlewares/cache.middleware');
 
 // 创建Express应用
 const app = express();
@@ -49,6 +50,13 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // 日志中间件
 app.use(morgan('combined', { stream: logger.stream }));
+
+// 缓存控制中间件
+app.use(cacheMiddleware.cacheControl());
+
+// 缓存统计和健康检查中间件
+app.use(cacheMiddleware.cacheStats());
+app.use(cacheMiddleware.cacheHealthCheck());
 
 // 根路径 - API文档
 app.get('/', (req, res) => {
@@ -110,12 +118,32 @@ app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/membership', require('./routes/membership.routes'));
 app.use('/api/media', require('./routes/media.routes'));
 app.use('/api/task', require('./routes/task.routes'));
-app.use('/api/admin', require('./routes/admin.routes'));
+
+// 功能配置路由 - 添加缓存
+app.use('/api/features',
+  cacheMiddleware.featureCache({ ttl: 3600 }), // 1小时缓存
+  require('./routes/feature.routes')
+);
+
+// 素材库路由 - 添加用户缓存
+app.use('/api/assets',
+  cacheMiddleware.userCache({ ttl: 600 }), // 10分钟缓存
+  require('./routes/asset.routes')
+);
+
+// 管理员路由 - 添加管理员缓存
+app.use('/api/admin',
+  cacheMiddleware.adminCache({ ttl: 300 }), // 5分钟缓存
+  require('./routes/admin.routes')
+);
+
 app.use('/api/system-config', require('./routes/systemConfig.routes'));
-app.use('/api/features', require('./routes/feature.routes'));
 app.use('/api/scf', require('./routes/scfCallback.routes'));
-app.use('/api/assets', require('./routes/asset.routes'));
+app.use('/api/cache', require('./routes/cache.routes')); // 缓存管理路由
 app.use('/api/distribution', require('./routes/distribution.routes')); // 分销代理路由
+app.use('/api/circuit-breaker', require('./routes/circuitBreaker.routes')); // 熔断器监控路由
+app.use('/api/payment', require('./routes/payment.routes')); // 支付相关路由
+app.use('/api/docs', require('./routes/docs.routes')); // API文档路由
 
 // 404处理
 app.use(notFoundHandler);
