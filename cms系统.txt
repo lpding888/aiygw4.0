@@ -1,0 +1,518 @@
+可以，这样的流程**可行**，而且跟你现有“develop→main”的发布策略一致。建议在不改变你目标的前提下，做两点小改进，让风控更稳：
+
+1. **开发分支结构**
+
+* 今晚从 `develop` 切：`feature/cms-config-v1`（或拆成若干短分支，如 `feature/cms-ui-schema`、`feature/cms-provider`，先合到 `develop`；最终仍只对 `main` 发**一个**汇总 PR）。
+* 汇总 PR 采用 **rebase + squash**（整洁历史），合并后立即打 `v0.1.0-cms` tag 与生成变更清单。
+* PR 模板里必须包含**回滚方案**（快照版本号与一键回滚脚本）。这些在你原“快照/失效/只读降级”的基线中已定义。 
+
+2. **交付物约定（随汇总 PR 一并提交）**
+
+* `C:\Users\qq100\Desktop\迭代目录\新建文件夹 (4)\后端计划.txt`：包含**本次改动清单、接口清单、DB 变更、回滚说明**（下面给你模板）。
+* CI 必须跑通 **Lint/UT/IT/E2E** 与**接口契约测试**；健康检查与告警配置随 PR 引入（你在“后端优化回答.md”里已有具体任务卡基线）。 
+
+---
+
+## 今晚的执行 Runbook（可直接照抄）
+
+```bash
+# 1) 拉分支
+git checkout develop
+git pull origin develop
+git checkout -b feature/cms-config-v1
+
+# 2) 开发顺序（建议）
+#   先内核后界面：UI Schema/Menu API → Feature Catalog → Provider/MCP → Flow校验&试跑 → Prompt → 内容管理
+#   每个模块完成即提交一次，信息里附带任务卡ID
+
+# 3) 自测与联调（至少一次全链路）
+#   Admin：菜单拉取→Provider连通→MCP发现→流程试跑（Mock/真实）→发布→前台可见
+
+# 4) 推 develop
+git push -u origin feature/cms-config-v1
+# （若拆分多个短分支，逐个合并到 develop；均通过后走下一步）
+
+# 5) 汇总 PR（develop → main）
+#   标题：feat(cms): 后端驱动的 CMS 配置与发布闭环（P0）
+#   附件：后端计划.txt（模板见下）
+```
+
+**PR Gating 清单（合并前必过）**
+
+* API 契约：`/ui/menus` `/ui/schema` `/admin/features` `/admin/providers` `/admin/mcp` `/admin/pipelines/*` `/admin/prompts/*` 均有 Swagger 条目、示例请求/响应；
+* **缓存命中** ≥85%、**失效广播** ≤200ms；**健康检查** `/health,/health/db,/health/redis` 全绿；**告警**生效；
+* 所有错误响应统一 `{code,message,requestId}`，并带结构化日志。  
+
+---
+
+# CMS 配置系统 —— 任务卡（**结合后端重构基线**）
+
+> 说明：以下卡片全部采用你们的 18 字段规范（可直接给 Codex 执行）。它们与现有“缓存→快照→广播→DB”的链路、统一错误/日志/监控/限流/幂等等工程基线完全对齐。其中多数细节已在你的自研 CMS 方案与后端优化文档中定义，这里做成可执行任务。   
+
+```json
+{
+  "Backend": [
+    {
+      "id": "CMS-BE-001",
+      "department": "Backend",
+      "title": "UI Schema & Menu API（后端驱动前端）",
+      "description": "实现 /ui/menus 与 /ui/schema：按角色动态下发菜单、表单模板、页面可见性与动作权限；与缓存/快照/广播集成。",
+      "businessValue": "实现“后端排好前端功能”，随配置发布即时生效。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "BE-Platform",
+      "dependencies": ["CMS-BE-004","CMS-BE-009"],
+      "deliverables": ["routes/ui.route.ts","services/ui-schema.service.ts","docs/ui-schema.json"],
+      "acceptanceCriteria": ["不同角色菜单不同","发布配置后≤1s前端生效"],
+      "risk": ["Schema 过复杂"],
+      "mitigation": ["JSON Schema 版本化","快照回滚"],
+      "techSpec": "返回 {menus,forms,tables,permissions}；读链路 LRU→Redis→快照→DB，变更发布 cfg:invalidate。",
+      "testPlan": ["UT：多角色分支","IT：发布后多进程一致性"],
+      "metrics": {"cacheHit": 0.85, "invalidationMs": 200},
+      "aiPromptSuggestion": "基于 ioredis 实现 /ui/menus 与 /ui/schema，集成多层缓存与 Pub/Sub 精准失效。"
+    },
+    {
+      "id": "CMS-BE-002",
+      "department": "Backend",
+      "title": "Feature Catalog + 发布/回滚 + 审计",
+      "description": "建立 features 表与快照：版本化（version）、审计（by/time），发布触发 cfg:invalidate；提供回滚 CLI。",
+      "businessValue": "后端单点控制所有前端功能开关与页面结构。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1.5,
+      "owner": "BE-Platform",
+      "dependencies": ["CMS-BE-009"],
+      "deliverables": ["migrations/feature_tables.ts","routes/admin/features.route.ts","scripts/rollback-feature.ts"],
+      "acceptanceCriteria": ["发布即生效","回滚成功且可审计"],
+      "risk": ["误发布"],
+      "mitigation": ["预览与草稿态","一键回滚+灰度"],
+      "techSpec": "features(id,key,name,enabled,menu,meta_json,version); config_snapshots(scope='feature').",
+      "testPlan": ["IT：发布/回滚链路","E2E：前端菜单联动"],
+      "metrics": {"rollbackSuccess": true, "publishLatencyMs": 300},
+      "aiPromptSuggestion": "实现 features CRUD+发布/回滚，集成 config_snapshots 与失效广播。"
+    },
+    {
+      "id": "CMS-BE-003",
+      "department": "Backend",
+      "title": "Provider Catalog & Secret 管理 + 测试连接",
+      "description": "provider_endpoints/provider_secrets 两表；/admin/providers CRUD 与 /test；敏感字段 AES-256-GCM 存储，掩码回显。",
+      "businessValue": "统一多厂商/多模型接入，前端下拉可用。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "BE-Platform",
+      "dependencies": ["CMS-BE-009"],
+      "deliverables": ["migrations/provider_tables.ts","routes/admin/providers.route.ts","crypto.service.ts"],
+      "acceptanceCriteria": ["测试连接2s内回显","敏感信息不外泄"],
+      "risk": ["Key 泄露"],
+      "mitigation": ["应用层加密+掩码","只读 DTO 白名单"],
+      "techSpec": "handler_key/base_url/weight/timeout/retry；/test 输出可用性与延迟。",
+      "testPlan": ["UT：加解密+掩码","IT：两家Provider连通"],
+      "metrics": {"connectP95Ms": 2000, "secretLeaks": 0},
+      "aiPromptSuggestion": "实现 Provider 表/路由/测试连接，统一错误体与日志字段。"
+    },
+    {
+      "id": "CMS-BE-004",
+      "department": "Backend",
+      "title": "RBAC 权限与资源分级（viewer/editor/admin）",
+      "description": "后端集成角色与资源动作矩阵；/admin 所有路由声明权限；viewer 只读，editor 可编辑，admin 可发布/回滚。",
+      "businessValue": "保障 CMS 改动的安全边界。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "BE-Auth",
+      "dependencies": [],
+      "deliverables": ["rbac.ts","middleware/require-permission.ts","policy.json"],
+      "acceptanceCriteria": ["越权403","动作审计完整"],
+      "risk": ["权限遗漏"],
+      "mitigation": ["只记录不拦截灰度","权限视图审计"],
+      "techSpec": "accesscontrol/casl；菜单权限随 /ui/menus 下发。",
+      "testPlan": ["白盒 10+ 权限组合","E2E：低角色尝试写操作"],
+      "metrics": {"unauthorizedAccess": 0},
+      "aiPromptSuggestion": "实现 requirePermission(perms[]) 中间件，并在 features/providers 等路由接入。"
+    },
+    {
+      "id": "CMS-BE-005",
+      "department": "Backend",
+      "title": "Pipeline Schema 与合法性校验器",
+      "description": "设计 pipeline_schemas（节点/边/变量）；实现拓扑排序、分支完整性、变量可达性、输出覆盖检查。",
+      "businessValue": "从根上防止“不可执行”的流程被发布。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "BE-Engine",
+      "dependencies": ["CMS-BE-002","CMS-BE-003"],
+      "deliverables": ["migrations/pipeline_tables.ts","services/pipeline.validator.ts"],
+      "acceptanceCriteria": ["非法拓扑被阻止","错误提示清晰"],
+      "risk": ["复杂流程漏检"],
+      "mitigation": ["校验规则分组与快照测试"],
+      "techSpec": "Kahn 拓扑排序；变量血缘分析；条件边 true/false 完整性；END 至少1入度。",
+      "testPlan": ["UT：环/悬挂/变量缺失等用例","IT：联动发布阻断"],
+      "metrics": {"invalidFlowPass": 0},
+      "aiPromptSuggestion": "实现 pipeline.validator，覆盖拓扑/变量/条件等 20+ 条单测。"
+    },
+    {
+      "id": "CMS-BE-006",
+      "department": "Backend",
+      "title": "流程试跑器（Mock/真实）+ SSE 输出",
+      "description": "POST /admin/pipelines/:id/test，隔离执行上下文（可选不计配额），SSE 回显 Step 日志与耗时；支持 Mock/真实调用切换。",
+      "businessValue": "管理员可在发布前验证流程可行性与成本。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "BE-Engine",
+      "dependencies": ["CMS-BE-005"],
+      "deliverables": ["routes/admin/pipelines.test.route.ts","services/pipeline.testrunner.ts"],
+      "acceptanceCriteria": ["SSE 流稳定","Mock/真实切换可用"],
+      "risk": ["外部依赖不稳定"],
+      "mitigation": ["退避/熔断/降级"],
+      "techSpec": "SSE 事件 data: {step,log,duration}; 尾帧带错误信息。",
+      "testPlan": ["IT：端到端试跑","异常注入断线重连"],
+      "metrics": {"sseAbortRate": 0.01},
+      "aiPromptSuggestion": "编写 SSE 试跑器与控制器，支持 Mock/真实两种路径。"
+    },
+    {
+      "id": "CMS-BE-007",
+      "department": "Backend",
+      "title": "MCP Endpoints：CRUD + 工具发现/测试",
+      "description": "mcp_endpoints 表；/admin/mcp CRUD、/discover、/test；白名单工具注册与 Token 鉴权。",
+      "businessValue": "把图像处理工具链以 MCP 形态接入/管理。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "BE-Integrations",
+      "dependencies": ["CMS-BE-004"],
+      "deliverables": ["migrations/mcp_endpoints.ts","routes/admin/mcp.route.ts"],
+      "acceptanceCriteria": ["discover 返回工具清单","test 延迟<1s"],
+      "risk": ["跨域/传输差异"],
+      "mitigation": ["Zod 参数校验","超时与重试"],
+      "techSpec": "支持 http/ws/stdio；工具 schema 存 JSON；敏感回显掩码。",
+      "testPlan": ["IT：三类传输均可用","UT：参数与鉴权"],
+      "metrics": {"discoverLatencyMs": 1000},
+      "aiPromptSuggestion": "实现 /admin/mcp 的 CRUD/discover/test，封装不同传输方式的客户端。"
+    },
+    {
+      "id": "CMS-BE-008",
+      "department": "Backend",
+      "title": "Prompt 模板中心服务（预览/变量校验/版本）",
+      "description": "模板 CRUD、变量校验与实时预览；Monaco 变量提示后端支持；可选 prompt_versions 表。",
+      "businessValue": "提升提示词产能与质量，降低线上回归风险。",
+      "priority": "P1",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "BE-LLM",
+      "dependencies": ["CMS-BE-002"],
+      "deliverables": ["routes/admin/prompts.route.ts","services/prompt.preview.ts","migrations/prompt_versions.ts"],
+      "acceptanceCriteria": ["预览可返回缺失变量列表","版本回滚可用"],
+      "risk": ["模板注入/执行风险"],
+      "mitigation": ["受限渲染（无 eval）","变量白名单校验"],
+      "techSpec": "POST /admin/prompts/preview 输入 variables，返回渲染结果+missingVars。",
+      "testPlan": ["UT：变量校验","E2E：试跑联动"],
+      "metrics": {"previewP95Ms": 200},
+      "aiPromptSuggestion": "实现 /admin/prompts CRUD+preview，结合 Handlebars/Mustache 的受限渲染与变量校验。"
+    },
+    {
+      "id": "CMS-BE-009",
+      "department": "Backend",
+      "title": "配置缓存（LRU→Redis→快照→DB）+ 失效广播",
+      "description": "getOrSet 封装、Null Cache、随机 TTL、stale-while-revalidate；发布 cfg:invalidate 精准失效；回滚脚本。",
+      "businessValue": "核心读路径稳态性能与一致性保证。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 1,
+      "owner": "BE-Platform",
+      "dependencies": [],
+      "deliverables": ["cache/config-cache.ts","pubsub/index.ts","scripts/rollback-config.ts"],
+      "acceptanceCriteria": ["命中率≥85%","失效≤200ms"],
+      "risk": ["一致性窗口"],
+      "mitigation": ["版本化 key","SWr 方案"],
+      "techSpec": "频道 cfg:invalidate；payload={scope,key,version}；本地 LRU 30s，Redis 300±60s。",
+      "testPlan": ["多进程一致性","过期抖动压测"],
+      "metrics": {"hitRatio": 0.85, "invalidationMs": 200},
+      "aiPromptSuggestion": "实现多层缓存与 Pub/Sub 失效，附多进程一致性集成测试。"
+    }
+  ],
+  "Frontend": [
+    {
+      "id": "CMS-FE-001",
+      "department": "Frontend",
+      "title": "Admin 外壳 + 动态菜单（消费 /ui/menus）",
+      "description": "Next.js 14 + AntD 搭建 /admin 外壳；SWR 拉取 /ui/menus 动态渲染菜单与权限。",
+      "businessValue": "前端无需发版即可增删功能。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "FE-Admin",
+      "dependencies": ["CMS-BE-001"],
+      "deliverables": ["app/admin/layout.tsx","lib/api/ui.ts"],
+      "acceptanceCriteria": ["不同角色菜单不同","无权限按钮不可见"],
+      "risk": ["菜单缓存不一致"],
+      "mitigation": ["版本字段+失效广播监听"],
+      "techSpec": "AntD Layout/Sider；SWR 拉取/缓存。",
+      "testPlan": ["RTL 角色快照","E2E 多账号对比"],
+      "metrics": {"renderP95Ms": 50},
+      "aiPromptSuggestion": "实现 /admin 外壳，基于 /ui/menus 渲染动态菜单与权限。"
+    },
+    {
+      "id": "CMS-FE-002",
+      "department": "Frontend",
+      "title": "Provider 管理 UI（列表/抽屉/测试连接）",
+      "description": "AntD Table+Drawer+Form；敏感字段掩码；测试连接按钮对 /admin/providers/test。",
+      "businessValue": "快速管理与验活供应商。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "FE-Admin",
+      "dependencies": ["CMS-BE-003","CMS-FE-001"],
+      "deliverables": ["app/admin/providers/page.tsx","components/ProviderForm.tsx"],
+      "acceptanceCriteria": ["CRUD 与测试连接可用","错误提示清晰"],
+      "risk": ["掩码误显示"],
+      "mitigation": ["后端不回明文","前端仅一次性显示"],
+      "techSpec": "表单校验 + Result 提示；乐观更新。",
+      "testPlan": ["RTL 校验与交互","E2E 流程"],
+      "metrics": {"testLatencyMs": 2000},
+      "aiPromptSuggestion": "实现 Provider 列表+抽屉+测试交互，掩码敏感字段。"
+    },
+    {
+      "id": "CMS-FE-003",
+      "department": "Frontend",
+      "title": "MCP 连接管理与工具发现 UI",
+      "description": "/admin/mcp：列表、创建/编辑、工具发现与一键测试；展示工具 schema。",
+      "businessValue": "把外部工具链可视化与可测化。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "FE-Admin",
+      "dependencies": ["CMS-BE-007","CMS-FE-001"],
+      "deliverables": ["app/admin/mcp/page.tsx"],
+      "acceptanceCriteria": ["发现列表可见","测试1s内回显"],
+      "risk": ["跨域/超时"],
+      "mitigation": ["超时提示+重试","Schema 校验"],
+      "techSpec": "AntD Form + 动态字段渲染。",
+      "testPlan": ["RTL：Schema 表单","E2E：一键测试"],
+      "metrics": {"discoverLatencyMs": 1000},
+      "aiPromptSuggestion": "实现 MCP 管理页，调用 /admin/mcp/discover 与 /admin/mcp/test。"
+    },
+    {
+      "id": "CMS-FE-004",
+      "department": "Frontend",
+      "title": "流程编辑器（React Flow）+ 侧边抽屉配置 + 拓扑校验",
+      "description": "React Flow 画布、最小地图、对齐线；右侧抽屉作为节点配置面板；保存前调用后端校验。",
+      "businessValue": "给运营可视化编排体验。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1.5,
+      "owner": "FE-Admin",
+      "dependencies": ["CMS-BE-005"],
+      "deliverables": ["app/admin/pipelines/editor.tsx","components/NodeInspector.tsx"],
+      "acceptanceCriteria": ["非法流程阻止保存","未绑定变量有标红"],
+      "risk": ["大图性能抖动"],
+      "mitigation": ["虚拟化/惰性渲染","节流移动事件"],
+      "techSpec": "minimap/吸附/右键菜单；拓扑合法性/变量可达提示。",
+      "testPlan": ["RTL：编辑交互","E2E：试跑前校验"],
+      "metrics": {"editorFps": "良好"},
+      "aiPromptSuggestion": "用 React Flow 搭建流程编辑器与节点抽屉，联通后端校验API。"
+    },
+    {
+      "id": "CMS-FE-005",
+      "department": "Frontend",
+      "title": "Prompt 中心（Monaco + 变量提示 + 预览）",
+      "description": "Monaco 集成、变量自动补全、预览面板；调用 /admin/prompts/preview 与 /ai/completions 试跑。",
+      "businessValue": "提示词工程化与版本化。",
+      "priority": "P1",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "FE-Admin",
+      "dependencies": ["CMS-BE-008","CMS-FE-001"],
+      "deliverables": ["app/admin/prompts/page.tsx","components/PromptEditor.tsx"],
+      "acceptanceCriteria": ["变量缺失高亮","预览SSE稳定"],
+      "risk": ["Monaco SSR 警告"],
+      "mitigation": ["next/dynamic 关闭 SSR","分步加载"],
+      "techSpec": "CompletionItemProvider 扫描 {{var}}；右侧变量表。",
+      "testPlan": ["RTL：变量提示","E2E：预览与发布"],
+      "metrics": {"previewP95Ms": 200},
+      "aiPromptSuggestion": "接入 Monaco 编辑器与变量补全，串联预览与试跑接口。"
+    }
+  ],
+  "QA": [
+    {
+      "id": "CMS-QA-001",
+      "department": "QA",
+      "title": "E2E：新建 Feature→流程试跑→发布→前台可见",
+      "description": "Playwright 端到端覆盖创建/编辑/校验/试跑/发布，以及前台读取 /ui/menus 的联动。",
+      "businessValue": "验证 CMS 核心闭环质量。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "QA-Automation",
+      "dependencies": ["CMS-FE-004","CMS-BE-006","CMS-BE-002"],
+      "deliverables": ["tests/e2e/cms-feature.spec.ts"],
+      "acceptanceCriteria": ["稳定通过率100%","失败出具截图/视频"],
+      "risk": ["外部Provider波动"],
+      "mitigation": ["Mock/真实双模式"],
+      "techSpec": "登录→新建→校验→试跑→发布→前台校验。",
+      "testPlan": ["多角色账号","多浏览器"],
+      "metrics": {"passRate": 1, "flakeRate": 0.05},
+      "aiPromptSuggestion": "用 Playwright 实现从创建到发布的全链路脚本，Mock Provider 以降低波动。"
+    },
+    {
+      "id": "CMS-QA-002",
+      "department": "QA",
+      "title": "缓存与快照一致性（多进程）",
+      "description": "PM2 多进程环境验证 cfg:invalidate 广播后 1s 内一致；快照回滚即时生效。",
+      "businessValue": "保证“后端排版”能够秒级生效且可回滚。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "QA-Platform",
+      "dependencies": ["CMS-BE-009"],
+      "deliverables": ["tests/integration/cfg-invalidate.spec.ts"],
+      "acceptanceCriteria": ["1s 内各进程命中新值","无误杀其他键"],
+      "risk": ["订阅断线"],
+      "mitigation": ["自动重连与批量合并广播"],
+      "techSpec": "spawn 多进程；发布→订阅→校验；记录延迟。",
+      "testPlan": ["高频变更","异常重连"],
+      "metrics": {"invalidationMs": 200, "staleReads": 0},
+      "aiPromptSuggestion": "编写多进程一致性集成测试并统计失效延迟。"
+    }
+  ],
+  "SRE-DevOps": [
+    {
+      "id": "CMS-SRE-001",
+      "department": "SRE-DevOps",
+      "title": "健康检查与监控（/health,* + OTEL + /metrics）",
+      "description": "实现健康检查三端点；接入 OTEL Trace（HTTP/MySQL/Redis/BullMQ）与 Prometheus 指标；Grafana 看板模板。",
+      "businessValue": "可观测性与部署弹性基础。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "SRE-Obs",
+      "dependencies": [],
+      "deliverables": ["routes/health.controller.ts","src/otel.ts","ops/grafana/dashboard.json"],
+      "acceptanceCriteria": ["端点返回200含延迟","主要路由有Trace与指标"],
+      "risk": ["采样率过高"],
+      "mitigation": ["生产1%起步可调"],
+      "techSpec": "prom-client 直方图/计数器；Jaeger/Tempo 导出。",
+      "testPlan": ["压测下稳定上报","断依赖降级为degraded"],
+      "metrics": {"traceCoverage": 0.8, "metricsScrapeOk": 1},
+      "aiPromptSuggestion": "初始化 OTEL 与 prom-client，输出健康检查与 Grafana 模板。"
+    },
+    {
+      "id": "CMS-SRE-002",
+      "department": "SRE-DevOps",
+      "title": "CI/CD 与汇总 PR 模板（develop→main）",
+      "description": "GitHub Actions：分阶段 Lint/UT/IT/E2E；构建镜像；汇总 PR 使用统一模板并生成变更清单与回滚指引。",
+      "businessValue": "稳定交付与可回滚保证。",
+      "priority": "P1",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "SRE-Platform",
+      "dependencies": ["CMS-QA-001"],
+      "deliverables": [".github/workflows/ci.yml",".github/PULL_REQUEST_TEMPLATE.md","CHANGELOG.md"],
+      "acceptanceCriteria": ["PR 必须过四套测试","镜像可部署"],
+      "risk": ["E2E 波动"],
+      "mitigation": ["重试与矩阵并行","Mock Provider 开关"],
+      "techSpec": "Node 版本锁定；缓存依赖；构建后推送。",
+      "testPlan": ["故意引错验证阻断","发布分支自动构建"],
+      "metrics": {"ciSuccessRate": 0.95, "meanPipelineMin": 15},
+      "aiPromptSuggestion": "写 CI 配置，区分 Lint/UT/IT/E2E 四阶段；生成 PR 模板与 changelog。"
+    }
+  ],
+  "Security": [
+    {
+      "id": "CMS-SEC-001",
+      "department": "Security",
+      "title": "DTO 白名单与字段脱敏（全 /admin 出参）",
+      "description": "统一出参白名单与掩码策略；管理员与普通用户字段差异；结合日志脱敏。",
+      "businessValue": "消除敏感信息泄露风险。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "Security",
+      "dependencies": [],
+      "deliverables": ["dto/toPublicDTO.ts","utils/mask.util.ts","policy/dto-visibility.json"],
+      "acceptanceCriteria": ["随机抽样50条响应无泄露","管理员额外字段只在admin可见"],
+      "risk": ["遗漏边缘接口"],
+      "mitigation": ["接口扫描脚本+快照测试"],
+      "techSpec": "toPublicDTO(entity, role) 在 Controller 统一调用。",
+      "testPlan": ["快照对比","随机审计"],
+      "metrics": {"leakIncidents": 0, "dtoCoverage": 0.95},
+      "aiPromptSuggestion": "实现 toPublicDTO 与掩码工具，覆盖 tasks/user 等出参，写快照测试。"
+    },
+    {
+      "id": "CMS-SEC-002",
+      "department": "Security",
+      "title": "接口级限流（敏感写路径更严）",
+      "description": "对发布/回滚/配置变更/任务创建叠加更严阈值；白名单豁免。",
+      "businessValue": "降低滥用与撞库风险。",
+      "priority": "P1",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "Security",
+      "dependencies": ["CMS-BE-009"],
+      "deliverables": ["middleware/rate-limit.ts","rate-limit.policy.json"],
+      "acceptanceCriteria": ["命中限流可观测","白名单生效"],
+      "risk": ["误伤合法用户"],
+      "mitigation": ["灰度+回滚","告警联动"],
+      "techSpec": "rate-limiter-flexible + Redis；路由标签化策略。",
+      "testPlan": ["撞库模拟","名单验证"],
+      "metrics": {"securityThrottles": "可观测"},
+      "aiPromptSuggestion": "在既有限流基础上实现路由级策略与名单豁免，附示例。"
+    }
+  ]
+}
+```
+
+**为什么这些卡与“新后端重构”对齐？**
+
+* **缓存/快照/广播**作为所有配置读写的底座，已在你的原规划中反复强调（变更后 1 秒内全进程一致，支持一键回滚）。 
+* **流程校验/试跑器**、**Provider 管理**、**MCP 连接**、**Prompt 预览**、**权限分级**与**只读降级**的交互与接口均来自你自研 CMS 文档里的设计要点。    
+* **健康检查/监控/告警/统一错误体/日志**等工程基线，严格复用《后端优化回答.md》的任务卡规范与验收口径。 
+
+---
+
+## “后端计划.txt”模板（随汇总 PR 一并提交）
+
+```
+# 本次改动概览
+- CMS 后端驱动（/ui/menus, /ui/schema）
+- Feature 发布/回滚 + 快照
+- Provider/MCP 管理 + 测试连接/工具发现
+- 流程校验 + 试跑器（SSE）
+- Prompt 中心（预览/变量校验）
+- 缓存（LRU→Redis→快照→DB）+ cfg:invalidate 广播
+- RBAC 分级；DTO 白名单与脱敏
+- 监控与健康检查
+
+# 接口清单（示例）
+- GET/POST /admin/features, POST /admin/features/publish, POST /admin/features/rollback
+- GET /ui/menus, GET /ui/schema
+- GET/POST /admin/providers, POST /admin/providers/test
+- GET/POST /admin/mcp, POST /admin/mcp/discover, POST /admin/mcp/test
+- POST /admin/pipelines/:id/test (SSE)
+- GET/POST /admin/prompts, POST /admin/prompts/preview
+
+# 数据库变更
+- 新表：features, config_snapshots, provider_endpoints, provider_secrets, mcp_endpoints, pipeline_schemas, prompt_versions（可选）
+- 索引：按高频查询与游标分页设计（详见 migration 注释）
+
+# 回滚与灰度
+- 一键回滚脚本：scripts/rollback-config.ts
+- 灰度：features.version 新旧双读，发布完成后删旧 ver
+- 只读降级：运行期读 Redis→快照→默认值（DB 挂也可读）
+
+# 验收指标
+- 缓存命中≥85%，失效≤200ms；SSE 断流率≤1%
+- 健康检查全绿；错误体统一且带 requestId；监控看板上线
+```
+
+---
+
+### 小结
+
+* 你的“**今晚建分支 → 全部完成 → 明天我确认 → 仅一个汇总 PR（develop→main）+ 附后端计划.txt**”流程**没有问题**；按上面的 Runbook 与 PR Gating 清单执行即可。
+* 本回答给出的 **CMS 配置系统任务卡** 已经把你**后端重构基线**（缓存→快照→广播、统一错误/日志/监控、RBAC/脱敏、健康检查等）全量融入；直接复制给 Codex/自动化代理就能开始写代码与联调。
+* 开发中若需要**索引/游标分页/连接池/限流/熔断**等更细的任务卡，你在《后端优化回答.md》与上一轮“后端任务卡 JSON”中已经具备，可与本次 CMS 卡片交叉引用使用。
+
+如果你希望，我可以把这些任务卡**导出为多仓的 issue 模板**，或者直接生成**OpenAPI（yaml）+ Knex 迁移骨架**的压缩包，方便你“一键丢给 Codex 跑”。
