@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt');
 const { generateCode, generateId } = require('../utils/generator');
 const logger = require('../utils/logger');
 const axios = require('axios');
+const { AppError, ErrorCode } = require('../utils/errors');
 
 /**
  * 认证服务
@@ -62,11 +63,7 @@ class AuthService {
       .first();
 
     if (phoneCount.count >= 5) {
-      throw {
-        statusCode: 429,
-        errorCode: 2004,
-        message: '验证码发送过于频繁,请1分钟后再试'
-      };
+      throw new AppError(ErrorCode.CODE_TOO_FREQUENT);
     }
 
     // 同一IP 1小时内最多20次
@@ -77,11 +74,7 @@ class AuthService {
       .first();
 
     if (ipCount.count >= 20) {
-      throw {
-        statusCode: 429,
-        errorCode: 2005,
-        message: '请求过于频繁,请稍后再试'
-      };
+      throw new AppError(ErrorCode.REQUEST_TOO_FREQUENT);
     }
   }
 
@@ -206,11 +199,7 @@ class AuthService {
       .first();
 
     if (!record) {
-      throw {
-        statusCode: 400,
-        errorCode: 2001,
-        message: '验证码错误或已过期'
-      };
+      throw new AppError(ErrorCode.INVALID_CODE);
     }
   }
 
@@ -226,11 +215,7 @@ class AuthService {
       const wxAppSecret = process.env.WECHAT_APP_SECRET;
 
       if (!wxAppId || !wxAppSecret) {
-        throw {
-          statusCode: 500,
-          errorCode: 1000,
-          message: '微信配置不完整'
-        };
+        throw new AppError(ErrorCode.SYSTEM_ERROR, '微信配置不完整');
       }
 
       const wxApiUrl = `https://api.weixin.qq.com/sns/jscode2session`;
@@ -245,11 +230,7 @@ class AuthService {
 
       if (response.data.errcode) {
         logger.error(`微信code2Session失败: ${response.data.errmsg}`);
-        throw {
-          statusCode: 400,
-          errorCode: 2006,
-          message: '微信登录失败: ' + response.data.errmsg
-        };
+        throw new AppError(ErrorCode.WECHAT_LOGIN_FAILED, '微信登录失败: ' + response.data.errmsg);
       }
 
       const { openid, unionid, session_key } = response.data;
@@ -312,11 +293,7 @@ class AuthService {
         throw error;
       }
       logger.error(`微信登录异常: ${error.message}`, error);
-      throw {
-        statusCode: 500,
-        errorCode: 1000,
-        message: '微信登录失败'
-      };
+      throw new AppError(ErrorCode.SYSTEM_ERROR, '微信登录失败');
     }
   }
 
@@ -331,29 +308,17 @@ class AuthService {
     const user = await db('users').where('phone', phone).first();
 
     if (!user) {
-      throw {
-        statusCode: 401,
-        errorCode: 2007,
-        message: '手机号或密码错误'
-      };
+      throw new AppError(ErrorCode.INVALID_CREDENTIALS);
     }
 
     // 2. 验证密码
     if (!user.password) {
-      throw {
-        statusCode: 401,
-        errorCode: 2008,
-        message: '该用户未设置密码,请使用验证码登录'
-      };
+      throw new AppError(ErrorCode.PASSWORD_NOT_SET);
     }
 
     const isPasswordValid = await this.verifyPassword(password, user.password);
     if (!isPasswordValid) {
-      throw {
-        statusCode: 401,
-        errorCode: 2007,
-        message: '手机号或密码错误'
-      };
+      throw new AppError(ErrorCode.INVALID_CREDENTIALS);
     }
 
     // 3. 生成JWT token (包含role字段 - P0-009)
@@ -396,38 +361,22 @@ class AuthService {
     const user = await db('users').where('id', userId).first();
 
     if (!user) {
-      throw {
-        statusCode: 404,
-        errorCode: 1004,
-        message: '用户不存在'
-      };
+      throw new AppError(ErrorCode.USER_NOT_FOUND);
     }
 
     // 2. 如果用户已有密码,验证旧密码
     if (user.password && oldPassword) {
       const isOldPasswordValid = await this.verifyPassword(oldPassword, user.password);
       if (!isOldPasswordValid) {
-        throw {
-          statusCode: 401,
-          errorCode: 2009,
-          message: '旧密码错误'
-        };
+        throw new AppError(ErrorCode.OLD_PASSWORD_INCORRECT);
       }
     } else if (user.password && !oldPassword) {
-      throw {
-        statusCode: 400,
-        errorCode: 2010,
-        message: '修改密码需要提供旧密码'
-      };
+      throw new AppError(ErrorCode.OLD_PASSWORD_REQUIRED);
     }
 
     // 3. 密码强度校验（至少6位）
     if (newPassword.length < 6) {
-      throw {
-        statusCode: 400,
-        errorCode: 2011,
-        message: '密码长度至少6位'
-      };
+      throw new AppError(ErrorCode.PASSWORD_TOO_SHORT);
     }
 
     // 4. 加密新密码
@@ -477,11 +426,7 @@ class AuthService {
     const user = await db('users').where('id', userId).first();
 
     if (!user) {
-      throw {
-        statusCode: 404,
-        errorCode: 1004,
-        message: '用户不存在'
-      };
+      throw new AppError(ErrorCode.USER_NOT_FOUND);
     }
 
     return {
@@ -506,20 +451,12 @@ class AuthService {
     const referrer = await db('users').where('id', referrerId).first();
 
     if (!referrer) {
-      throw {
-        statusCode: 400,
-        errorCode: 2012,
-        message: '推荐人不存在'
-      };
+      throw new AppError(ErrorCode.REFERRER_NOT_FOUND);
     }
 
     // 2. 检查推荐人账号状态
     if (referrer.deleted_at) {
-      throw {
-        statusCode: 400,
-        errorCode: 2013,
-        message: '推荐人账号已被删除'
-      };
+      throw new AppError(ErrorCode.REFERRER_DELETED);
     }
 
     // 3. 检查推荐人是否是分销员（可选）
