@@ -2,6 +2,7 @@ const db = require('../config/database');
 const jwt = require('jsonwebtoken');
 const { generateCode, generateId } = require('../utils/generator');
 const logger = require('../utils/logger');
+const axios = require('axios');
 
 /**
  * 认证服务
@@ -200,6 +201,111 @@ class AuthService {
         statusCode: 400,
         errorCode: 2001,
         message: '验证码错误或已过期'
+      };
+    }
+  }
+
+  /**
+   * 微信登录 (P0-006)
+   * @param {string} code - 微信登录code
+   * @returns {Promise<{token: string, user: object}>}
+   */
+  async wechatLogin(code) {
+    try {
+      // 1. 调用微信API code2Session获取openid和unionid
+      const wxAppId = process.env.WECHAT_APP_ID;
+      const wxAppSecret = process.env.WECHAT_APP_SECRET;
+
+      if (!wxAppId || !wxAppSecret) {
+        throw {
+          statusCode: 500,
+          errorCode: 1000,
+          message: '微信配置不完整'
+        };
+      }
+
+      const wxApiUrl = `https://api.weixin.qq.com/sns/jscode2session`;
+      const response = await axios.get(wxApiUrl, {
+        params: {
+          appid: wxAppId,
+          secret: wxAppSecret,
+          js_code: code,
+          grant_type: 'authorization_code'
+        }
+      });
+
+      if (response.data.errcode) {
+        logger.error(`微信code2Session失败: ${response.data.errmsg}`);
+        throw {
+          statusCode: 400,
+          errorCode: 2006,
+          message: '微信登录失败: ' + response.data.errmsg
+        };
+      }
+
+      const { openid, unionid, session_key } = response.data;
+
+      // 2. 查询或创建用户（通过openid）
+      let user = await db('users').where('wechat_openid', openid).first();
+
+      if (!user) {
+        // 新用户，自动注册
+        await db.transaction(async (trx) => {
+          const userId = generateId();
+
+          await trx('users').insert({
+            id: userId,
+            phone: null, // 微信登录时phone为空，后续可绑定
+            wechat_openid: openid,
+            wechat_unionid: unionid || null,
+            isMember: false,
+            quota_remaining: 0,
+            quota_expireAt: null,
+            created_at: new Date(),
+            updated_at: new Date()
+          });
+
+          logger.info(`微信新用户注册: userId=${userId}, openid=${openid}`);
+        });
+
+        user = await db('users').where('wechat_openid', openid).first();
+      }
+
+      // 3. 生成JWT token (使用P0-002的双Token机制)
+      const token = jwt.sign(
+        {
+          userId: user.id,
+          phone: user.phone,
+          openid: user.wechat_openid
+        },
+        process.env.JWT_SECRET,
+        {
+          expiresIn: process.env.JWT_EXPIRE || '7d'
+        }
+      );
+
+      logger.info(`微信登录成功: userId=${user.id}, openid=${openid}`);
+
+      return {
+        token,
+        user: {
+          id: user.id,
+          phone: user.phone,
+          role: user.role || 'user',
+          isMember: user.isMember,
+          quota_remaining: user.quota_remaining,
+          quota_expireAt: user.quota_expireAt
+        }
+      };
+    } catch (error) {
+      if (error.statusCode) {
+        throw error;
+      }
+      logger.error(`微信登录异常: ${error.message}`, error);
+      throw {
+        statusCode: 500,
+        errorCode: 1000,
+        message: '微信登录失败'
       };
     }
   }

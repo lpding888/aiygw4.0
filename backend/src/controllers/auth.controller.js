@@ -78,6 +78,36 @@ class AuthController {
   }
 
   /**
+   * 微信登录 (P0-006)
+   * POST /api/auth/wechat-login
+   */
+  async wechatLogin(req, res, next) {
+    try {
+      const { code } = req.body;
+
+      // 参数验证
+      if (!code) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 2000,
+            message: '微信code不能为空'
+          }
+        });
+      }
+
+      const result = await authService.wechatLogin(code);
+
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * 获取当前用户信息
    * GET /api/auth/me
    */
