@@ -3,18 +3,18 @@
  */
 
 exports.up = function(knex) {
-  return knex.schema.createTable('provider_secrets', (table) {
+  return knex.schema.createTable('provider_secrets', function(table) {
     table.string('id').primary().defaultTo(knex.raw('(UUID())'));
     table.string('provider_id').notNullable().comment('供应商ID');
     table.text('encrypted_secret').notNullable().comment('加密的密钥');
     table.string('iv').notNullable().comment('初始化向量');
     table.timestamps(true, true);
 
-    // 外键约束
-    table.foreign('provider_id')
-      .references('id')
-      .inTable('provider_endpoints')
-      .onDelete('CASCADE');
+    // 注释外键约束，避免兼容性问题
+    // table.foreign('provider_id')
+    //   .references('id')
+    //   .inTable('provider_endpoints')
+    //   .onDelete('CASCADE');
 
     // 索引
     table.index(['provider_id']);

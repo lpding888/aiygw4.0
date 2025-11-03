@@ -90,6 +90,26 @@ app.get('/', (req, res) => {
         description: '管理员接口',
         requiresAuth: true,
         requiresAdmin: true
+      },
+      pipelineSchemas: {
+        path: '/api/pipeline-schemas/*',
+        description: 'Pipeline模板管理接口',
+        requiresAuth: true
+      },
+      pipelineExecutions: {
+        path: '/api/pipeline-executions/*',
+        description: 'Pipeline执行管理接口',
+        requiresAuth: true
+      },
+      mcpEndpoints: {
+        path: '/api/mcp-endpoints/*',
+        description: 'MCP端点管理接口',
+        requiresAuth: true
+      },
+      promptTemplates: {
+        path: '/api/prompt-templates/*',
+        description: 'Prompt模板管理接口',
+        requiresAuth: true
       }
     },
     documentation: '请使用具体的API端点,根路径仅用于查看可用接口列表'
@@ -121,6 +141,10 @@ app.use('/api/distribution', require('./routes/distribution.routes')); // 分销
 app.use('/api/ui', require('./routes/ui.routes'));
 app.use('/api/cms/features', require('./routes/cmsFeatures.routes'));
 app.use('/api/cms/providers', require('./routes/cmsProviders.routes'));
+app.use('/api/pipeline-schemas', require('./routes/pipelineSchemas.routes'));
+app.use('/api/pipeline-executions', require('./routes/pipelineExecution.routes'));
+app.use('/api/mcp-endpoints', require('./routes/mcpEndpoints.routes'));
+app.use('/api/prompt-templates', require('./routes/promptTemplates.routes'));
 
 // 404处理
 app.use(notFoundHandler);

@@ -221,23 +221,69 @@ class PromptTemplateService {
 
     try {
       await knex.transaction(async (trx) => {
-        // 更新版本号
         const newVersion = this.incrementVersion(existingTemplate.version);
+        const now = new Date();
 
-        // 更新模板
+        const updateFields: any = {
+          version: newVersion,
+          updated_by: updatedBy,
+          updated_at: now
+        };
+
+        const updatedTemplate = { ...existingTemplate };
+
+        const applyUpdate = (
+          property: keyof PromptTemplate,
+          column: string,
+          transformDb?: (value: any) => any,
+          transformSnapshot?: (value: any) => any
+        ) => {
+          if (!Object.prototype.hasOwnProperty.call(updateData, property)) {
+            return;
+          }
+
+          const rawValue = (updateData as any)[property];
+          updateFields[column] = transformDb ? transformDb(rawValue) : rawValue;
+          (updatedTemplate as any)[property] = transformSnapshot
+            ? transformSnapshot(rawValue)
+            : rawValue;
+        };
+
+        applyUpdate('name', 'name');
+        applyUpdate('description', 'description');
+        applyUpdate('category', 'category');
+        applyUpdate('template', 'template');
+        applyUpdate('tags', 'tags', (value) => JSON.stringify(value || []), (value) => value || []);
+        applyUpdate('variables', 'variables', (value) => JSON.stringify(value || []), (value) => value || []);
+        applyUpdate('metadata', 'metadata', (value) => JSON.stringify(value || {}), (value) => value || {});
+        applyUpdate('examples', 'examples', (value) => JSON.stringify(value || []), (value) => value || []);
+        applyUpdate('config', 'config', (value) => JSON.stringify(value || {}), (value) => value || {});
+        applyUpdate('usageStats', 'usage_stats', (value) => JSON.stringify(value || {
+          usedCount: 0,
+          avgRating: 0,
+          ratingCount: 0
+        }), (value) => value || existingTemplate.usageStats);
+        applyUpdate('status', 'status', (value) => {
+          if (value === 'published' || value === 'archived') {
+            return value;
+          }
+          return 'draft';
+        }, (value) => (value === 'published' || value === 'archived') ? value : 'draft');
+
+        // 状态默认回到草稿（除非显式传入允许的状态）
+        if (!Object.prototype.hasOwnProperty.call(updateData, 'status')) {
+          updateFields.status = 'draft';
+          (updatedTemplate as any).status = 'draft';
+        }
+
         await trx('prompt_templates')
           .where('id', templateId)
-          .update({
-            ...updateData,
-            version: newVersion,
-            updated_by: updatedBy,
-            updated_at: new Date(),
-            // 如果有字段变更，设置为草稿状态
-            status: updateData.status === 'published' ? 'published' : 'draft'
-          });
+          .update(updateFields);
 
-        // 创建快照
-        const updatedTemplate = { ...existingTemplate, ...updateData, version: newVersion, updatedBy };
+        updatedTemplate.version = newVersion;
+        updatedTemplate.updatedBy = updatedBy;
+        updatedTemplate.updatedAt = now;
+
         await this.createSnapshot(trx, updatedTemplate, 'update', '更新Prompt模板', updatedBy);
       });
 

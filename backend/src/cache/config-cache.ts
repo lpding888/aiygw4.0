@@ -1,8 +1,7 @@
 const LRU = require('lru-cache');
 const crypto = require('crypto');
 const logger = require('../utils/logger');
-const cacheService = require('../services/cache.service');
-const cacheSubscriberService = require('../services/cache-subscriber.service');
+const redis = require('../utils/redis');
 
 interface CacheOptions {
   scope: string;
@@ -46,6 +45,7 @@ class ConfigCacheService {
   private snapshotPath: string;
   private invalidationChannel = 'cfg:invalidate';
   private isInitialized = false;
+  private unsubscribe?: () => void;
 
   constructor() {
     // L1: 内存LRU缓存 - 最多1000条，30秒TTL
@@ -77,8 +77,14 @@ class ConfigCacheService {
         fs.mkdirSync(snapshotDir, { recursive: true });
       }
 
-      // 订阅失效广播
-      cacheSubscriberService.subscribe(this.invalidationChannel, this.handleInvalidation.bind(this));
+      if (!this.unsubscribe) {
+        this.unsubscribe = await redis.subscribe(this.invalidationChannel, (message) => {
+          if (!message) {
+            return;
+          }
+          this.handleInvalidation(message);
+        });
+      }
 
       this.isInitialized = true;
       logger.info('Config cache service initialized successfully');
@@ -212,7 +218,7 @@ class ConfigCacheService {
    */
   private async getFromRedis<T>(key: string): Promise<T | null> {
     try {
-      const cached = await cacheService.get(key);
+      const cached = await redis.get(key);
       if (cached) {
         const parsed = JSON.parse(cached);
         return parsed.data;
@@ -239,7 +245,7 @@ class ConfigCacheService {
         timestamp: Date.now()
       };
 
-      await cacheService.set(key, JSON.stringify(cacheData), actualTtl);
+      await redis.setex(key, actualTtl, JSON.stringify(cacheData));
     } catch (error) {
       logger.warn(`Redis set error for key ${key}:`, error);
       // Redis写入失败不影响主流程
@@ -357,7 +363,7 @@ class ConfigCacheService {
 
       // 失效Redis缓存（通过缓存服务）
       if (key) {
-        await cacheService.del(this.buildCacheKey(scope, key, version));
+        await redis.del(this.buildCacheKey(scope, key, version));
       } else {
         // 批量删除（需要Redis支持模式匹配）
         const pattern = `config:${scope}:*`;
@@ -384,7 +390,7 @@ class ConfigCacheService {
 
     // 发布失效广播
     try {
-      await cacheService.publish(this.invalidationChannel, JSON.stringify(payload));
+      await redis.publish(this.invalidationChannel, JSON.stringify(payload));
       logger.info(`Invalidation broadcast sent: ${scope}:${key || '*'}:${version}`);
     } catch (error) {
       logger.error('Failed to send invalidation broadcast:', error);

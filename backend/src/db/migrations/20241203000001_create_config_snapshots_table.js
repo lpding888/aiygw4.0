@@ -11,7 +11,7 @@ exports.up = function(knex) {
     table.json('data').comment('快照数据');
     table.string('action').notNullable().comment('操作类型: create/update/delete/publish/rollback');
     table.text('description').comment('变更说明');
-    integer('created_by').references('id').inTable('users').onDelete('SET NULL');
+    table.integer('created_by').unsigned().comment('创建者ID');
     table.timestamps(true, true);
 
     // 索引

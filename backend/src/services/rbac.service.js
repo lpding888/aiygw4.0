@@ -20,6 +20,7 @@ class RbacService {
       MCP_ENDPOINTS: 'mcp_endpoints',
       PROMPT_TEMPLATES: 'prompt_templates',
       PIPELINES: 'pipelines',
+      PIPELINE_SCHEMAS: 'pipeline_schemas',
       USERS: 'users',
       SYSTEM: 'system'
     };
@@ -33,6 +34,7 @@ class RbacService {
       PUBLISH: 'publish',
       ROLLBACK: 'rollback',
       TEST: 'test',
+      VALIDATE: 'validate',
       MANAGE: 'manage'
     };
 
@@ -44,6 +46,7 @@ class RbacService {
         [this.RESOURCES.MCP_ENDPOINTS]: [this.ACTIONS.READ],
         [this.RESOURCES.PROMPT_TEMPLATES]: [this.ACTIONS.READ],
         [this.RESOURCES.PIPELINES]: [this.ACTIONS.READ],
+        [this.RESOURCES.PIPELINE_SCHEMAS]: [this.ACTIONS.READ],
         [this.RESOURCES.USERS]: [this.ACTIONS.READ],
         [this.RESOURCES.SYSTEM]: [this.ACTIONS.READ]
       },
@@ -53,6 +56,7 @@ class RbacService {
         [this.RESOURCES.MCP_ENDPOINTS]: [this.ACTIONS.READ, this.ACTIONS.CREATE, this.ACTIONS.UPDATE, this.ACTIONS.TEST],
         [this.RESOURCES.PROMPT_TEMPLATES]: [this.ACTIONS.READ, this.ACTIONS.CREATE, this.ACTIONS.UPDATE, this.ACTIONS.TEST],
         [this.RESOURCES.PIPELINES]: [this.ACTIONS.READ, this.ACTIONS.CREATE, this.ACTIONS.UPDATE, this.ACTIONS.TEST],
+        [this.RESOURCES.PIPELINE_SCHEMAS]: [this.ACTIONS.READ, this.ACTIONS.CREATE, this.ACTIONS.UPDATE, this.ACTIONS.VALIDATE],
         [this.RESOURCES.USERS]: [this.ACTIONS.READ],
         [this.RESOURCES.SYSTEM]: [this.ACTIONS.READ]
       },
@@ -67,6 +71,8 @@ class RbacService {
                                            this.ACTIONS.DELETE, this.ACTIONS.PUBLISH, this.ACTIONS.TEST],
         [this.RESOURCES.PIPELINES]: [this.ACTIONS.READ, this.ACTIONS.CREATE, this.ACTIONS.UPDATE,
                                     this.ACTIONS.DELETE, this.ACTIONS.TEST],
+        [this.RESOURCES.PIPELINE_SCHEMAS]: [this.ACTIONS.READ, this.ACTIONS.CREATE, this.ACTIONS.UPDATE,
+                                           this.ACTIONS.DELETE, this.ACTIONS.VALIDATE],
         [this.RESOURCES.USERS]: [this.ACTIONS.READ, this.ACTIONS.CREATE, this.ACTIONS.UPDATE,
                                 this.ACTIONS.DELETE, this.ACTIONS.MANAGE],
         [this.RESOURCES.SYSTEM]: [this.ACTIONS.READ, this.ACTIONS.MANAGE]
@@ -159,6 +165,9 @@ class RbacService {
     }
     if (path.includes('/pipelines')) {
       return this.RESOURCES.PIPELINES;
+    }
+    if (path.includes('/pipeline-schemas') || path.includes('/pipeline_schemas')) {
+      return this.RESOURCES.PIPELINE_SCHEMAS;
     }
     if (path.includes('/users')) {
       return this.RESOURCES.USERS;

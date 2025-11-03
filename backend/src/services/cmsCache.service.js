@@ -14,6 +14,12 @@ class CmsCacheService {
     this.INVALIDATE_CHANNEL = 'cms:invalidate';
     this.memoryCache = new Map(); // 简单的内存缓存
     this.cacheTimeout = 5 * 60 * 1000; // 5分钟
+    this.unsubscribe = null;
+
+    // 异步初始化订阅
+    this.initSubscription().catch(error => {
+      logger.error('[CmsCacheService] Failed to initialize subscription:', error);
+    });
   }
 
   /**
@@ -199,6 +205,51 @@ class CmsCacheService {
       await redis.publish(this.INVALIDATE_CHANNEL, message);
     } catch (error) {
       logger.error('[CMS Cache] Failed to publish invalidation:', error);
+    }
+  }
+
+  async initSubscription() {
+    try {
+      if (this.unsubscribe) {
+        return;
+      }
+
+      this.unsubscribe = await redis.subscribe(this.INVALIDATE_CHANNEL, (payload) => {
+        if (!payload) {
+          return;
+        }
+        this.handleInvalidation(payload);
+      });
+
+      logger.info('[CMS Cache] Subscribed invalidate channel');
+    } catch (error) {
+      logger.warn('[CMS Cache] Failed to subscribe invalidate channel:', error);
+    }
+  }
+
+  handleInvalidation(message) {
+    try {
+      const { scope, key } = JSON.parse(message);
+
+      for (const memoryKey of this.memoryCache.keys()) {
+        if (!memoryKey.startsWith(`${scope}:`)) {
+          continue;
+        }
+
+        if (!key || key === '*') {
+          this.memoryCache.delete(memoryKey);
+          continue;
+        }
+
+        const [, cacheKey] = memoryKey.split(':');
+        if (cacheKey === key) {
+          this.memoryCache.delete(memoryKey);
+        }
+      }
+
+      logger.debug('[CMS Cache] Invalidation handled', { scope, key });
+    } catch (error) {
+      logger.error('[CMS Cache] Handle invalidation failed:', error);
     }
   }
 

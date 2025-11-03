@@ -22,6 +22,7 @@ class ConfigCacheService {
 
     // 版本号缓存，防止快速连续变更
     this.versionCache = new Map();
+    this.unsubscribe = null;
 
     // 初始化Redis订阅
     this.initRedisSubscription();
@@ -174,10 +175,18 @@ class ConfigCacheService {
    */
   async initRedisSubscription() {
     try {
-      const redisClient = require('../utils/redis');
-      // 这里应该创建一个专门的订阅客户端
-      // 为了简化，使用现有的客户端
-      logger.info('Redis subscription initialized for cache invalidation');
+      if (this.unsubscribe) {
+        return;
+      }
+
+      this.unsubscribe = await redis.subscribe(this.INVALIDATE_CHANNEL, (message) => {
+        if (!message) {
+          return;
+        }
+        this.handleInvalidation(message);
+      });
+
+      logger.info(`[ConfigCache] Subscribed to ${this.INVALIDATE_CHANNEL}`);
     } catch (error) {
       logger.warn('Failed to initialize Redis subscription:', error);
     }
@@ -269,14 +278,53 @@ class ConfigCacheService {
    * 预热缓存
    */
   async warmup(dataLoaders) {
+    if (!dataLoaders) {
+      return;
+    }
+
     logger.info('Starting cache warmup...');
 
-    for (const [key, loader] of Object.entries(dataLoaders)) {
+    const entries = Array.isArray(dataLoaders)
+      ? dataLoaders
+      : Object.entries(dataLoaders).map(([descriptor, loader]) => {
+          if (typeof loader === 'function') {
+            const [scope, key, version] = descriptor.split(':');
+            return {
+              options: {
+                scope,
+                key,
+                version: version || 'latest'
+              },
+              loader
+            };
+          }
+
+          if (loader && typeof loader === 'object' && typeof loader.loader === 'function') {
+            return {
+              options: {
+                scope: loader.scope,
+                key: loader.key,
+                version: loader.version || 'latest'
+              },
+              loader: loader.loader
+            };
+          }
+
+          return null;
+        }).filter(Boolean);
+
+    for (const entry of entries) {
+      const { options, loader } = entry;
+      if (!options?.scope || !options?.key || typeof loader !== 'function') {
+        logger.warn('[ConfigCache] Invalid warmup entry, skip', { entry });
+        continue;
+      }
+
       try {
-        await this.getOrSet(key, loader);
-        logger.debug(`Warmed up cache: ${key}`);
+        await this.getOrSet(options, loader);
+        logger.debug(`[ConfigCache] Warmed cache: ${options.scope}:${options.key}`);
       } catch (error) {
-        logger.warn(`Failed to warm up cache ${key}:`, error);
+        logger.warn(`[ConfigCache] Warmup failed for ${options.scope}:${options.key}`, error);
       }
     }
 

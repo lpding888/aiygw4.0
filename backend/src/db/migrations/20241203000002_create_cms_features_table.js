@@ -16,8 +16,8 @@ exports.up = function(knex) {
     table.json('metadata').defaultTo('{}').comment('元数据');
     table.string('version').defaultTo('1.0.0').comment('版本号');
     table.timestamp('published_at').nullable().comment('发布时间');
-    integer('created_by').references('id').inTable('users').onDelete('SET NULL');
-    integer('updated_by').references('id').inTable('users').onDelete('SET NULL');
+    table.integer('created_by').unsigned().comment('创建者ID');
+    table.integer('updated_by').unsigned().comment('更新者ID');
     table.timestamps(true, true);
 
     // 索引

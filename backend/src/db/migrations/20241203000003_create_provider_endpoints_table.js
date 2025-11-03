@@ -16,7 +16,7 @@ exports.up = function(knex) {
     table.string('status').defaultTo('inactive').comment('状态: inactive/active/error');
     table.timestamp('last_tested_at').nullable().comment('最后测试时间');
     table.json('last_test_result').comment('最后测试结果');
-    integer('created_by').references('id').inTable('users').onDelete('SET NULL');
+    table.integer('created_by').unsigned().comment('创建者ID');
     table.timestamps(true, true);
 
     // 索引
