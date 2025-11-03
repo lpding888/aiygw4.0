@@ -120,6 +120,7 @@ app.use('/api/distribution', require('./routes/distribution.routes')); // 分销
 // CMS系统路由
 app.use('/api/ui', require('./routes/ui.routes'));
 app.use('/api/cms/features', require('./routes/cmsFeatures.routes'));
+app.use('/api/cms/providers', require('./routes/cmsProviders.routes'));
 
 // 404处理
 app.use(notFoundHandler);
