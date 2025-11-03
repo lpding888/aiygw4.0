@@ -1,3 +1,6 @@
+// TypeScript支持 - 允许require .ts文件
+require('ts-node/register');
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -193,6 +196,19 @@ app.use('/api/pipeline-schemas', require('./routes/pipelineSchemas.routes'));
 app.use('/api/pipeline-executions', require('./routes/pipelineExecution.routes'));
 app.use('/api/mcp-endpoints', require('./routes/mcpEndpoints.routes'));
 app.use('/api/prompt-templates', require('./routes/promptTemplates.routes'));
+
+// ===== P0新增路由 - 艹，这些是核心功能，必须注册！ =====
+
+// 统一推理API（BE-API-001）- 提供Chat Completions接口
+app.use('/api/ai/chat', require('./routes/ai.route'));
+
+// COS直传API（BE-COS-001）- 提供STS临时密钥和上传接口
+app.use('/api/admin/uploads', require('./routes/admin/uploads.route'));
+
+// 知识库管理API（BE-RAG-003）- 提供文档管理和检索接口
+app.use('/api/admin/kb', require('./routes/admin/kb.route'));
+
+// ===== P0新增路由结束 =====
 
 // 404处理
 app.use(notFoundHandler);
