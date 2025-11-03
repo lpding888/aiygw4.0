@@ -133,21 +133,51 @@ class FeatureCatalogService {
       await knex.transaction(async (trx) => {
         // 更新版本号
         const newVersion = this.incrementVersion(existingFeature.version);
+        const now = new Date();
+        const updateFields: any = {
+          version: newVersion,
+          updated_by: updatedBy,
+          updated_at: now,
+          status: 'draft'
+        };
+
+        const assignIfPresent = (property: keyof FeatureConfig, column: string, transform?: (value: any) => any) => {
+          if (Object.prototype.hasOwnProperty.call(updateData, property)) {
+            const rawValue = (updateData as any)[property];
+            updateFields[column] = transform ? transform(rawValue) : rawValue;
+          }
+        };
+
+        assignIfPresent('key', 'key');
+        assignIfPresent('name', 'name');
+        assignIfPresent('description', 'description');
+        assignIfPresent('category', 'category');
+        assignIfPresent('config', 'config', (value) => JSON.stringify(value || {}));
+        assignIfPresent('enabled', 'enabled');
+        assignIfPresent('menuPath', 'menu_path');
+        assignIfPresent('icon', 'icon');
+        assignIfPresent('color', 'color');
+        assignIfPresent('quotaCost', 'quota_cost');
+        assignIfPresent('accessScope', 'access_scope');
+        assignIfPresent('allowedAccounts', 'allowed_accounts', (value) => JSON.stringify(value || []));
+        assignIfPresent('outputType', 'output_type');
+        assignIfPresent('saveToAssetLibrary', 'save_to_asset_library');
 
         // 更新功能配置
         await trx('features')
           .where('id', featureId)
-          .update({
-            ...updateData,
-            version: newVersion,
-            updated_by: updatedBy,
-            updated_at: new Date(),
-            // 如果有字段变更，设置为草稿状态
-            status: 'draft'
-          });
+          .update(updateFields);
 
         // 创建快照
-        const updatedFeature = { ...existingFeature, ...updateData, version: newVersion, updatedBy };
+        const updatedFeature = {
+          ...existingFeature,
+          ...updateData,
+          version: newVersion,
+          status: 'draft',
+          updatedBy,
+          updatedAt: now
+        };
+
         await this.createSnapshot(trx, updatedFeature, 'update', '更新功能配置', updatedBy);
       });
 

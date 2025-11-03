@@ -147,22 +147,33 @@ class MCPEndpointsService {
     }
 
     try {
+      const now = new Date();
       const updateFields: any = {
-        ...updateData,
         updated_by: updatedBy,
-        updated_at: new Date()
+        updated_at: now
       };
 
-      // 处理JSON字段
-      if (updateData.capabilities) {
-        updateFields.capabilities = JSON.stringify(updateData.capabilities);
-      }
-      if (updateData.supportedTools) {
-        updateFields.supportedTools = JSON.stringify(updateData.supportedTools);
-      }
-      if (updateData.metadata) {
-        updateFields.metadata = JSON.stringify(updateData.metadata);
-      }
+      const assignIfPresent = (property: keyof MCPEndpoint, column: string, transform?: (value: any) => any) => {
+        if (Object.prototype.hasOwnProperty.call(updateData, property)) {
+          const rawValue = (updateData as any)[property];
+          updateFields[column] = transform ? transform(rawValue) : rawValue;
+        }
+      };
+
+      assignIfPresent('name', 'name');
+      assignIfPresent('description', 'description');
+      assignIfPresent('endpointUrl', 'endpoint_url');
+      assignIfPresent('protocolVersion', 'protocol_version');
+      assignIfPresent('capabilities', 'capabilities', (value) => JSON.stringify(value || []));
+      assignIfPresent('supportedTools', 'supported_tools', (value) => JSON.stringify(value || []));
+      assignIfPresent('metadata', 'metadata', (value) => JSON.stringify(value || {}));
+      assignIfPresent('status', 'status');
+      assignIfPresent('healthy', 'healthy');
+      assignIfPresent('timeoutMs', 'timeout_ms');
+      assignIfPresent('maxRetries', 'max_retries');
+      assignIfPresent('enabled', 'enabled');
+      assignIfPresent('lastSyncAt', 'last_sync_at');
+      assignIfPresent('lastError', 'last_error');
 
       await knex('mcp_endpoints')
         .where('id', endpointId)

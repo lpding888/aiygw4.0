@@ -117,6 +117,10 @@ app.use('/api/scf', require('./routes/scfCallback.routes'));
 app.use('/api/assets', require('./routes/asset.routes'));
 app.use('/api/distribution', require('./routes/distribution.routes')); // 分销代理路由
 
+// CMS系统路由
+app.use('/api/ui', require('./routes/ui.routes'));
+app.use('/api/cms/features', require('./routes/cmsFeatures.routes'));
+
 // 404处理
 app.use(notFoundHandler);
 

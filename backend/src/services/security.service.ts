@@ -146,7 +146,11 @@ class SecurityService {
     for (const key in obj) {
       const currentPath = path ? `${path}.${key}` : key;
 
-      if (key === rule.field || currentPath.endsWith(`.${rule.field}`)) {
+      if (
+        currentPath === rule.field ||
+        key === rule.field ||
+        currentPath.endsWith(`.${rule.field}`)
+      ) {
         if (typeof obj[key] === 'string') {
           obj[key] = this.maskValue(obj[key], rule);
         }

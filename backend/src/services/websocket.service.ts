@@ -294,6 +294,24 @@ export class WebSocketService {
   }
 
   /**
+   * 发送任务事件消息（结构化 payload）
+   */
+  sendTaskEvent(taskId: string, payload: Record<string, any>): void {
+    const enrichedPayload = {
+      taskId,
+      ...payload,
+      timestamp: payload && payload.timestamp ? payload.timestamp : new Date().toISOString()
+    };
+
+    const message = {
+      type: 'task_event',
+      data: enrichedPayload
+    };
+
+    this.broadcast(message, `task:${taskId}`);
+  }
+
+  /**
    * 发送任务完成通知
    */
   sendTaskCompleted(taskId: string, result: any): void {

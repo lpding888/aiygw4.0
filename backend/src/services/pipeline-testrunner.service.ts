@@ -533,7 +533,7 @@ class PipelineTestRunnerService extends EventEmitter {
    */
   private emitExecutionEvent(executionId: string, eventType: string, data: any): void {
     // 通过WebSocket发送事件
-    websocketService.sendTaskProgress(executionId, {
+    websocketService.sendTaskEvent(executionId, {
       event: eventType,
       data,
       executionId,
@@ -601,7 +601,7 @@ class PipelineTestRunnerService extends EventEmitter {
         pending: executions.filter(e => e.status === 'pending').length,
         running: executions.filter(e => e.status === 'running').length,
         completed: executions.filter(e => e.status === 'completed').length,
-        failed: executions.filter(e => === 'failed').length,
+        failed: executions.filter(e => e.status === 'failed').length,
         cancelled: executions.filter(e => e.status === 'cancelled').length
       },
       byMode: {
