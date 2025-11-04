@@ -1,0 +1,63 @@
+tage B（P0）— 单 app 路径版任务卡
+
+目标：打通聊天 + 知识库 + CMS 管控三条主链，补齐模板中心/编辑器骨架，完善监控/规范与测试基线。
+规则：每张卡单独 PR；PR 描述要包含：实现清单 / 影响范围 / 截图或录屏 / UT&IT&E2E 结果 / 回滚说明。
+
+1) 页面开发
+任务ID	类型	名称	详细描述	工时	前置	验收	文件路径
+PAGE-P0-CHAT-001	页面	聊天（SSE）	/workspace/chat：调用 POST /api/ai/chat（SSE），模型下拉、停止生成、断线≤3次自动重连、IndexedDB 会话（chatDB.ts）、错误体展示（可复制 requestId）。	10h	BOOT完成	多轮稳定；刷新不丢；移动端 OK	src/app/workspace/chat/page.tsx src/lib/storage/chatDB.ts（复用）
+PAGE-P0-KB-002	页面	知识库 3 页	/admin/kb 列表(分页/删)；/admin/kb/upload COS 直传+回调；/admin/kb/stats 队列统计（轮询或 WS）；POST /api/admin/kb/query 检索测试（topK 可调）。	12h	COSUploader	上传→处理→检索闭环；列表 P95<200ms	src/app/admin/kb/page.tsx src/app/admin/kb/upload/page.tsx src/app/admin/kb/stats/page.tsx
+PAGE-P0-PROV-003	页面	Provider 完善	/admin/providers：测试连接 POST /api/admin/providers/:ref/test、敏感字段掩码、分页/搜索/排序、错误体统一。	6h	—	“测试连接”≤2s；明文仅一次	src/app/admin/providers/page.tsx
+PAGE-P0-PRM-004	页面	Prompt 完整	/admin/prompts 列表；/admin/prompts/[id]/edit：Monaco、变量缺失高亮、预览 POST /api/admin/prompts/:id/render、版本 GET /api/admin/prompts/:id/versions。	10h	—	预览/对比/回滚可用	src/app/admin/prompts/page.tsx src/app/admin/prompts/[id]/edit/page.tsx
+PAGE-P0-USERS-005	全栈	用户管理	若后端未齐先用 MSW：GET /api/admin/users、PUT /api/admin/users/:id、PUT /api/admin/users/:id/roles。前端：表格 + 详情抽屉 + 角色编辑/封禁。	12h	—	403 越权、变更即时	src/app/admin/users/page.tsx src/app/admin/users/[id]/page.tsx
+PAGE-P0-CFG-006	页面	配置管理	/admin/configs：KV 编辑、版本/快照；保存后 1s 内生效（版本号对比）；回滚入口。	6h	—	≤1s 生效；可回滚	src/app/admin/configs/page.tsx
+PAGE-P0-TPL-007	页面	模板中心（骨架）	/workspace/templates：FilterBar+TemplateCard；数据走 cardsEndpoint（MSW），过滤维度从 /api/ui/bootstrap。	8h	BOOT完成	改 bootstrap filters → 页面随变	src/app/workspace/templates/page.tsx
+PAGE-P0-ED-008	页面	编辑器（骨架）	/workspace/editor：三栏（画布/图层/属性）、撤销/重做、QuickActions 按 bootstrap 下发渲染（仅占位）。	10h	BOOT完成	快捷按钮渲染正确	src/app/workspace/editor/page.tsx src/components/editor/*
+2) 共用组件
+任务ID	类型	名称	详细描述	工时	验收	文件路径
+COMP-P0-001	组件	BaseCard	统一卡片：标题/副标题/操作/角标。替换 5+ 处复用。	4h	快照不变	src/components/base/BaseCard.tsx
+COMP-P0-002	组件	DataTablePro	AntD Table 二封：服务端分页/排序/筛选/列选择/导出；Provider/Users/KB 共用。	6h	三页接入成功	src/components/base/DataTablePro.tsx
+COMP-P0-003	组件	COSBatchUploader	STS 直传：批量/进度/取消/重试/限制/回调；KB 上传页复用。	6h	10×10MB 并发稳定	src/components/upload/COSBatchUploader.tsx
+3) 监控 / 规范 / 测试
+任务ID	类型	名称	详细描述	工时	验收	文件路径
+MON-P0-001	监控	Sentry 接入	保持生产环境启用；统一把 requestId 加为 breadcrumb。	4h	捕获率≥95%	src/lib/monitoring/sentry.ts
+MON-P0-002	监控	Web Vitals	LCP/CLS/INP/FID 采集，开发 console，测试打 /__metrics（MSW），生产接 APM/Sentry。	3h	采集率≥95%	src/lib/monitoring/web-vitals.ts
+STD-P0-001	规范	ESLint/Prettier/commitlint	禁随意 any（白名单）、import 顺序、Husky 钩子、CI 阻断。	2h	CI 零警告	根配置
+TEST-P0-001	测试	组件 UT	BaseCard/DataTablePro/COSUploader 等 ≥10 组件；约 30+ 断言。	8h	覆盖≥50%	src/__tests__/*.test.tsx
+TEST-P0-002	测试	Admin IT	Providers/KB/Prompts 三页 CRUD/上传/预览（MSW）。	8h	CI 稳定	src/tests/integration/*.spec.ts
+TEST-P0-003	测试	E2E（主链路）	登录→聊天（SSE）→切模型→KB 检索开关→返回答案。	6h	100% 通过	src/tests/e2e/chat-rag.spec.ts
+📜 API 要点（前端对接约定）
+
+聊天 SSE：POST /api/ai/chat → 返回 text/event-stream，行格式 data: {...}\n，末尾 [DONE]。失败返回 {code,message,requestId}。
+
+Provider：GET/POST/PUT/DELETE /api/admin/providers、POST /api/admin/providers/:ref/test（2xx 返回 {ok,latencyMs,message}）。
+
+KB：POST /api/admin/kb/documents（直传回调）、GET /api/admin/kb/documents、POST /api/admin/kb/query、GET /api/admin/kb/queue-stats。
+
+Prompt：GET /api/admin/prompts、PUT/POST /api/admin/prompts、GET /api/admin/prompts/:id/versions、POST /api/admin/prompts/:id/render。
+
+用户（如未齐，用 MSW 先挡）：GET /api/admin/users、PUT /api/admin/users/:id、PUT /api/admin/users/:id/roles。
+
+配置：GET /api/admin/configs、PUT /api/admin/configs/:key（保存后广播/轮询 version，秒级生效）。
+
+🧭 执行顺序 & 并行建议（P0）
+
+关键路径 A（用户闭环）：PAGE-P0-CHAT-001 → TEST-P0-003
+
+关键路径 B（RAG 闭环）：COMP-P0-003 → PAGE-P0-KB-002 → TEST-P0-002
+
+关键路径 C（CMS 稳态）：PAGE-P0-PROV-003 → PAGE-P0-PRM-004 → PAGE-P0-CFG-006 → TEST-P0-002
+
+展示链 D（服饰外观）：PAGE-P0-TPL-007 → PAGE-P0-ED-008
+
+Provider/聊天可以并行；KB 后半与 Prompt 完整并行；配置页在 Prompt 之后。
+
+✅ 验收门槛（P0）
+
+性能：聊天首帧 < 1.5s；KB 列表 P95 < 200ms；上传 10×10MB 并发成功
+
+稳定性：SSE 自动重连 ≤ 3 次；Provider 测试连接 ≤ 2s；错误体统一且含 requestId
+
+质量：UT 覆盖 ≥ 50%；IT+E2E 全绿
+
+配置化：修改 /api/ui/bootstrap 的 filters、menus、tools 后，前端无需发版即可正确渲染

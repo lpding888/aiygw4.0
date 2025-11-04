@@ -1,0 +1,77 @@
+太猛了！🎉 **P2 全部完成**= 功能完整 + 体验稳定。
+下面直接给你**下一阶段路线**，继续把产品推向“可大规模商用 & 变现 & 企业化”的水位。仍按你**单 app 结构（`frontend/src`）**写好任务卡；一张卡=一条 PR，可直接给 Claude Code 开工。
+
+---
+
+# Stage E（Prod 硬实力 / 安全 & 可观测 & 可靠性）
+
+> 目标：把现在的 Alpha/β 升级为“可商用”的生产级系统：安全、SLA、回滚、成本与稳定性基线。
+
+## 任务卡（单 app 路径）
+
+| 任务ID      | 类型 | 名称                 | 详细描述                                                                               | 验收                    | 路径                                                    |
+| --------- | -- | ------------------ | ---------------------------------------------------------------------------------- | --------------------- | ----------------------------------------------------- |
+| SEC-E-01  | 安全 | CSP & 依赖体检         | 严格 CSP（img-src/COS、connect-src/你的 API）；`npm audit`、`depcheck`、敏感信息扫描（git-secrets）。 | CSP 告警为 0；CI 阻断高危包    | `next.config.js` `public/_headers` `docs/security.md` |
+| SEC-E-02  | 安全 | XSS/CSRF/DOMPurify | 富文本/模板预览使用 DOMPurify；同源/CSRF token；Cookie SameSite。                                | 安全基准测试通过；关键页无 XSS 注入  | `src/components/*` `src/middleware.ts`                |
+| REL-E-03  | 可靠 | 失败重试&幂等            | axios 指数退避 ≤3；上传只重试失败分片；生成任务幂等 key。                                                | 短时网络抖动下主流程 100% 成功    | `src/lib/api/client.ts` `src/components/upload/*`     |
+| REL-E-04  | 可靠 | 灾备回滚               | 前端开关回滚：Bootstrap version 回退；模板/样式包一键回退；PR 回滚文档。                                    | 5 分钟内恢复到上个稳定版本        | `src/app/admin/configs/*` `docs/rollback.md`          |
+| MON-E-05  | 观测 | 前端日志结构化            | requestId 全链路；前端 error 指纹；Vitals 边界告警阈值。                                           | Sentry 告警样例可见；阈值命中能通知 | `src/lib/monitoring/*`                                |
+| COST-E-06 | 成本 | Provider 路由策略      | 低/中/高画质三档；同任务支持降级重试；CMS 配权重。                                                       | 高级模型失败自动降级；成本报表可导出    | `src/app/admin/providers/page.tsx`                    |
+| PERF-E-07 | 性能 | 页面级 RUM 仪表盘        | 为关键页面打点（聊天、Studio、Lookbook）；首屏/LCP/错误率曲线。                                          | 看板 4+ 关键指标，含近 7 天趋势   | `src/lib/monitoring/metrics.ts`                       |
+| QA-E-08   | 质量 | 视觉回归基线             | Storybook + Chromatic/Loki；关键 UI 建立基线。                                             | 关键组件 0 像素回归；变更有差异报告   | `.storybook/*`                                        |
+| DOC-E-09  | 文档 | 线上手册               | 故障排查（SSE/上传/权限/Provider）、告警处理 SOP、发布/回滚流程。                                         | 值班工程师 30 分钟内可定位并恢复    | `docs/playbook.md`                                    |
+
+**PR 顺序**：SEC-E-01 → SEC-E-02 → REL-E-03 → REL-E-04 → MON-E-05 → COST-E-06 → PERF-E-07 → QA-E-08 → DOC-E-09
+
+---
+
+# Stage F（变现 & 增长 / 计费、配额、A/B）
+
+> 目标：闭环商业化与增长：套餐、用量、结算、实验机制、邀请分销拉新。
+
+## 任务卡
+
+| 任务ID       | 类型 | 名称      | 详细描述                                       | 验收                | 路径                                                |
+| ---------- | -- | ------- | ------------------------------------------ | ----------------- | ------------------------------------------------- |
+| BILL-F-01  | 计费 | 套餐&配额   | 方案：免费/专业/企业；调用扣配额；前端显示剩余额度；异常显示付费引导。       | 用量实时展示，触顶优雅降级     | `src/app/membership/*` `src/components/billing/*` |
+| BILL-F-02  | 计费 | 订单/发票   | 账单列表、发票导出（PDF）；下载历史。                       | 可下载指定周期发票         | `src/app/account/billing/page.tsx`                |
+| GROW-F-03  | 增长 | 邀请/分销闭环 | 你的分销模块前台打通：邀请链接、佣金进度、提现流程指引。               | E2E：邀请→注册→首单→佣金入账 | `src/app/distribution/*`                          |
+| EXP-F-04   | 实验 | A/B 平台  | 前端实验 SDK（feature flag + split）；模板中心排序策略实验。 | 任意实验在 24h 内上新与回滚  | `src/lib/exp/*` `src/app/workspace/templates/*`   |
+| NPS-F-05   | 反馈 | 用户反馈/打分 | 关键页悬浮反馈按钮；提交携带 requestId/版本。               | 反馈直达看板；可回溯场景      | `src/components/feedback/*`                       |
+| ANALY-F-06 | 分析 | 漏斗&转化   | PV→模板→生成→导出/支付 漏斗；落地页渠道标记（utm）。            | 看板可视；渠道对比报表       | `docs/metrics.md`                                 |
+
+**PR 顺序**：BILL-F-01 → BILL-F-02 → GROW-F-03 → EXP-F-04 → NPS-F-05 → ANALY-F-06
+
+---
+
+# Stage G（企业化 & 多租户 & 合规）
+
+> 目标：拿下 B 端客户：多租户隔离、审计、权限、导入导出、SLA、合规资料。
+
+## 任务卡
+
+| 任务ID     | 类型  | 名称         | 详细描述                           | 验收            | 路径                                    |
+| -------- | --- | ---------- | ------------------------------ | ------------- | ------------------------------------- |
+| ENT-G-01 | 多租  | 多租户切换      | 顶部租户选择器；租户级 RBAC；资产隔离校验。       | 切租户后菜单/数据切换正确 | `src/components/tenant/*`             |
+| ENT-G-02 | 审计  | 前端审计日志     | 关键操作埋点（发布、回滚、删除、导出）；导出 CSV。    | 审计查询按用户/时间    | `src/app/admin/audit/page.tsx`        |
+| ENT-G-03 | 权限  | 细粒度 RBAC   | 资源级/字段级可见；按钮不渲染；接口 403。        | 黑盒测试过权限矩阵     | `src/shared/auth/*` `src/app/admin/*` |
+| ENT-G-04 | 导入  | 模板/样式/库存导入 | CSV/JSON 导入向导（字段映射/校验）；预览与回滚。  | 10w 行以内稳定     | `src/app/admin/importer/*`            |
+| ENT-G-05 | SLA | 状态页/公告     | `/status`：依赖健康；公告栏（灰度发布/维护窗口）。 | 故障时用户可见状态&订阅  | `src/app/status/page.tsx`             |
+| ENT-G-06 | 合规  | 隐私/条款/同意   | 页脚隐私与条款；Cookie 同意；删除账户流程文档。    | 合规模板齐全        | `src/app/(legal)/*` `docs/legal.md`   |
+
+**PR 顺序**：ENT-G-01 → ENT-G-03 → ENT-G-02 → ENT-G-04 → ENT-G-05 → ENT-G-06
+
+---
+
+## 一次性“开工消息”（直接发给 Claude Code）
+
+```
+进入 Stage E → F → G，按每阶段顺序逐卡提交 PR（单 app 结构）。共性要求：
+- 一张卡一条 PR，使用统一 PR 模板（实现清单/影响范围/截图或录屏/UT&IT&E2E/回滚）。
+- 后端未就绪，一律使用 MSW 挡板，不阻塞联调。
+- 严格执行：ApiError{code,message,requestId}、SSE 重连≤3、Bootstrap 配置驱动、RBAC 不渲染不可见按钮。
+- 每阶段结束前跑一次：Lighthouse/A11y/Sentry报表/性能 Vitals 汇总，并在 docs 中更新基线。
+```
+
+---
+

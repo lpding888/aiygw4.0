@@ -1,0 +1,562 @@
+下面给出**可直接落地、生产级**的「微信小程序首席架构方案」。
+已完整纳入你提供的后台栈、API 文档、运维规范、共享配置层与现有小程序草案（`tasks/01-miniprogram/*.json`），并在每个环节给出**仓库路径、代码/配置样例、API 对接约定、测试与验收**。你可以把整份文档交给 AI 编程助手逐卡实施。
+
+---
+
+# AI衣柜 · 微信小程序生产级方案
+
+## 1. 系统蓝图
+
+### 1.1 整体架构（文字/ASCII）
+
+```
+┌─────────────────────────────────────────── 云与后端 ───────────────────────────────────────────┐
+│  Express(REST) + Bull(Queue) + Redis + MySQL + WS推送                                     │
+│  ├─ services/                                                                            │
+│  │  ├─ contentAudit.service.js （内容审核）                                              │
+│  │  ├─ cos-storage.service.js （COS STS/直传回调）                                       │
+│  │  ├─ payment.service.js （预下单/回调/对账）                                           │
+│  │  ├─ invite/distribution （邀请/佣金/提现）                                            │
+│  │  └─ kms / provider router （密钥与多Provider路由）                                    │
+│  ├─ ws/ （任务进度广播，requestId 贯穿）                                                 │
+│  └─ docs/API对接指南-小程序和APP.md、docs/API_DOCUMENTATION.md                           │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
+                                    ▲                         ▲
+                                    | HTTPS/WS (合法域名)
+                                    |
+┌─────────────────────────────── 微信小程序（端上） ───────────────────────────────────────────┐
+│  app/                                                                                     │
+│   ├─ runtime/                                                                            │
+│   │  ├─ ConfigParser（拉取 /api/ui/bootstrap + shared-layer.json，热更新+缓存）           │
+│   │  ├─ ApiClient（wx.request/wx.uploadFile 封装，ApiError+requestId）                   │
+│   │  ├─ Auth（wx.login→code2Session→后端 wechat-login→unified-login）                    │
+│   │  ├─ WSClient（wx.connectSocket，与 Bull 任务进度对齐；降级长轮询）                   │
+│   │  ├─ Store（authStore/configStore/taskStore/quotaStore）                              │
+│   │  ├─ Theme（shared tokens→自定义TabBar/全局样式）                                     │
+│   │  └─ Monitor（埋点/日志：请求+页面+性能+异常）                                        │
+│   ├─ components/                                                                         │
+│   │  ├─ DynamicFormRenderer（基于 uiSchema 渲染表单）                                     │
+│   │  ├─ TaskList/TaskCard（任务状态/重试/下载）                                          │
+│   │  ├─ COSUploader（STS 获取→wx.uploadFile 到 COS）                                     │
+│   │  └─ CustomTabBar（配置驱动）                                                         │
+│   ├─ pages/（主包最小化）                                                                │
+│   │  ├─ index（首页，预拉取衣橱分包）                                                    │
+│   │  └─ login（登录 + 风控）                                                             │
+│   ├─ subpackages/                                                                        │
+│   │  ├─ wardrobe/** （个人衣橱：管理/AI标签/搭配/社区）                                   │
+│   │  ├─ business/** （商业工作台：批量任务/支付/下载）                                   │
+│   │  └─ profile/**  （我的：配额/订单/分销/设置）                                        │
+│   └─ static 缓存/FSManager（离线兜底、结果图缓存）                                       │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**前端 runtime**：以“配置驱动”为核心（与 Web 前端一致），小程序端启动时拉取 `/api/ui/bootstrap` 与 `tasks/00-shared-types/phase1-shared-layer.json`，在 `ConfigParser` 中合并为本地可用的 **组件注册表/主题 tokens/uiSchema/接口客户端**，并**缓存+热更新**（有 `version` 字段对比）。
+
+**网络通信**：REST（`wx.request`）、上传（`wx.uploadFile` → COS）、下载（`wx.downloadFile`）、进度（优先 `wx.connectSocket`；后备长轮询）。
+
+**状态管理**：轻量 store（`store/{auth,config,task,quota}.ts`），关键信息落 `wx.setStorage`（加密/过期）。
+
+**监控**：前端埋点（请求、PV、点击、任务与支付成功率、性能指标）、异常日志（含 requestId），与后端看板（队列长度、任务成功率、支付成功率）“指标对齐”。
+
+**安全模块**：token/refresh、反重放（nonce+timestamp+签名）、本地敏感信息最小化存储、域名白名单、上传/下载域、WebSocket 合法域、图片内容审核失败兜底 UI。
+
+---
+
+### 1.2 关键数据流 / 事件流（逐步标注服务与策略）
+
+**流程：登录 → 任务提交 → Bull 排队 → 内容审核 → 推送进度/轮询 → 结果下载 → 异常处理/重试**
+
+1. **登录**
+
+   * 小程序端：`wx.login` → 拿 `code`。
+   * 后端：`/api/auth/wechat-login`（按《API对接指南-小程序和APP.md》），内部走 `code2Session` 与 `unified-login` 打通账户。
+   * 返回：`{ token, refreshToken, user, quota, requestId }`。
+   * **策略**：token（内存+Storage，TTL-5min 预刷新）、防刷（设备指纹/UA/小程序 openid+IP）。
+
+2. **获取 STS、上传源图到 COS**
+
+   * `GET /api/admin/uploads/sts`（后端 cos-storage.service.js）。
+   * `wx.uploadFile` 直传 COS；成功后 `POST /api/admin/uploads/callback`（后端入库）。
+   * **重试**：分片失败分片重试；超时指数退避≤3；失败上报 requestId。
+
+3. **提交任务**（例：商品图/换色/试衣…）
+
+   * `POST /api/tools/:toolKey/tasks`，body 为 `uiSchema` 生成的参数 + 资源 URL，**携带幂等 key**（client 生成 `idempotencyKey`）。
+   * 返回 `{ taskId }`。
+   * Bull 入队；Redis 记录状态。
+
+4. **进度获取**
+
+   * 优先 `wx.connectSocket` → 订阅 `/ws/tasks/:taskId`；
+   * 失败降级为**长轮询** `GET /api/tools/tasks/:taskId/status?since=<cursor>`（间隔 2~5s，退避）。
+   * 每条消息必须包含 `requestId`，UI 同步进度（排队→处理中→完成/失败）。
+
+5. **内容审核**（后端）
+
+   * `contentAudit.service.js` 自动审查结果图；不通过→标记任务失败、返回 `AUDIT_REJECTED` 与建议。
+   * 小程序端提示「不合规原因」+「一键修改参数重提」。
+
+6. **结果下载**
+
+   * `GET /api/tools/tasks/:taskId/result` → 返回 `{ outputUrl }`（COS）；
+   * 小程序 `wx.downloadFile` 到临时 FS；显示/保存相册；**文件与元数据缓存**（TTL + ETag）。
+
+7. **异常与回退**
+
+   * 网络抖动：自动重试（上传仅重试失败分片；轮询指数退避<=3）；
+   * 任务失败：支持「重试该任务/复制参数创建新任务」；
+   * 审核失败：引导用户调整参数/提示词并重新提交（保留表单草稿）。
+
+---
+
+## 2. 复用策略
+
+### 2.1 共享配置/类型复用
+
+* 直接引用：`tasks/00-shared-types/phase1-shared-layer.json`（组件注册表、主题 tokens、uiSchema、API 客户端描述）。
+
+* **ConfigParser** 规则：
+
+  1. 首次启动：优先从本地 Storage 读取缓存（带 `version`、`etag` 与 `ts`）；
+  2. 并行拉取：`/api/ui/bootstrap` 与 `phase1-shared-layer.json`；若 `version`/`etag` 变化则合并后覆盖缓存；
+  3. 注入到全局：`getApp().globalData.config` 与 `configStore`。
+
+* 动态渲染器：沿用 Web 的表单 uiSchema→ 小程序端 `DynamicFormRenderer` 渲染为原生控件（picker/slider/switch/input 等）。
+
+### 2.2 必须重写的模块
+
+* **请求层**：从 axios 改为 `wx.request`，保持 **ApiError{code,message,requestId}** 形态与重试策略一致。
+* **上传下载**：COS SDK（小程序版）或 `wx.uploadFile/wx.downloadFile`，与 STS 打通。
+* **进度**：SSE→`wx.connectSocket`（或长轮询）。
+* **UI**：原生 WXML/WXSS 或小程序框架（此方案按「原生+TS」设计）。
+
+### 2.3 目录结构（建议）
+
+> 不变更现有 `frontend/`；新增一个应用：`apps/miniprogram/`
+
+```
+apps/miniprogram/
+├─ project.config.json               # 微信开发者工具工程
+├─ app.ts / app.json / app.wxss
+├─ app.config.ts                     # 构建时生成 app.json 的源（便于分包配置）
+├─ runtime/
+│  ├─ configParser.ts                # 解析 shared-layer + /api/ui/bootstrap
+│  ├─ apiClient.ts                   # request/upload/download 封装
+│  ├─ auth.ts                        # wx.login → wechat-login → unified-login
+│  ├─ wsClient.ts                    # 任务WS + 心跳 + 重连
+│  ├─ store/                         # authStore/configStore/taskStore/quotaStore
+│  ├─ theme.ts                       # tokens → 全局样式 & CustomTabBar
+│  ├─ monitor.ts                     # 埋点/异常上报
+│  └─ types.ts                       # 共享类型(TS)
+├─ components/
+│  ├─ DynamicFormRenderer/
+│  ├─ TaskCard/
+│  ├─ COSUploader/
+│  └─ CustomTabBar/
+├─ pages/
+│  ├─ index/                         # 主包首页（预下载 wardrobe 分包）
+│  └─ login/
+├─ subpackages/
+│  ├─ wardrobe/ ...                  # 个人衣橱
+│  ├─ business/ ...                  # 商业工作台（批量任务/结果下载/支付）
+│  └─ profile/ ...                   # 我的/设置/分销
+├─ utils/
+│  ├─ storage.ts                     # 加密/过期封装
+│  ├─ idempotency.ts                 # 幂等 key 生成
+│  └─ format.ts
+├─ tests/                            # 单测/组件/集成/E2E（小程序模拟器 + 真机）
+└─ scripts/
+   ├─ ci-upload.js                   # miniprogram-ci 上传&灰度
+   └─ rollback.sh
+```
+
+**命名规范**：`kebab-case` 目录；页面用 `index.ts[wxml|wxss|json]`；组件用 `index.ts[wxml|wxss|json]`。
+
+---
+
+## 3. 鉴权与账号打通
+
+### 3.1 登录流程
+
+1. `wx.login()` → 获取 `code`
+2. 后端：`POST /api/auth/wechat-login` `{ code, deviceId, scene }`
+3. 后端内部：`code2Session` → 绑定 openid/unionid → `unified-login`（复用 Web 的用户体系）
+4. 返回：`{ token, refreshToken, user, quota, requestId }`
+
+**Token 策略**
+
+* 缓存：内存 + `wx.setStorage('token', {value, exp})`（exp 提前 5 分钟刷新）。
+* 续期：`/api/auth/refresh`；并发刷新「只发一次」（用本地 Promise 锁）。
+* 退出：清空 token、ws 断开、清理本地缓存（除非用户选择保留配置）。
+
+**风控/防刷/防重放**
+
+* 每次请求头带：`x-nonce`（随机）、`x-timestamp`、`x-sign`（HMAC(tokenSubKey)）；后端验证 5 分钟有效期+一次性。
+* 敏感操作（支付、提现）再加一次 **临时验证码/设备指纹** 验证。
+
+**与 Web/APP 账号打通**
+
+* 后端统一账户 ID；配额/会员信息放在 `/api/account/profile`；小程序端进入 **同一配额/订单** 视图。
+* 若未绑定手机号→引导绑定，便于后续多端合并登录态。
+
+---
+
+## 4. API 映射表（小程序 <-> 后端）
+
+> 以下路径/参数以 `docs/API对接指南-小程序和APP.md`、`docs/API_DOCUMENTATION.md` 为准；这里列小程序侧要用到的核心接口与包装要求。所有响应错误体统一为 **`{ code, message, requestId }`**，网络层按此解析。
+
+### 4.1 认证/账户
+
+| 功能   | 方法   | 路径                       | 入参（示例）                      | 出参（示例）                                            | 重试/幂等              |
+| ---- | ---- | ------------------------ | --------------------------- | ------------------------------------------------- | ------------------ |
+| 微信登录 | POST | `/api/auth/wechat-login` | `{ code, deviceId, scene }` | `{ token, refreshToken, user, quota, requestId }` | 失败退避≤2；同 code 不可重放 |
+| 刷新   | POST | `/api/auth/refresh`      | `{ refreshToken }`          | `{ token, exp }`                                  | 单航道并发锁             |
+
+### 4.2 配置/共享层/菜单
+
+| 功能   | 方法    | 路径                                                                  | 说明                                              |
+| ---- | ----- | ------------------------------------------------------------------- | ----------------------------------------------- |
+| 启动配置 | GET   | `/api/ui/bootstrap`                                                 | 返回菜单、工具、uiSchema、模板过滤维度、editor 快捷操作等（含 version） |
+| 共享层  | 本地/远程 | `tasks/00-shared-types/phase1-shared-layer.json` 或 `/api/ui/shared` | 组件注册表/主题 tokens 等                               |
+
+### 4.3 上传/下载（COS）
+
+| 功能   | 方法   | 路径                            | 入参                       | 出参                                                      | 包装                     |
+| ---- | ---- | ----------------------------- | ------------------------ | ------------------------------------------------------- | ---------------------- |
+| STS  | GET  | `/api/admin/uploads/sts`      | —                        | `{ tmpSecretId,tmpSecretKey,sessionToken,expiredTime }` | 缓存在有效期-2min 过期         |
+| 上传回调 | POST | `/api/admin/uploads/callback` | `{ fileKey, size, md5 }` | `{ ok, requestId }`                                     | 失败重试≤3                 |
+| 结果下载 | GET  | `/api/tools/tasks/:id/result` | —                        | `{ outputUrl, meta }`                                   | `wx.downloadFile` 保存本地 |
+
+### 4.4 任务流（与 Bull 对齐）
+
+| 功能   | 方法   | 路径                            | 入参                           | 出参                               | 包装              |
+| ---- | ---- | ----------------------------- | ---------------------------- | -------------------------------- | --------------- |
+| 创建任务 | POST | `/api/tools/:toolKey/tasks`   | `{ inputs, idempotencyKey }` | `{ taskId }`                     | 必带幂等 key；失败退避≤3 |
+| 任务状态 | GET  | `/api/tools/tasks/:id/status` | `?since=<cursor>`            | `{ state, progress, updatedAt }` | WS 不可用时用它轮询     |
+| 进度推送 | WS   | `wss://<domain>/ws/tasks/:id` | header token                 | 增量进度 JSON                        | 心跳 30s、重连≤3     |
+| 任务结果 | GET  | `/api/tools/tasks/:id/result` | —                            | `{ outputUrl, meta }`            | 结合下载缓存          |
+
+### 4.5 支付/订单/配额
+
+| 功能     | 方法   | 路径                      | 入参                                                               | 出参                                                    | 包装                       |
+| ------ | ---- | ----------------------- | ---------------------------------------------------------------- | ----------------------------------------------------- | ------------------------ |
+| 预下单    | POST | `/api/pay/unifiedorder` | `{ productId, plan, amount, payChannel:'wxpay', scene:'minip' }` | `{ timeStamp, nonceStr, package, signType, paySign }` | 直接喂给 `wx.requestPayment` |
+| 支付状态   | GET  | `/api/pay/orders/:id`   | —                                                                | `{ status, amount, items }`                           | 失败重试                     |
+| 回调（后端） | POST | `/api/pay/callback/wx`  | —                                                                | —                                                     | 小程序侧订阅消息/订单页轮询同步         |
+| 配额     | GET  | `/api/account/quota`    | —                                                                | `{ remain, used, plan }`                              | 任务完成后主动刷新                |
+
+### 4.6 内容审核/分销邀请（如你的文档定义）
+
+| 功能   | 方法       | 路径                    | 说明              |
+| ---- | -------- | --------------------- | --------------- |
+| 审核回调 | POST     | `/api/audit/callback` | 后端侧；小程序接收任务状态变化 |
+| 邀请   | POST/GET | `/api/distribution/*` | 生成邀请链接、查看佣金、提现等 |
+
+> **所有请求头必须：** `x-request-id`（前端生成 UUID）、`x-client`（minip vX.Y）、`Authorization: Bearer <token>`。后端返回 `requestId` 时端侧覆盖记录，以贯穿排查。
+
+---
+
+## 5. 安全与合规
+
+* **密钥管理**：小程序端**不存放任何长效密钥**；只缓存 token/STStmp（到期前2分钟失效）；敏感信息（手机号、openid）落后端。
+* **本地存储策略**：`wx.setStorage` 仅保存**最少必要**信息（token、配置 version、主题），加 `exp`；内容加密（可用 AES-CTR key 派生自 refreshToken 哈希）。
+* **日志脱敏**：埋点与错误日志禁止写入用户隐私/密钥；requestId 可写。
+* **域名白名单（微信后台）**：
+
+  * request 合法域名：`https://api.<your-domain>`
+  * uploadFile 合法域名：`https://<cos-bucket>.cos.<region>.myqcloud.com`
+  * downloadFile 合法域名：同上
+  * socket 合法域名：`wss://api.<your-domain>`（或专用 ws 域）
+* **CSP/防重放**：WeChat 侧配置 + 请求签名（nonce/timestamp/sign）；后端 5 分钟时窗、nonce 一次性表。
+* **内容安全**：端上可选调用 `wx.imgSecCheck`/`wx.msgSecCheck` 提前拦截；主审仍以 `contentAudit.service.js` 为准。
+* **支付**：仅调用 `wx.requestPayment`，参数由后端签发；回调只信任后端（不以端上结果为准）。
+
+---
+
+## 6. 性能 & 离线
+
+* **分包策略（主包 < 700KB）**：主包仅 `pages/index`、`pages/login`、主题与 Runtime 核心；
+* **预下载**：在 `app.json: preloadRule` 中对首页配置 `wardrobe` 分包预拉取；进入首页后主动 `wx.loadSubPackage({ name:'wardrobe' })`。
+* **公共模块拆分**：Runtime/Renderer/Store/ApiClient 单独包；避免在每个分包重复打入。
+* **资源缓存**：配置/模板列表使用 `stale-while-revalidate`；结果图下载保存到 `wx.env.USER_DATA_PATH` 并使用 ETag 命名。
+* **离线兜底**：提供 `pages/offline/index`，在网络不可用/域名不合法时显示说明与本地缓存入口。
+* **容灾策略（与 Bull）**：
+
+  * 任务失败：端上提示失败原因，支持**一键重试**（沿用 `idempotencyKey` 或重置）。
+  * 内容审核拒绝：弹出原因/建议与「调整参数后重提」。
+  * 支付同步：订单页轮询 + 订阅消息（支付成功/失败）提示。
+
+**`app.config.ts`（生成 app.json）分包片段示例：**
+
+```ts
+export default {
+  pages: ["pages/index/index", "pages/login/index"],
+  subPackages: [
+    { root: "subpackages/wardrobe", pages: ["index/index","detail/index"] },
+    { root: "subpackages/business", pages: ["console/index","task/index","result/index","pay/index"] },
+    { root: "subpackages/profile", pages: ["index/index","settings/index","invite/index"] }
+  ],
+  preloadRule: {
+    "pages/index/index": { packages: ["subpackages/wardrobe"] }
+  },
+  tabBar: { custom: true, list: [{pagePath:"pages/index/index", text:"首页"}, {pagePath:"subpackages/wardrobe/index/index", text:"衣橱"}, {pagePath:"subpackages/business/console/index", text:"工作台"}, {pagePath:"subpackages/profile/index/index", text:"我的"}] }
+};
+```
+
+---
+
+## 7. 监控 & 埋点（前后对齐）
+
+**事件模型**（建议上报到后端 `/api/metrics/track`，批量 10 条/5s 或页面隐藏即刻上报）
+
+| 事件ID          | 触发                  | 字段（必含 requestId）                | 备注   |
+| ------------- | ------------------- | ------------------------------- | ---- |
+| pv.page       | 页面 onShow           | page, scene, ref                | PV   |
+| click.btn     | UI 点击               | btnId, page                     | 按钮点击 |
+| task.create   | 提交任务                | toolKey, idempotencyKey, size   | 任务创建 |
+| task.progress | WS/轮询               | taskId, progress, state         | 进度采样 |
+| task.done     | 完成                  | taskId, duration, outputSize    | 成功率  |
+| task.fail     | 失败                  | taskId, code, message, stage    | 失败率  |
+| pay.order     | 下单                  | orderId, plan, amount           | 下单   |
+| pay.result    | 支付结果                | orderId, status, duration       | 成功率  |
+| audit.result  | 审核                  | taskId, status, reason          | 内容安全 |
+| perf.vitals   | 首屏/渲染               | LCP, FMP, TTI, CLS              | 性能   |
+| error.js      | try/catch/unhandled | code, message, stack, requestId | 异常日志 |
+
+**节流与批量**
+
+* 批量缓存（最大 50 条/2 分钟）；页面隐藏/切前台/断网重连时立即 flush；
+* 失败退避重试≤3；超过丢弃并打点 `error.js`；
+* 带上 `userId/tenantId/requestId/version` 以便后端与队列/订单/任务关联。
+
+---
+
+## 8. Stage 规划 & 任务卡（≥4 阶段，每阶段≥6 卡）
+
+> 「复用/重写」标注：**Ref** 指向 `tasks/01-miniprogram/01-base-architecture.json` 中的键名（由于无法读取具体 ID，这里用“文件名#任务名”的方式 1:1 对应；落地时以 JSON 中的真实 `taskId` 为准）。
+
+### **Stage MP-A：基础架构与主包（预计 8 卡）**
+
+| 编号      | 名称                   | 类型      | 详细实现步骤                                                                                  | 依赖   | 改动路径                                           | 验收                    | 测试          | 文档     | 工期   | 复用/重写                          |
+| ------- | -------------------- | ------- | --------------------------------------------------------------------------------------- | ---- | ---------------------------------------------- | --------------------- | ----------- | ------ | ---- | ------------------------------ |
+| MP-A-01 | 初始化工程与主包             | 基建      | 配置 `project.config.json`、`app.ts/json/wxss`；引入 TS；自定义 TabBar 占位；主包仅 index/login         | 无    | `apps/miniprogram/*`                           | 主包<700KB，可启动          | Devtools 构建 | README | 0.5d | Ref: 01-base-architecture#Init |
+| MP-A-02 | ConfigParser         | Runtime | 解析 `shared-layer.json` + `/api/ui/bootstrap`，合并/校验/缓存（version/etag），注入 globalData/store | A-01 | `runtime/configParser.ts`                      | 首次离线→缓存兜底；上线变更→1s 内生效 | 单测+集成       | 开发手册   | 1d   | Ref: #ConfigParser（增强）         |
+| MP-A-03 | ApiClient & ApiError | Runtime | `wx.request/upload/download`封装；错误体统一 `{code,message,requestId}`；重试/退避；header 补全         | A-01 | `runtime/apiClient.ts`                         | 失败提示含 requestId；重试≤3  | 单测          | 接口手册   | 1d   | 新增                             |
+| MP-A-04 | Auth 流程              | Runtime | `wx.login`→`/auth/wechat-login`→token 缓存/续期；风控（nonce/timestamp/sign）                    | A-03 | `runtime/auth.ts`                              | 首次/冷启动/过期自动续期         | 集成/真机       | 接口手册   | 1d   | Ref: #Auth（增强）                 |
+| MP-A-05 | WSClient & 轮询降级      | Runtime | `wx.connectSocket`+心跳/重连；失败降级 `GET /tasks/:id/status`                                   | A-03 | `runtime/wsClient.ts`                          | 断网/重连稳定，降级可用          | 集成/真机       | 监控手册   | 1d   | 新增                             |
+| MP-A-06 | DynamicFormRenderer  | 组件      | 按 uiSchema 渲染：select/number/text/slider/switch/color                                    | A-02 | `components/DynamicFormRenderer/*`             | 表单渲染正确、校验提示           | 组件测         | 组件手册   | 1d   | Ref: #DynamicRenderer          |
+| MP-A-07 | Theme & CustomTabBar | UI      | 主题 tokens 注入；自定义 TabBar 样式/路由；与 bootstrap.menus 联动                                      | A-02 | `runtime/theme.ts` `components/CustomTabBar/*` | 切主题即时生效；菜单随配置变化       | 组件测         | 主题手册   | 0.5d | Ref: #Theme/#CustomTabBar      |
+| MP-A-08 | 监控基座                 | 监控      | 埋点 SDK（批量/节流），异常捕获（带 requestId），性能首帧指标                                                  | A-03 | `runtime/monitor.ts`                           | 事件可在后端看板查询            | 单测          | 监控手册   | 0.5d | 新增                             |
+
+### **Stage MP-B：商业工作台（批量任务/支付/下载）（≥6 卡）**
+
+| 编号      | 名称          | 类型 | 详细实现步骤                                                                                                                         | 依赖      | 改动路径                                   | 验收            | 测试     | 文档   | 工期   | 复用/重写 |
+| ------- | ----------- | -- | ------------------------------------------------------------------------------------------------------------------------------ | ------- | -------------------------------------- | ------------- | ------ | ---- | ---- | ----- |
+| MP-B-01 | 任务创建页       | 页面 | `/subpackages/business/console/index`：选择工具（来自 bootstrap.tools），`DynamicFormRenderer` 渲染参数，提交 `POST /tools/:key/tasks`（含幂等 key） | A-02/06 | `subpackages/business/console/index/*` | 可提交、参数校验、失败提示 | 集成     | 页面说明 | 1d   | 新增    |
+| MP-B-02 | 任务进度页       | 页面 | `/subpackages/business/task/index`：WS 订阅/轮询进度、取消/重试；审查失败提示重提                                                                   | A-05    | `subpackages/business/task/index/*`    | 进度实时；失败可重试    | E2E/真机 | 故障排查 | 1d   | 新增    |
+| MP-B-03 | 结果列表/下载     | 页面 | `/subpackages/business/result/index`：分页拉取、`wx.downloadFile`，缓存本地                                                               | B-02    | `subpackages/business/result/*`        | 下载成功，离线可查看    | 集成/真机  | 用户手册 | 0.5d | 新增    |
+| MP-B-04 | COSUploader | 组件 | 获取 STS → `wx.uploadFile` 直传 COS → 回调；进度/失败重试                                                                                   | A-03    | `components/COSUploader/*`             | 10×10MB 并发成功  | 组件/真机  | 组件手册 | 1d   | 新增    |
+| MP-B-05 | 支付流程        | 页面 | `/subpackages/business/pay/index`：`/pay/unifiedorder` → `wx.requestPayment` → 订单查询/订阅消息                                        | A-04    | `subpackages/business/pay/*`           | 支付成功率≥99%     | 真机     | 支付手册 | 1d   | 新增    |
+| MP-B-06 | 配额/会员展示     | 页面 | `/subpackages/profile/index` 集成配额/订单                                                                                           | A-04    | `subpackages/profile/index/*`          | 配额同步正确        | 集成     | 帐号文档 | 0.5d | 新增    |
+
+### **Stage MP-C：个人衣橱 & 社区（≥6 卡）**
+
+| 编号      | 名称      | 类型 | 实现步骤                          | 依赖        | 路径                       | 验收       | 测试 | 文档   | 工期   | 复用/重写 |
+| ------- | ------- | -- | ----------------------------- | --------- | ------------------------ | -------- | -- | ---- | ---- | ----- |
+| MP-C-01 | 衣物管理    | 页面 | 列表/上传/分类/搜索；AI 标签（后端接口）       | A-04/B-04 | `subpackages/wardrobe/*` | 列表/上传流畅  | 集成 | 用户手册 | 1d   | 新增    |
+| MP-C-02 | AI 标签打标 | 任务 | 提交 `tool:tagging`，结果回填衣物      | C-01      | 同上                       | 标签覆盖≥95% | 集成 | 接口手册 | 0.5d | 新增    |
+| MP-C-03 | 搭配推荐    | 页面 | 组合多 SKU→提交 `tool:lookbook`→展示 | C-01      | `wardrobe/lookbook/*`    | 三种模版导出   | 集成 | 用户手册 | 1d   | 新增    |
+| MP-C-04 | 社区/分享   | 页面 | 分享卡片（海报）/收藏/点赞                | C-01      | `wardrobe/community/*`   | 分享/收藏成功  | 真机 | 社区手册 | 0.5d | 新增    |
+| MP-C-05 | 结果图缓存   | 性能 | FSManager+ETag 命名             | B-03      | `utils/storage.ts`       | 冷启可看历史   | 单测 | 性能文档 | 0.5d | 新增    |
+| MP-C-06 | 离线兜底页   | 页面 | `pages/offline/index`         | A-03      | `pages/offline/*`        | 离线优雅提示   | 真机 | 故障手册 | 0.5d | 新增    |
+
+### **Stage MP-D：分销/邀请 & 运维（≥6 卡）**
+
+| 编号      | 名称            | 类型    | 实现步骤                          | 依赖        | 路径                             | 验收           | 测试  | 文档   | 工期   | 复用/重写  |
+| ------- | ------------- | ----- | ----------------------------- | --------- | ------------------------------ | ------------ | --- | ---- | ---- | ------ |
+| MP-D-01 | 邀请闭环          | 页面    | 生成邀请码/海报、注册绑定、佣金进度            | A-04      | `subpackages/profile/invite/*` | E2E：邀请→注册→佣金 | E2E | 分销文档 | 1d   | 新增     |
+| MP-D-02 | 佣金提现          | 页面    | 申请提现/状态/明细                    | D-01      | `profile/withdraw/*`           | 提现流通         | 集成  | 财务对账 | 0.5d | 新增     |
+| MP-D-03 | 订阅消息          | 运维    | 任务完成/支付结果订阅                   | B-02/B-05 | `runtime/monitor.ts`           | 到达率≥95%      | 真机  | 运维手册 | 0.5d | 新增     |
+| MP-D-04 | 埋点与告警         | 监控    | 指标阈值（任务失败率/支付失败率）→ 服务端告警      | A-08      | `runtime/monitor.ts`           | 告警验证通过       | 单测  | 监控手册 | 0.5d | 新增     |
+| MP-D-05 | DevTools CI上传 | CI/CD | `miniprogram-ci` 自动上传、灰度、回滚脚本 | 无         | `scripts/ci-upload.js`         | 可一键发布/回滚     | CI  | 部署手册 | 0.5d | 新增     |
+| MP-D-06 | 安全基线          | 安全    | 依赖体检/域名配置/CSRF/签名校验联测         | 全局        | `docs/安全审计报告.md` 对齐            | 审计通过         | 安测  | 安全记录 | 0.5d | 重用（增强） |
+
+> 以上每张卡**都包含**：实现步骤/依赖/路径/验收/测试/文档/工期，满足要求（每阶段≥6 张）。
+
+---
+
+## 9. 测试 & CI/CD
+
+**测试目标**
+
+* 单测（Jest + 小程序适配器）：覆盖率 **≥60%**；
+* 组件测试（miniprogram-simulate）：表单渲染、上传器、任务卡；
+* 集成：登录→任务提交→进度→下载→支付；
+* E2E：微信开发者工具自动化 + 真机 2 型号（iOS/Android），关键链路 100% 通过；
+* 视觉回归：关键页面截图对比（工具：`miniprogram-automator` + `pixelmatch`）。
+
+**CI（结合 `deploy/README.md`）**
+
+```
+lint → type-check → unit → component → integration → build
+→ miniprogram-ci upload(体验版) → 自动化E2E(体验版)
+→ 灰度发布(10%→50%→100%) → 指标观察 → 自动或人工升灰
+```
+
+* 回滚：`scripts/rollback.sh` 指定上一个版本号；触发条件：任务失败率/支付失败率超阈、崩溃率上升、关键指标恶化。
+
+---
+
+## 10. 上线运维 & 应急
+
+**微信后台 checklist**
+
+* 合法域名（request/upload/download/socket）
+* 分包配置与预下载
+* 订阅消息模板（任务完成、支付成功）
+* 客服消息开通（异常兜底）
+* 体验版本流程与成员权限
+
+**灰度策略**
+
+* 10% → 50% → 100% 分步灰度；
+* 每步观测 30–60 分钟关键指标（任务成功率、支付成功率、崩溃率、PV）；
+* 失败触发：自动回滚 & 发布公告（status 页/公告组件）。
+
+**故障应急手册**
+
+* 内容审核失败：提示原因→保留参数草稿→一键重提；
+* 任务积压：UI 显示排队状态与预计时长；后端扩容通知；
+* 支付异常：前端不依赖端上结果；以后端订单状态为准；
+* COS 超时：提示稍后重试、保留已上传分片；
+* Redis/队列不可用：降级为创建任务排队中；禁用批量入口。
+
+**配置备份/演练**
+
+* 每周备份 shared-layer.json、bootstrap；
+* 每月演练「任务失败/审核拒绝/支付异常/回滚」。
+
+---
+
+## 11. 文档清单（放置位置）
+
+```
+docs/
+├─ miniprogram-README.md            # 项目介绍、安装、命令
+├─ miniprogram-dev-guide.md         # 开发手册（目录、状态、API封装、WS、上传、主题）
+├─ miniprogram-api-handbook.md      # 小程序端接口手册（映射表+示例）
+├─ miniprogram-monitoring.md        # 埋点/日志/性能指标与告警阈值
+├─ miniprogram-troubleshooting.md   # 故障排查（登录/上传/WS/支付/审核）
+├─ miniprogram-release-checklist.md # 上线Checklist（域名/分包/订阅消息/灰度/回滚）
+├─ miniprogram-rollback-SOP.md      # 回滚SOP（脚本/触发条件/指标）
+└─ miniprogram-security.md          # 安全基线（本地存储/签名/脱敏/依赖体检）
+```
+
+---
+
+## 12. 代码/配置示例
+
+### 12.1 `runtime/apiClient.ts`（请求封装）
+
+```ts
+// apps/miniprogram/runtime/apiClient.ts
+type ApiError = { code: string; message: string; requestId?: string };
+const BASE = 'https://api.your-domain.com';
+
+function headers(extra: Record<string,string> = {}) {
+  const token = wx.getStorageSync('token')?.value || '';
+  const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return { 'Content-Type':'application/json', 'x-request-id': requestId, Authorization: token ? `Bearer ${token}` : '', ...extra };
+}
+
+export function request<T=any>(url: string, method: 'GET'|'POST'|'PUT'|'DELETE'='GET', data?: any, retry=0): Promise<T> {
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${BASE}${url}`,
+      method, data, header: headers(),
+      success: (res) => {
+        if (res.statusCode! >= 200 && res.statusCode! < 300) resolve(res.data as T);
+        else reject({ code: (res.data as any)?.code || `HTTP_${res.statusCode}`, message: (res.data as any)?.message || '请求失败', requestId: (res.data as any)?.requestId } as ApiError);
+      },
+      fail: (e) => {
+        if (retry < 3) setTimeout(() => request<T>(url, method, data, retry+1).then(resolve, reject), 300 * (retry+1));
+        else reject({ code: 'NETWORK', message: e.errMsg } as ApiError);
+      }
+    });
+  });
+}
+```
+
+### 12.2 `runtime/wsClient.ts`（WS+降级）
+
+```ts
+// 简化示例：按 taskId 订阅进度
+export function subscribeTask(taskId: string, onMsg: (d:any)=>void, onError:(e:any)=>void) {
+  const token = wx.getStorageSync('token')?.value || '';
+  const url = `wss://api.your-domain.com/ws/tasks/${taskId}?token=${encodeURIComponent(token)}`;
+  let retries = 0; const max = 3;
+  let socket = wx.connectSocket({ url, header: { 'Sec-WebSocket-Protocol': 'json' } });
+
+  socket.onOpen(() => { retries = 0; /* 心跳 */ });
+  socket.onMessage((e) => { try { onMsg(JSON.parse(e.data as string)); } catch {} });
+  socket.onError((e) => { if (retries++ < max) setTimeout(()=>subscribeTask(taskId,onMsg,onError), 500*retries); else onError(e); });
+  socket.onClose(() => { /* 可选：重连 */ });
+
+  return () => { try { socket.close({ code: 1000 }); } catch {} };
+}
+```
+
+### 12.3 `components/DynamicFormRenderer/index.ts`（uiSchema→原生表单）
+
+```ts
+// 支持 select/number/text/slider/switch/color 六类，略
+Component({
+  properties: { schema: Object, value: Object },
+  methods: {
+    onSubmit() { this.triggerEvent('submit', this.data.value); },
+    onChange(e:any) { /* 更新内部 value */ }
+  }
+});
+```
+
+### 12.4 `pages/index/index.ts`（预下载分包）
+
+```ts
+Page({
+  onLoad() {
+    wx.loadSubPackage({ name: 'subpackages/wardrobe', success:()=>{}, fail:()=>{} });
+  }
+});
+```
+
+### 12.5 `scripts/ci-upload.js`（miniprogram-ci 上传）
+
+```js
+const ci = require('miniprogram-ci');
+(async () => {
+  const project = new ci.Project({ appid: process.env.WX_APPID, type: 'miniProgram', projectPath: 'apps/miniprogram', privateKeyPath: process.env.WX_PRIVATE_KEY });
+  await ci.upload({ project, version: process.env.APP_VERSION, desc: process.env.GIT_SHA, setting: { es6:true, minifyJS:true } });
+})();
+```
+
+---
+
+## 与现有规划的映射（沿用/重写/增强）
+
+* **沿用**：主包最小化、分包结构（wardrobe/business/profile）、预下载策略、ConfigParser、动态渲染器、自定义 TabBar、主题系统（均来自 `01-base-architecture.json`）。
+* **增强/重写**：
+
+  * **ApiClient/WSClient**（适配小程序 API、错误体与重试/退避、WS 降级轮询）；
+  * **COSUploader**（STS→COS直传→回调、分片失败重试）；
+  * **监控基座**（批量埋点、异常、性能指标、与后端看板对齐）；
+  * **支付**（预下单→`wx.requestPayment`→回调同步）；
+  * **安全基线**（签名、防重放、域名配置、本地敏感数据策略）。
+
+---
+
+### 结语
+
+* 小程序端**完全继承**了 Web 端的“配置驱动 + ApiError + requestId + 多 Provider 路由 + Bull 队列编排”的思想；
+* 通过 **WS/轮询容灾、上传/下载直连 COS、任务幂等与重试、审核拒绝重提**，保障了生产级可用性；
+* 监控、CI/CD、灰度与回滚、应急预案全部到位。
+
