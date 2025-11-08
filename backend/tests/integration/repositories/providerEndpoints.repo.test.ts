@@ -4,7 +4,7 @@
  * 测试覆盖：CRUD完整流程/加密存储/解密读取/缓存机制
  */
 
-import db from '../../../src/db';
+import { db } from '../../../src/config/database.js';
 import {
   createProviderEndpoint,
   getProviderEndpoint,
@@ -12,8 +12,8 @@ import {
   deleteProviderEndpoint,
   providerEndpointExists,
   clearAllCache,
-  ProviderEndpointInput,
-} from '../../../src/repositories/providerEndpoints.repo';
+  ProviderEndpointInput
+} from '../../../src/repositories/providerEndpoints.repo.js';
 
 describe('ProviderEndpoints Repository - 集成测试', () => {
   // 测试用Provider端点
@@ -23,26 +23,22 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
     endpoint_url: 'https://api.example.com',
     credentials: {
       apiKey: 'super-secret-key-123',
-      apiSecret: 'super-secret-456',
+      apiSecret: 'super-secret-456'
     },
-    auth_type: 'api_key',
+    auth_type: 'api_key'
   };
 
   beforeAll(() => {
     // 确保测试环境有MASTER_KEY
     if (!process.env.MASTER_KEY) {
-      const testKey = Buffer.from('test-master-key-32-bytes-long!').toString(
-        'base64'
-      );
+      const testKey = Buffer.from('test-master-key-32-bytes-long!').toString('base64');
       process.env.MASTER_KEY = testKey;
     }
   });
 
   beforeEach(async () => {
     // 清理测试数据
-    await db('provider_endpoints')
-      .where('provider_ref', 'like', 'test-provider-%')
-      .delete();
+    await db('provider_endpoints').where('provider_ref', 'like', 'test-provider-%').delete();
 
     // 清空缓存
     clearAllCache();
@@ -50,9 +46,7 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
 
   afterAll(async () => {
     // 清理所有测试数据
-    await db('provider_endpoints')
-      .where('provider_ref', 'like', 'test-provider-%')
-      .delete();
+    await db('provider_endpoints').where('provider_ref', 'like', 'test-provider-%').delete();
 
     // 关闭数据库连接
     await db.destroy();
@@ -69,9 +63,7 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
       expect(created.auth_type).toBe(testProviderInput.auth_type);
 
       // 艹，返回的凭证应该是解密后的对象
-      expect(created.credentials_encrypted).toEqual(
-        testProviderInput.credentials
-      );
+      expect(created.credentials_encrypted).toEqual(testProviderInput.credentials);
 
       // 验证数据库中存储的是加密数据
       const rawRow = await db('provider_endpoints')
@@ -101,15 +93,11 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
     test('应该成功读取并自动解密凭证', async () => {
       await createProviderEndpoint(testProviderInput);
 
-      const retrieved = await getProviderEndpoint(
-        testProviderInput.provider_ref
-      );
+      const retrieved = await getProviderEndpoint(testProviderInput.provider_ref);
 
       expect(retrieved).not.toBeNull();
       expect(retrieved?.provider_ref).toBe(testProviderInput.provider_ref);
-      expect(retrieved?.credentials_encrypted).toEqual(
-        testProviderInput.credentials
-      );
+      expect(retrieved?.credentials_encrypted).toEqual(testProviderInput.credentials);
     });
 
     test('不存在的Provider应该返回null', async () => {
@@ -129,9 +117,7 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
       expect(second).not.toBeNull();
 
       // 数据应该一致
-      expect(second?.credentials_encrypted).toEqual(
-        first?.credentials_encrypted
-      );
+      expect(second?.credentials_encrypted).toEqual(first?.credentials_encrypted);
     });
 
     test('useCache=false应该跳过缓存', async () => {
@@ -141,15 +127,10 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
       await getProviderEndpoint(testProviderInput.provider_ref, true);
 
       // 强制从数据库读取
-      const retrieved = await getProviderEndpoint(
-        testProviderInput.provider_ref,
-        false
-      );
+      const retrieved = await getProviderEndpoint(testProviderInput.provider_ref, false);
 
       expect(retrieved).not.toBeNull();
-      expect(retrieved?.credentials_encrypted).toEqual(
-        testProviderInput.credentials
-      );
+      expect(retrieved?.credentials_encrypted).toEqual(testProviderInput.credentials);
     });
   });
 
@@ -157,20 +138,15 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
     test('应该成功更新普通字段', async () => {
       await createProviderEndpoint(testProviderInput);
 
-      const updated = await updateProviderEndpoint(
-        testProviderInput.provider_ref,
-        {
-          provider_name: '更新后的名字',
-          endpoint_url: 'https://new-api.example.com',
-        }
-      );
+      const updated = await updateProviderEndpoint(testProviderInput.provider_ref, {
+        provider_name: '更新后的名字',
+        endpoint_url: 'https://new-api.example.com'
+      });
 
       expect(updated.provider_name).toBe('更新后的名字');
       expect(updated.endpoint_url).toBe('https://new-api.example.com');
       // 凭证不应该改变
-      expect(updated.credentials_encrypted).toEqual(
-        testProviderInput.credentials
-      );
+      expect(updated.credentials_encrypted).toEqual(testProviderInput.credentials);
     });
 
     test('应该成功更新凭证并重新加密', async () => {
@@ -178,15 +154,12 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
 
       const newCredentials = {
         apiKey: 'new-secret-key-789',
-        apiSecret: 'new-secret-999',
+        apiSecret: 'new-secret-999'
       };
 
-      const updated = await updateProviderEndpoint(
-        testProviderInput.provider_ref,
-        {
-          credentials: newCredentials,
-        }
-      );
+      const updated = await updateProviderEndpoint(testProviderInput.provider_ref, {
+        credentials: newCredentials
+      });
 
       expect(updated.credentials_encrypted).toEqual(newCredentials);
 
@@ -202,7 +175,7 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
     test('更新不存在的Provider应该抛出错误', async () => {
       await expect(
         updateProviderEndpoint('non-existent-provider', {
-          provider_name: 'Test',
+          provider_name: 'Test'
         })
       ).rejects.toThrow('Provider端点不存在');
     });
@@ -215,13 +188,11 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
 
       // 更新
       await updateProviderEndpoint(testProviderInput.provider_ref, {
-        provider_name: '更新后的名字',
+        provider_name: '更新后的名字'
       });
 
       // 再次读取应该从数据库读取（缓存已清除）
-      const retrieved = await getProviderEndpoint(
-        testProviderInput.provider_ref
-      );
+      const retrieved = await getProviderEndpoint(testProviderInput.provider_ref);
       expect(retrieved?.provider_name).toBe('更新后的名字');
     });
   });
@@ -234,9 +205,7 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
       expect(result).toBe(true);
 
       // 验证已删除
-      const retrieved = await getProviderEndpoint(
-        testProviderInput.provider_ref
-      );
+      const retrieved = await getProviderEndpoint(testProviderInput.provider_ref);
       expect(retrieved).toBeNull();
     });
 
@@ -255,9 +224,7 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
       await deleteProviderEndpoint(testProviderInput.provider_ref);
 
       // 再次读取应该返回null（缓存已清除）
-      const retrieved = await getProviderEndpoint(
-        testProviderInput.provider_ref
-      );
+      const retrieved = await getProviderEndpoint(testProviderInput.provider_ref);
       expect(retrieved).toBeNull();
     });
   });
@@ -266,9 +233,7 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
     test('存在的Provider应该返回true', async () => {
       await createProviderEndpoint(testProviderInput);
 
-      const exists = await providerEndpointExists(
-        testProviderInput.provider_ref
-      );
+      const exists = await providerEndpointExists(testProviderInput.provider_ref);
       expect(exists).toBe(true);
     });
 
@@ -283,13 +248,13 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
       const sensitiveData = {
         password: 'my-super-secret-password',
         apiKey: 'sk-1234567890abcdef',
-        privateKey: '-----BEGIN RSA PRIVATE KEY-----\nMIICXAIBAAK...',
+        privateKey: '-----BEGIN RSA PRIVATE KEY-----\nMIICXAIBAAK...'
       };
 
       const input: ProviderEndpointInput = {
         ...testProviderInput,
         provider_ref: 'test-provider-security',
-        credentials: sensitiveData,
+        credentials: sensitiveData
       };
 
       await createProviderEndpoint(input);
@@ -317,13 +282,11 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
       await db('provider_endpoints')
         .where({ provider_ref: testProviderInput.provider_ref })
         .update({
-          credentials_encrypted: 'tampered-data-not-valid-json',
+          credentials_encrypted: 'tampered-data-not-valid-json'
         });
 
       // 尝试读取应该返回原始（损坏的）数据或抛出错误
-      const retrieved = await getProviderEndpoint(
-        testProviderInput.provider_ref
-      );
+      const retrieved = await getProviderEndpoint(testProviderInput.provider_ref);
 
       // 艹，解密失败时应该保留原始数据（防止数据丢失）
       expect(retrieved?.credentials_encrypted).toBe('tampered-data-not-valid-json');
@@ -338,7 +301,7 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
         provider_name: 'CRUD测试Provider',
         endpoint_url: 'https://crud-test.example.com',
         credentials: { key: 'value1' },
-        auth_type: 'bearer',
+        auth_type: 'bearer'
       });
 
       expect(created.provider_ref).toBe('test-provider-crud');
@@ -352,18 +315,16 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
       // 3. 更新
       const updated = await updateProviderEndpoint('test-provider-crud', {
         provider_name: 'CRUD测试Provider（已更新）',
-        credentials: { key: 'value2' },
+        credentials: { key: 'value2' }
       });
 
       expect(updated.provider_name).toBe('CRUD测试Provider（已更新）');
       expect(updated.credentials_encrypted).toEqual({ key: 'value2' });
 
       // 4. 验证更新
-      const retrievedAfterUpdate = await getProviderEndpoint(
-        'test-provider-crud'
-      );
+      const retrievedAfterUpdate = await getProviderEndpoint('test-provider-crud');
       expect(retrievedAfterUpdate?.credentials_encrypted).toEqual({
-        key: 'value2',
+        key: 'value2'
       });
 
       // 5. 删除
@@ -371,14 +332,10 @@ describe('ProviderEndpoints Repository - 集成测试', () => {
       expect(deleted).toBe(true);
 
       // 6. 验证删除
-      const retrievedAfterDelete = await getProviderEndpoint(
-        'test-provider-crud'
-      );
+      const retrievedAfterDelete = await getProviderEndpoint('test-provider-crud');
       expect(retrievedAfterDelete).toBeNull();
 
-      const existsAfterDelete = await providerEndpointExists(
-        'test-provider-crud'
-      );
+      const existsAfterDelete = await providerEndpointExists('test-provider-crud');
       expect(existsAfterDelete).toBe(false);
     });
   });

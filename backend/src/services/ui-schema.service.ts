@@ -1,5 +1,5 @@
 const configCacheService = require('../cache/config-cache');
-const { knex } = require('../db/connection');
+import { db as knex } from '../db/index.js';
 const logger = require('../utils/logger');
 const { hasPermission, getRolePermissions } = require('../utils/rbac');
 
@@ -230,14 +230,14 @@ class UISchemaService {
 
     const menuMap = new Map<string, MenuConfig>();
 
-    features.forEach(feature => {
+    features.forEach((feature) => {
       const menuPath = feature.menu_path || `/admin/${feature.key}`;
-      const pathParts = menuPath.split('/').filter(p => p);
+      const pathParts = menuPath.split('/').filter((p: any) => p);
 
       let currentPath = '';
       let parentMenu: MenuConfig | null = null;
 
-      pathParts.forEach((part, index) => {
+      pathParts.forEach((part: any, index: any) => {
         currentPath += `/${part}`;
 
         if (!menuMap.has(currentPath)) {
@@ -266,7 +266,7 @@ class UISchemaService {
       });
     });
 
-    return Array.from(menuMap.values()).filter(menu => !menu.path);
+    return Array.from(menuMap.values()).filter((menu) => !menu.path);
   }
 
   /**
@@ -292,11 +292,12 @@ class UISchemaService {
   /**
    * 从数据库生成表单Schema
    */
-  private async generateFormSchemaFromDB(formKey: string, userRole: string): Promise<FormSchema | null> {
+  private async generateFormSchemaFromDB(
+    formKey: string,
+    userRole: string
+  ): Promise<FormSchema | null> {
     try {
-      const config = await knex('ui_configs')
-        .where('config_key', `form:${formKey}`)
-        .first();
+      const config = await knex('ui_configs').where('config_key', `form:${formKey}`).first();
 
       if (config) {
         return JSON.parse(config.config_value);
@@ -313,11 +314,12 @@ class UISchemaService {
   /**
    * 从数据库生成表格Schema
    */
-  private async generateTableSchemaFromDB(tableKey: string, userRole: string): Promise<TableSchema | null> {
+  private async generateTableSchemaFromDB(
+    tableKey: string,
+    userRole: string
+  ): Promise<TableSchema | null> {
     try {
-      const config = await knex('ui_configs')
-        .where('config_key', `table:${tableKey}`)
-        .first();
+      const config = await knex('ui_configs').where('config_key', `table:${tableKey}`).first();
 
       if (config) {
         return JSON.parse(config.config_value);
@@ -338,9 +340,7 @@ class UISchemaService {
     const forms: Record<string, FormSchema> = {};
 
     // 为每个启用的功能生成表单Schema
-    const features = await knex('features')
-      .where('enabled', true)
-      .where('status', 'published');
+    const features = await knex('features').where('enabled', true).where('status', 'published');
 
     for (const feature of features) {
       const formSchema = await this.generateDefaultFormSchema(feature.key, userRole);
@@ -373,7 +373,7 @@ class UISchemaService {
    */
   private generateDefaultFormSchema(featureKey: string, userRole: string): FormSchema | null {
     const schemaMap: Record<string, FormSchema> = {
-      'features': {
+      features: {
         type: 'object',
         title: '功能配置',
         properties: {
@@ -385,7 +385,7 @@ class UISchemaService {
         },
         required: ['name', 'category']
       },
-      'providers': {
+      providers: {
         type: 'object',
         title: '供应商配置',
         properties: {
@@ -407,31 +407,48 @@ class UISchemaService {
    */
   private generateDefaultTableSchema(tableKey: string, userRole: string): TableSchema {
     const schemaMap: Record<string, TableSchema> = {
-      'features': {
+      features: {
         columns: [
           { key: 'id', title: 'ID', dataIndex: 'id', width: 80 },
           { key: 'name', title: '功能名称', dataIndex: 'name', sorter: true },
-          { key: 'category', title: '分类', dataIndex: 'category', filters: [
-            { text: '图像处理', value: 'image' },
-            { text: '视频处理', value: 'video' },
-            { text: '文本处理', value: 'text' }
-          ]},
+          {
+            key: 'category',
+            title: '分类',
+            dataIndex: 'category',
+            filters: [
+              { text: '图像处理', value: 'image' },
+              { text: '视频处理', value: 'video' },
+              { text: '文本处理', value: 'text' }
+            ]
+          },
           { key: 'quota_cost', title: '配额消耗', dataIndex: 'quota_cost', width: 100 },
           { key: 'enabled', title: '状态', dataIndex: 'enabled', width: 80, render: 'statusBadge' },
           { key: 'actions', title: '操作', dataIndex: 'actions', width: 200, fixed: 'right' }
         ],
         actions: [
           { key: 'edit', title: '编辑', icon: 'edit', permission: 'features:update' },
-          { key: 'delete', title: '删除', icon: 'delete', permission: 'features:delete', danger: true }
+          {
+            key: 'delete',
+            title: '删除',
+            icon: 'delete',
+            permission: 'features:delete',
+            danger: true
+          }
         ]
       },
-      'providers': {
+      providers: {
         columns: [
           { key: 'id', title: 'ID', dataIndex: 'id', width: 80 },
           { key: 'name', title: '供应商名称', dataIndex: 'name', sorter: true },
           { key: 'type', title: '类型', dataIndex: 'type' },
           { key: 'base_url', title: '基础URL', dataIndex: 'base_url' },
-          { key: 'healthy', title: '健康状态', dataIndex: 'healthy', width: 100, render: 'healthBadge' },
+          {
+            key: 'healthy',
+            title: '健康状态',
+            dataIndex: 'healthy',
+            width: 100,
+            render: 'healthBadge'
+          },
           { key: 'actions', title: '操作', dataIndex: 'actions', width: 200, fixed: 'right' }
         ],
         actions: [
@@ -441,26 +458,31 @@ class UISchemaService {
       }
     };
 
-    return schemaMap[tableKey] || {
-      columns: [
-        { key: 'id', title: 'ID', dataIndex: 'id', width: 80 },
-        { key: 'name', title: '名称', dataIndex: 'name', sorter: true },
-        { key: 'actions', title: '操作', dataIndex: 'actions', width: 150, fixed: 'right' }
-      ]
-    };
+    return (
+      schemaMap[tableKey] || {
+        columns: [
+          { key: 'id', title: 'ID', dataIndex: 'id', width: 80 },
+          { key: 'name', title: '名称', dataIndex: 'name', sorter: true },
+          { key: 'actions', title: '操作', dataIndex: 'actions', width: 150, fixed: 'right' }
+        ]
+      }
+    );
   }
 
   /**
    * 按权限过滤菜单
    */
-  private filterMenusByPermission(menus: MenuConfig[], userRole: string): MenuConfig[] {
+  filterMenusByPermission(menus: MenuConfig[], userRole: string): MenuConfig[] {
     return menus
-      .filter(menu => this.hasMenuPermission(menu, userRole))
-      .map(menu => ({
+      .filter((menu) => this.hasMenuPermission(menu, userRole))
+      .map((menu) => ({
         ...menu,
         children: menu.children ? this.filterMenusByPermission(menu.children, userRole) : undefined
       }))
-      .filter(menu => menu.children?.length || !menu.permissions || this.hasMenuPermission(menu, userRole));
+      .filter(
+        (menu) =>
+          menu.children?.length || !menu.permissions || this.hasMenuPermission(menu, userRole)
+      );
   }
 
   /**
@@ -481,7 +503,7 @@ class UISchemaService {
       return true;
     }
 
-    return menu.permissions.some(permission => {
+    return menu.permissions.some((permission) => {
       const [resource, action] = permission.split(':');
       return hasPermission(userRole as any, resource, action as any);
     });
@@ -506,13 +528,13 @@ class UISchemaService {
    */
   private getDefaultIcon(part: string): string {
     const iconMap: Record<string, string> = {
-      'admin': 'setting',
-      'features': 'appstore',
-      'providers': 'cloud',
-      'mcp': 'api',
-      'pipelines': 'share-alt',
-      'prompts': 'edit',
-      'system': 'monitor'
+      admin: 'setting',
+      features: 'appstore',
+      providers: 'cloud',
+      mcp: 'api',
+      pipelines: 'share-alt',
+      prompts: 'edit',
+      system: 'monitor'
     };
 
     return iconMap[part] || 'folder';
@@ -534,30 +556,28 @@ class UISchemaService {
     ];
 
     if (userRole === 'admin') {
-      baseMenus.push(
-        {
-          id: 'system',
-          key: 'system',
-          title: '系统管理',
-          icon: 'setting',
-          children: [
-            {
-              id: 'features',
-              key: 'features',
-              title: '功能管理',
-              path: '/admin/features',
-              permissions: ['features:read']
-            },
-            {
-              id: 'providers',
-              key: 'providers',
-              title: '供应商管理',
-              path: '/admin/providers',
-              permissions: ['providers:read']
-            }
-          ]
-        }
-      );
+      baseMenus.push({
+        id: 'system',
+        key: 'system',
+        title: '系统管理',
+        icon: 'setting',
+        children: [
+          {
+            id: 'features',
+            key: 'features',
+            title: '功能管理',
+            path: '/admin/features',
+            permissions: ['features:read']
+          },
+          {
+            id: 'providers',
+            key: 'providers',
+            title: '供应商管理',
+            path: '/admin/providers',
+            permissions: ['providers:read']
+          }
+        ]
+      });
     }
 
     return baseMenus;
@@ -586,4 +606,15 @@ class UISchemaService {
 }
 
 const uiSchemaService = new UISchemaService();
-module.exports = uiSchemaService;
+
+// 导出类实例的所有public方法
+export const getMenus = uiSchemaService.getMenus.bind(uiSchemaService);
+export const getUISchema = uiSchemaService.getUISchema.bind(uiSchemaService);
+export const getFormSchema = uiSchemaService.getFormSchema.bind(uiSchemaService);
+export const getTableSchema = uiSchemaService.getTableSchema.bind(uiSchemaService);
+export const updateMenus = uiSchemaService.updateMenus.bind(uiSchemaService);
+export const updateFormSchema = uiSchemaService.updateFormSchema.bind(uiSchemaService);
+export const filterMenusByPermission =
+  uiSchemaService.filterMenusByPermission.bind(uiSchemaService);
+
+export default uiSchemaService;

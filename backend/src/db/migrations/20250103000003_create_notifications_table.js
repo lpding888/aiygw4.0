@@ -2,7 +2,7 @@
  * 创建notifications表
  * 用于存储用户通知记录
  */
-exports.up = function(knex) {
+exports.up = function (knex) {
   return knex.schema.createTable('notifications', (table) => {
     // 主键
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
@@ -11,16 +11,19 @@ exports.up = function(knex) {
     table.string('user_id', 36).notNullable().comment('用户ID');
 
     // 通知类型
-    table.enum('type', [
-      'task_completed',
-      'task_failed',
-      'quota_low',
-      'system_maintenance',
-      'payment_success',
-      'payment_failed',
-      'membership_expired',
-      'promotion'
-    ]).notNullable().comment('通知类型');
+    table
+      .enum('type', [
+        'task_completed',
+        'task_failed',
+        'quota_low',
+        'system_maintenance',
+        'payment_success',
+        'payment_failed',
+        'membership_expired',
+        'promotion'
+      ])
+      .notNullable()
+      .comment('通知类型');
 
     // 通知内容
     table.string('title', 200).notNullable().comment('通知标题');
@@ -35,7 +38,8 @@ exports.up = function(knex) {
     table.json('channels').nullable().comment('通知渠道');
 
     // 优先级
-    table.enum('priority', ['low', 'normal', 'high', 'urgent'])
+    table
+      .enum('priority', ['low', 'normal', 'high', 'urgent'])
       .defaultTo('normal')
       .comment('通知优先级');
 
@@ -53,6 +57,6 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
+exports.down = function (knex) {
   return knex.schema.dropTableIfExists('notifications');
 };

@@ -47,7 +47,7 @@ interface TestResult {
 function parseArgs(): TestConfig {
   const config: TestConfig = {
     baseUrl: 'http://localhost:3000',
-    timeout: 10000,
+    timeout: 10000
   };
 
   for (let i = 2; i < process.argv.length; i++) {
@@ -100,7 +100,7 @@ async function testAIChatAPI(config: TestConfig): Promise<TestResult> {
     name: 'BE-API-001: 统一推理API',
     endpoint: '/api/ai/chat',
     method: 'POST',
-    success: false,
+    success: false
   };
 
   const startTime = Date.now();
@@ -110,18 +110,16 @@ async function testAIChatAPI(config: TestConfig): Promise<TestResult> {
       `${config.baseUrl}/api/ai/chat`,
       {
         model: 'gpt-3.5-turbo',
-        messages: [
-          { role: 'user', content: '你好' }
-        ],
-        stream: false,
+        messages: [{ role: 'user', content: '你好' }],
+        stream: false
       },
       {
         headers: {
           'Content-Type': 'application/json',
-          ...(config.token && { Authorization: `Bearer ${config.token}` }),
+          ...(config.token && { Authorization: `Bearer ${config.token}` })
         },
         timeout: config.timeout,
-        validateStatus: (status) => status < 500, // 允许400+，检查API是否可达
+        validateStatus: (status) => status < 500 // 允许400+，检查API是否可达
       }
     );
 
@@ -134,7 +132,7 @@ async function testAIChatAPI(config: TestConfig): Promise<TestResult> {
       result.details = {
         hasChoices: !!response.data.choices,
         hasUsage: !!response.data.usage,
-        model: response.data.model,
+        model: response.data.model
       };
     } else if (response.status === 401) {
       result.success = false;
@@ -175,7 +173,7 @@ async function testCOSSTSAPI(config: TestConfig): Promise<TestResult> {
     name: 'BE-COS-001: COS临时密钥API',
     endpoint: '/api/admin/uploads/sts',
     method: 'POST',
-    success: false,
+    success: false
   };
 
   const startTime = Date.now();
@@ -185,15 +183,15 @@ async function testCOSSTSAPI(config: TestConfig): Promise<TestResult> {
       `${config.baseUrl}/api/admin/uploads/sts`,
       {
         filename: 'test-file.txt',
-        contentType: 'text/plain',
+        contentType: 'text/plain'
       },
       {
         headers: {
           'Content-Type': 'application/json',
-          ...(config.token && { Authorization: `Bearer ${config.token}` }),
+          ...(config.token && { Authorization: `Bearer ${config.token}` })
         },
         timeout: config.timeout,
-        validateStatus: (status) => status < 500,
+        validateStatus: (status) => status < 500
       }
     );
 
@@ -205,7 +203,7 @@ async function testCOSSTSAPI(config: TestConfig): Promise<TestResult> {
       result.details = {
         hasCredentials: !!response.data.credentials,
         hasUploadUrl: !!response.data.uploadUrl,
-        expiresIn: response.data.expiresIn,
+        expiresIn: response.data.expiresIn
       };
     } else if (response.status === 401) {
       result.success = false;
@@ -246,7 +244,7 @@ async function testKBDocumentAPI(config: TestConfig): Promise<TestResult> {
     name: 'BE-RAG-003: 知识库文档API',
     endpoint: '/api/admin/kb/documents',
     method: 'POST',
-    success: false,
+    success: false
   };
 
   const startTime = Date.now();
@@ -258,15 +256,15 @@ async function testKBDocumentAPI(config: TestConfig): Promise<TestResult> {
         title: 'Test Document',
         content: '这是一个测试文档内容',
         kbId: 'test-kb',
-        format: 'text',
+        format: 'text'
       },
       {
         headers: {
           'Content-Type': 'application/json',
-          ...(config.token && { Authorization: `Bearer ${config.token}` }),
+          ...(config.token && { Authorization: `Bearer ${config.token}` })
         },
         timeout: config.timeout,
-        validateStatus: (status) => status < 500,
+        validateStatus: (status) => status < 500
       }
     );
 
@@ -278,7 +276,7 @@ async function testKBDocumentAPI(config: TestConfig): Promise<TestResult> {
       result.details = {
         hasDocumentId: !!response.data.documentId,
         hasJobId: !!response.data.jobId,
-        status: response.data.status,
+        status: response.data.status
       };
     } else if (response.status === 401) {
       result.success = false;
@@ -405,8 +403,8 @@ async function main() {
         summary: {
           total: results.length,
           success: results.filter((r) => r.success).length,
-          failed: results.filter((r) => !r.success).length,
-        },
+          failed: results.filter((r) => !r.success).length
+        }
       },
       null,
       2

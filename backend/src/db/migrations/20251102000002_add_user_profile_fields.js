@@ -3,7 +3,7 @@
  *
  * 完善用户信息，支持更多用户属性
  */
-exports.up = function(knex) {
+exports.up = function (knex) {
   return knex.schema.table('users', (table) => {
     // 基本信息
     table.string('nickname', 50).nullable().comment('昵称');
@@ -11,7 +11,8 @@ exports.up = function(knex) {
     table.string('email', 100).nullable().comment('邮箱');
 
     // 用户状态
-    table.enum('status', ['active', 'inactive', 'banned'])
+    table
+      .enum('status', ['active', 'inactive', 'banned'])
       .notNullable()
       .defaultTo('active')
       .comment('用户状态');
@@ -54,7 +55,7 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
+exports.down = function (knex) {
   return knex.schema.table('users', (table) => {
     // 删除字段（SQLite不支持，MySQL可以）
     table.dropColumn('nickname');

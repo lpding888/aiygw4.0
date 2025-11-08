@@ -4,8 +4,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { MembershipPlansController } from '../../../src/controllers/membershipPlans.controller';
-import * as planRepo from '../../../src/repositories/membershipPlans.repo';
+import { MembershipPlansController } from '../../../src/controllers/membershipPlans.controller.js';
+import * as planRepo from '../../../src/repositories/membershipPlans.repo.js';
 
 jest.mock('../../../src/repositories/membershipPlans.repo');
 
@@ -32,7 +32,7 @@ describe('MembershipPlansController - 单元测试', () => {
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
-        data: expect.objectContaining({ items: mockPlans }),
+        data: expect.objectContaining({ items: mockPlans })
       });
     });
   });

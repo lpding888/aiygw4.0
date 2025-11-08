@@ -4,8 +4,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import * as textRepo from '../repositories/contentTexts.repo';
-import { CreateTextInput } from '../repositories/contentTexts.repo';
+import * as textRepo from '../repositories/contentTexts.repo.js';
+import type { CreateTextInput } from '../repositories/contentTexts.repo.js';
 
 export class ContentTextsController {
   /**
@@ -21,7 +21,7 @@ export class ContentTextsController {
         language: language as string,
         status: status as string,
         limit: parseInt(limit as string),
-        offset: parseInt(offset as string),
+        offset: parseInt(offset as string)
       });
 
       res.json({
@@ -29,8 +29,8 @@ export class ContentTextsController {
         data: {
           items: texts,
           limit: parseInt(limit as string),
-          offset: parseInt(offset as string),
-        },
+          offset: parseInt(offset as string)
+        }
       });
     } catch (error: any) {
       console.error('[TextsController] 列出文案失败:', error.message);
@@ -48,12 +48,12 @@ export class ContentTextsController {
 
       const texts = await textRepo.getPageTexts({
         page,
-        language: (language as string) || 'zh-CN',
+        language: (language as string) || 'zh-CN'
       });
 
       res.json({
         success: true,
-        data: texts,
+        data: texts
       });
     } catch (error: any) {
       console.error('[TextsController] 获取页面文案失败:', error.message);
@@ -72,7 +72,7 @@ export class ContentTextsController {
       if (!text) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: '文案不存在' },
+          error: { code: 'NOT_FOUND', message: '文案不存在' }
         });
         return;
       }
@@ -91,14 +91,14 @@ export class ContentTextsController {
     try {
       const input: CreateTextInput = {
         ...req.body,
-        created_by: (req as any).user?.id,
+        created_by: (req as any).user?.id
       };
 
       // 艹，基础校验
       if (!input.page?.trim()) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'page不能为空' },
+          error: { code: 'VALIDATION_ERROR', message: 'page不能为空' }
         });
         return;
       }
@@ -106,7 +106,7 @@ export class ContentTextsController {
       if (!input.key?.trim()) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'key不能为空' },
+          error: { code: 'VALIDATION_ERROR', message: 'key不能为空' }
         });
         return;
       }
@@ -114,7 +114,7 @@ export class ContentTextsController {
       if (!input.value?.trim()) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'value不能为空' },
+          error: { code: 'VALIDATION_ERROR', message: 'value不能为空' }
         });
         return;
       }
@@ -136,7 +136,7 @@ export class ContentTextsController {
       const id = parseInt(req.params.id);
       const updates = {
         ...req.body,
-        updated_by: (req as any).user?.id,
+        updated_by: (req as any).user?.id
       };
 
       const text = await textRepo.updateText(id, updates);
@@ -146,7 +146,7 @@ export class ContentTextsController {
       if (error.message.includes('不存在')) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: error.message },
+          error: { code: 'NOT_FOUND', message: error.message }
         });
         return;
       }
@@ -166,7 +166,7 @@ export class ContentTextsController {
       if (!deleted) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: '文案不存在' },
+          error: { code: 'NOT_FOUND', message: '文案不存在' }
         });
         return;
       }
@@ -190,7 +190,7 @@ export class ContentTextsController {
       if (!Array.isArray(texts) || texts.length === 0) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'texts必须是非空数组' },
+          error: { code: 'VALIDATION_ERROR', message: 'texts必须是非空数组' }
         });
         return;
       }
@@ -200,7 +200,7 @@ export class ContentTextsController {
       res.json({
         success: true,
         data: result,
-        message: `批量导入成功: 创建${result.created}条, 更新${result.updated}条`,
+        message: `批量导入成功: 创建${result.created}条, 更新${result.updated}条`
       });
     } catch (error: any) {
       console.error('[TextsController] 批量导入文案失败:', error.message);

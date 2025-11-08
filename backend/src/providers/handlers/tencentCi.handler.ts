@@ -10,12 +10,8 @@
  * 艹，这个需要集成腾讯云SDK，目前是符合IProvider规范的占位实现！
  */
 
-import { BaseProvider } from '../base/base-provider';
-import {
-  ExecContext,
-  ExecResult,
-  ProviderErrorCode,
-} from '../types';
+import { BaseProvider } from '../base/base-provider.js';
+import { ExecContext, ExecResult, ProviderErrorCode } from '../types.js';
 
 /**
  * 腾讯云CI操作类型枚举
@@ -30,7 +26,7 @@ export enum TencentCiAction {
   /** 图片压缩 */
   IMAGE_COMPRESS = 'imageCompress',
   /** 图片水印 */
-  IMAGE_WATERMARK = 'imageWatermark',
+  IMAGE_WATERMARK = 'imageWatermark'
 }
 
 /**
@@ -81,13 +77,7 @@ export class TencentCiProvider extends BaseProvider {
       return '输入参数必须是对象';
     }
 
-    const {
-      action,
-      bucket,
-      region,
-      objectKey,
-      params,
-    } = input as TencentCiInput;
+    const { action, bucket, region, objectKey, params } = input as TencentCiInput;
 
     // 校验action
     if (!action || typeof action !== 'string') {
@@ -146,7 +136,7 @@ export class TencentCiProvider extends BaseProvider {
         action,
         bucket,
         region,
-        objectKey,
+        objectKey
       });
 
       // TODO: 实现腾讯云CI SDK调用
@@ -166,10 +156,9 @@ export class TencentCiProvider extends BaseProvider {
       // - imageCompress: 图片压缩
       // - imageWatermark: 图片水印
 
-      this.logger.warn(
-        `[${this.key}] TencentCiProvider尚未实现，返回占位结果`,
-        { taskId: context.taskId }
-      );
+      this.logger.warn(`[${this.key}] TencentCiProvider尚未实现，返回占位结果`, {
+        taskId: context.taskId
+      });
 
       // 艹，占位实现（返回成功但提示未实现）
       return {
@@ -180,17 +169,17 @@ export class TencentCiProvider extends BaseProvider {
           bucket,
           region,
           objectKey,
-          params,
+          params
           // TODO: 实现后应该返回真实的处理结果
           // 例如：processedUrl, taskId, status等
-        },
+        }
       };
     } catch (error: any) {
       // 艹，腾讯云CI任务失败了！
       this.logger.error(`[${this.key}] 腾讯云CI任务失败`, {
         taskId: context.taskId,
         action,
-        error: error.message,
+        error: error.message
       });
 
       return {
@@ -205,9 +194,9 @@ export class TencentCiProvider extends BaseProvider {
             region,
             objectKey,
             originalError: error.message,
-            stack: error.stack,
-          },
-        },
+            stack: error.stack
+          }
+        }
       };
     }
   }

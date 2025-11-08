@@ -4,7 +4,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import * as userRepo from '../repositories/users.repo';
+import * as userRepo from '../repositories/users.repo.js';
 
 export class UsersController {
   /**
@@ -20,22 +20,22 @@ export class UsersController {
           success: false,
           error: {
             code: 'UNAUTHORIZED',
-            message: '未登录，请先登录',
-          },
+            message: '未登录，请先登录'
+          }
         });
         return;
       }
 
       // 从数据库获取最新用户信息
-      const user = await userRepo.findUserById(req.user.userId);
+      const user = await userRepo.findUserById(req.user.id);
 
       if (!user) {
         res.status(404).json({
           success: false,
           error: {
             code: 'USER_NOT_FOUND',
-            message: '用户不存在',
-          },
+            message: '用户不存在'
+          }
         });
         return;
       }
@@ -45,7 +45,7 @@ export class UsersController {
 
       res.json({
         success: true,
-        data: safeUser,
+        data: safeUser
       });
     } catch (error: any) {
       console.error('[UsersController] 获取当前用户失败:', error.message);
@@ -65,8 +65,8 @@ export class UsersController {
           success: false,
           error: {
             code: 'UNAUTHORIZED',
-            message: '未登录，请先登录',
-          },
+            message: '未登录，请先登录'
+          }
         });
         return;
       }
@@ -87,8 +87,8 @@ export class UsersController {
           success: false,
           error: {
             code: 'NO_UPDATES',
-            message: '没有可更新的字段',
-          },
+            message: '没有可更新的字段'
+          }
         });
         return;
       }
@@ -99,8 +99,8 @@ export class UsersController {
           success: false,
           error: {
             code: 'INVALID_PHONE',
-            message: '手机号格式不正确',
-          },
+            message: '手机号格式不正确'
+          }
         });
         return;
       }
@@ -108,26 +108,26 @@ export class UsersController {
       // 检查手机号是否被其他用户使用
       if (updates.phone) {
         const existingUser = await userRepo.findUserByPhone(updates.phone);
-        if (existingUser && existingUser.id !== req.user.userId) {
+        if (existingUser && existingUser.id !== req.user.id) {
           res.status(409).json({
             success: false,
             error: {
               code: 'PHONE_EXISTS',
-              message: '手机号已被其他用户使用',
-            },
+              message: '手机号已被其他用户使用'
+            }
           });
           return;
         }
       }
 
       // 更新用户
-      const updatedUser = await userRepo.updateUser(req.user.userId, updates);
+      const updatedUser = await userRepo.updateUser(req.user.id, updates);
 
       const safeUser = userRepo.toSafeUser(updatedUser);
 
       res.json({
         success: true,
-        data: safeUser,
+        data: safeUser
       });
     } catch (error: any) {
       console.error('[UsersController] 更新当前用户失败:', error.message);

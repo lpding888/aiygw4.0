@@ -10,12 +10,8 @@
  * 艹，这个需要对接RunningHub的API，目前是符合IProvider规范的占位实现！
  */
 
-import { BaseProvider } from '../base/base-provider';
-import {
-  ExecContext,
-  ExecResult,
-  ProviderErrorCode,
-} from '../types';
+import { BaseProvider } from '../base/base-provider.js';
+import { ExecContext, ExecResult, ProviderErrorCode } from '../types.js';
 
 /**
  * RunningHub Provider输入格式
@@ -114,7 +110,7 @@ export class RunningHubProvider extends BaseProvider {
       params,
       pollInterval = this.DEFAULT_POLL_INTERVAL,
       maxPollTime = this.DEFAULT_MAX_POLL_TIME,
-      baseUrl,
+      baseUrl
     } = input;
 
     try {
@@ -122,7 +118,7 @@ export class RunningHubProvider extends BaseProvider {
         taskId: context.taskId,
         workflowId,
         pollInterval,
-        maxPollTime,
+        maxPollTime
       });
 
       // TODO: 实现RunningHub API调用
@@ -144,10 +140,9 @@ export class RunningHubProvider extends BaseProvider {
       //    GET {baseUrl}/api/workflows/runs/{runId}/result
       //    响应: { result: any, error?: string }
 
-      this.logger.warn(
-        `[${this.key}] RunningHubProvider尚未实现，返回占位结果`,
-        { taskId: context.taskId }
-      );
+      this.logger.warn(`[${this.key}] RunningHubProvider尚未实现，返回占位结果`, {
+        taskId: context.taskId
+      });
 
       // 艹，占位实现（返回成功但提示未实现）
       return {
@@ -157,17 +152,17 @@ export class RunningHubProvider extends BaseProvider {
           workflowId,
           params,
           pollInterval,
-          maxPollTime,
+          maxPollTime
           // TODO: 实现后应该返回真实的工作流结果
           // 例如：runId, status, result, duration等
-        },
+        }
       };
     } catch (error: any) {
       // 艹，RunningHub工作流失败了！
       this.logger.error(`[${this.key}] RunningHub工作流失败`, {
         taskId: context.taskId,
         workflowId,
-        error: error.message,
+        error: error.message
       });
 
       return {
@@ -179,9 +174,9 @@ export class RunningHubProvider extends BaseProvider {
             taskId: context.taskId,
             workflowId,
             originalError: error.message,
-            stack: error.stack,
-          },
-        },
+            stack: error.stack
+          }
+        }
       };
     }
   }

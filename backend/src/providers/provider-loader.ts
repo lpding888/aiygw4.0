@@ -1,4 +1,4 @@
-import { IProvider, ProviderError, ProviderErrorCode } from './types';
+import { IProvider, ProviderError, ProviderErrorCode } from './types.js';
 
 /**
  * Provider白名单配置
@@ -9,22 +9,22 @@ const ALLOW_LIST: Record<string, () => Promise<any>> = {
   /**
    * 通用HTTP Provider - 支持标准HTTP/HTTPS请求
    */
-  GENERIC_HTTP: () => import('./handlers/genericHttp.handler'),
+  GENERIC_HTTP: () => import('./handlers/genericHttp.handler.js'),
 
   /**
    * 腾讯云万象（CI）Provider - 图片/视频处理
    */
-  TENCENT_CI: () => import('./handlers/tencentCi.handler'),
+  TENCENT_CI: () => import('./handlers/tencentCi.handler.js'),
 
   /**
    * RunningHub工作流Provider - 第三方工作流编排
    */
-  RUNNINGHUB: () => import('./handlers/runninghub.handler'),
+  RUNNINGHUB: () => import('./handlers/runninghub.handler.js'),
 
   /**
    * 腾讯云云函数（SCF）Provider - Serverless函数调用
    */
-  SCF: () => import('./handlers/scf.handler'),
+  SCF: () => import('./handlers/scf.handler.js')
 };
 
 /**
@@ -61,7 +61,7 @@ class ProviderLoader {
     this.stats = {
       loadCount: 0,
       cacheHitCount: 0,
-      errorCount: 0,
+      errorCount: 0
     };
   }
 
@@ -133,7 +133,6 @@ class ProviderLoader {
       this.cache.set(handlerKey, provider);
 
       return provider;
-
     } catch (error: any) {
       this.stats.errorCount++;
 
@@ -174,7 +173,7 @@ class ProviderLoader {
     return {
       ...this.stats,
       cacheSize: this.cache.size,
-      cachedProviders: Array.from(this.cache.keys()),
+      cachedProviders: Array.from(this.cache.keys())
     };
   }
 

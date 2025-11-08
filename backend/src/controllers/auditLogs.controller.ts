@@ -4,7 +4,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import * as auditRepo from '../repositories/auditLogs.repo';
+import * as auditRepo from '../repositories/auditLogs.repo.js';
 
 export class AuditLogsController {
   /**
@@ -20,7 +20,7 @@ export class AuditLogsController {
         start_date,
         end_date,
         limit = 50,
-        offset = 0,
+        offset = 0
       } = req.query;
 
       const logs = await auditRepo.listAuditLogs({
@@ -31,7 +31,7 @@ export class AuditLogsController {
         start_date: start_date ? new Date(start_date as string) : undefined,
         end_date: end_date ? new Date(end_date as string) : undefined,
         limit: parseInt(limit as string),
-        offset: parseInt(offset as string),
+        offset: parseInt(offset as string)
       });
 
       // 获取总数
@@ -40,7 +40,7 @@ export class AuditLogsController {
         user_id: user_id ? parseInt(user_id as string) : undefined,
         action: action as string,
         start_date: start_date ? new Date(start_date as string) : undefined,
-        end_date: end_date ? new Date(end_date as string) : undefined,
+        end_date: end_date ? new Date(end_date as string) : undefined
       });
 
       res.json({
@@ -49,8 +49,8 @@ export class AuditLogsController {
           items: logs,
           total,
           limit: parseInt(limit as string),
-          offset: parseInt(offset as string),
-        },
+          offset: parseInt(offset as string)
+        }
       });
     } catch (error: any) {
       console.error('[AuditLogsController] 列出审计日志失败:', error.message);
@@ -69,7 +69,7 @@ export class AuditLogsController {
 
       res.json({
         success: true,
-        data: history,
+        data: history
       });
     } catch (error: any) {
       console.error('[AuditLogsController] 获取实体历史失败:', error.message);
@@ -92,7 +92,7 @@ export class AuditLogsController {
 
       res.json({
         success: true,
-        data: history,
+        data: history
       });
     } catch (error: any) {
       console.error('[AuditLogsController] 获取用户历史失败:', error.message);
@@ -111,7 +111,7 @@ export class AuditLogsController {
       if (!log) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: '审计日志不存在' },
+          error: { code: 'NOT_FOUND', message: '审计日志不存在' }
         });
         return;
       }

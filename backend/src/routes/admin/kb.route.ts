@@ -1,14 +1,14 @@
-/**
+﻿/**
  * KB知识库路由 - 管理和检索API
  * 艹，这个憨批路由提供知识库管理和检索功能！
  */
 
 import express, { Request, Response, NextFunction } from 'express';
 import { body, query, validationResult } from 'express-validator';
-import { authenticateToken } from '../../middlewares/auth.middleware';
-import { addIngestJob, getQueueStats } from '../../rag/ingest/worker';
-import db from '../../db';
-import logger from '../../utils/logger';
+import { authenticate } from '../../middlewares/auth.middleware.js';
+import { addIngestJob, getQueueStats } from '../../rag/ingest/worker.js';
+import db from '../../db/index.js';
+import logger from '../../utils/logger.js';
 
 const router = express.Router();
 
@@ -21,7 +21,7 @@ const validate = (req: Request, res: Response, next: NextFunction) => {
     return res.status(400).json({
       success: false,
       errors: errors.array(),
-      requestId: (req as any).id,
+      requestId: (req as any).id
     });
   }
   next();
@@ -33,12 +33,14 @@ const validate = (req: Request, res: Response, next: NextFunction) => {
  */
 router.post(
   '/documents',
-  authenticateToken,
+  authenticate,
   [
     body('kbId').isString().notEmpty().withMessage('kbId is required'),
     body('title').isString().notEmpty().withMessage('title is required'),
     body('content').isString().notEmpty().withMessage('content is required'),
-    body('format').isIn(['markdown', 'html', 'pdf']).withMessage('format must be markdown, html or pdf'),
+    body('format')
+      .isIn(['markdown', 'html', 'pdf'])
+      .withMessage('format must be markdown, html or pdf')
   ],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -59,23 +61,23 @@ router.post(
         source_url: sourceUrl,
         status: 'pending',
         created_at: new Date(),
-        updated_at: new Date(),
+        updated_at: new Date()
       });
 
       // 添加到摄取队列
       await addIngestJob({
         documentId: documentId.toString(),
         userId,
+        kbId,
         content,
-        format,
+        format
       });
 
       res.json({
         success: true,
         data: { documentId, status: 'pending' },
-        requestId: (req as any).id,
+        requestId: (req as any).id
       });
-
     } catch (error: any) {
       logger.error('[KBRoute] 创建文档失败:', error);
       next(error);
@@ -89,12 +91,12 @@ router.post(
  */
 router.get(
   '/documents',
-  authenticateToken,
+  authenticate,
   [
     query('kbId').optional().isString(),
     query('status').optional().isIn(['pending', 'processing', 'completed', 'failed']),
     query('page').optional().isInt({ min: 1 }),
-    query('limit').optional().isInt({ min: 1, max: 100 }),
+    query('limit').optional().isInt({ min: 1, max: 100 })
   ],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -120,7 +122,7 @@ router.get(
           .orderBy('created_at', 'desc')
           .limit(parseInt(limit as string))
           .offset(offset),
-        query.count('* as total'),
+        query.count('* as total')
       ]);
 
       res.json({
@@ -129,11 +131,10 @@ router.get(
           items: documents,
           total,
           page: parseInt(page as string),
-          limit: parseInt(limit as string),
+          limit: parseInt(limit as string)
         },
-        requestId: (req as any).id,
+        requestId: (req as any).id
       });
-
     } catch (error: any) {
       logger.error('[KBRoute] 获取文档列表失败:', error);
       next(error);
@@ -147,12 +148,12 @@ router.get(
  */
 router.post(
   '/query',
-  authenticateToken,
+  authenticate,
   [
     body('query').isString().notEmpty().withMessage('query is required'),
     body('kbId').optional().isString(),
     body('topK').optional().isInt({ min: 1, max: 20 }),
-    body('filters').optional().isObject(),
+    body('filters').optional().isObject()
   ],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -190,11 +191,10 @@ router.post(
         data: {
           query: searchQuery,
           results,
-          count: results.length,
+          count: results.length
         },
-        requestId: (req as any).id,
+        requestId: (req as any).id
       });
-
     } catch (error: any) {
       logger.error('[KBRoute] 检索失败:', error);
       next(error);
@@ -208,7 +208,7 @@ router.post(
  */
 router.get(
   '/queue-stats',
-  authenticateToken,
+  authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const stats = await getQueueStats();
@@ -216,9 +216,8 @@ router.get(
       res.json({
         success: true,
         data: stats,
-        requestId: (req as any).id,
+        requestId: (req as any).id
       });
-
     } catch (error: any) {
       logger.error('[KBRoute] 获取队列统计失败:', error);
       next(error);

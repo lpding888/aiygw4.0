@@ -8,15 +8,21 @@
  * - 邀请统计追踪
  */
 
-exports.up = async function(knex) {
+exports.up = async function (knex) {
   // 邀请码池表
   await knex.schema.createTable('invite_codes', (table) => {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('code', 20).notNullable().unique().comment('邀请码');
-    table.enum('type', ['general', 'vip', 'special', 'limited']).defaultTo('general').comment('邀请码类型');
-    table.enum('status', ['active', 'used', 'expired', 'disabled']).defaultTo('active').comment('状态');
+    table
+      .enum('type', ['general', 'vip', 'special', 'limited'])
+      .defaultTo('general')
+      .comment('邀请码类型');
+    table
+      .enum('status', ['active', 'used', 'expired', 'disabled'])
+      .defaultTo('active')
+      .comment('状态');
     table.string('creator_id', 36).nullable().comment('创建者ID');
-    table.string('creator_type', defaultTo('system').comment('创建者类型: system/user/admin');
+    table.string('creator_type', 20).defaultTo('system').comment('创建者类型: system/user/admin');
     table.string('inviter_id', 36).nullable().comment('邀请人ID');
     table.string('invitee_id', 36).nullable().comment('被邀请人ID');
     table.integer('max_uses').defaultTo(1).comment('最大使用次数');
@@ -71,7 +77,10 @@ exports.up = async function(knex) {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('name', 100).notNullable().comment('奖励名称');
     table.text('description').comment('奖励描述');
-    table.enum('type', ['registration', 'first_order', 'subscription', 'custom']).notNullable().comment('奖励类型');
+    table
+      .enum('type', ['registration', 'first_order', 'subscription', 'custom'])
+      .notNullable()
+      .comment('奖励类型');
     table.json('conditions').comment('触发条件');
     table.json('rewards').comment('奖励内容');
     table.boolean('is_active').defaultTo(true).comment('是否激活');
@@ -119,7 +128,10 @@ exports.up = async function(knex) {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('batch_name', 100).comment('批次名称');
     table.string('description').nullable().comment('批次描述');
-    table.enum('type', ['general', 'vip', 'special', 'limited']).notNullable().comment('邀请码类型');
+    table
+      .enum('type', ['general', 'vip', 'special', 'limited'])
+      .notNullable()
+      .comment('邀请码类型');
     table.integer('count').notNullable().comment('生成数量');
     table.integer('valid_days').defaultTo(30).comment('有效天数');
     table.integer('max_uses_per_code').defaultTo(1).comment('每个邀请码最大使用次数');
@@ -137,7 +149,7 @@ exports.up = async function(knex) {
   });
 };
 
-exports.down = async function(knex) {
+exports.down = async function (knex) {
   await knex.schema.dropTableIfExists('invite_code_batches');
   await knex.schema.dropTableIfExists('user_invite_stats');
   await knex.schema.dropTableIfExists('invite_rewards');

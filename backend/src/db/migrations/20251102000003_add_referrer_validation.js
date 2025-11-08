@@ -3,10 +3,11 @@
  *
  * 支持推荐关系验证和佣金计算
  */
-exports.up = function(knex) {
+exports.up = function (knex) {
   return knex.schema.table('users', (table) => {
     // 推荐验证状态
-    table.enum('referral_status', ['pending', 'valid', 'invalid'])
+    table
+      .enum('referral_status', ['pending', 'valid', 'invalid'])
       .notNullable()
       .defaultTo('pending')
       .comment('推荐状态');
@@ -29,7 +30,7 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
+exports.down = function (knex) {
   return knex.schema.table('users', (table) => {
     table.dropColumn('referral_status');
     table.dropColumn('referral_validated_at');

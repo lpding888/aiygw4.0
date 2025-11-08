@@ -4,7 +4,7 @@
  */
 
 import { Router } from 'express';
-import textsController from '../controllers/contentTexts.controller';
+import textsController from '../controllers/contentTexts.controller.js';
 
 const router = Router();
 

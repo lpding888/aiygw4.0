@@ -4,8 +4,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import * as announcementRepo from '../repositories/announcements.repo';
-import { CreateAnnouncementInput } from '../repositories/announcements.repo';
+import * as announcementRepo from '../repositories/announcements.repo.js';
+import type { CreateAnnouncementInput } from '../repositories/announcements.repo.js';
 
 export class AnnouncementsController {
   /**
@@ -20,7 +20,7 @@ export class AnnouncementsController {
         position: position as string,
         limit: parseInt(limit as string),
         offset: parseInt(offset as string),
-        includeExpired: includeExpired === 'true',
+        includeExpired: includeExpired === 'true'
       });
 
       res.json({
@@ -28,8 +28,8 @@ export class AnnouncementsController {
         data: {
           items: announcements,
           limit: parseInt(limit as string),
-          offset: parseInt(offset as string),
-        },
+          offset: parseInt(offset as string)
+        }
       });
     } catch (error: any) {
       console.error('[AnnouncementsController] 列出公告失败:', error.message);
@@ -46,12 +46,12 @@ export class AnnouncementsController {
 
       const announcements = await announcementRepo.getActiveAnnouncements({
         position: position as string,
-        target_audience: target_audience as any,
+        target_audience: target_audience as any
       });
 
       res.json({
         success: true,
-        data: announcements,
+        data: announcements
       });
     } catch (error: any) {
       console.error('[AnnouncementsController] 获取有效公告失败:', error.message);
@@ -70,7 +70,7 @@ export class AnnouncementsController {
       if (!announcement) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: '公告不存在' },
+          error: { code: 'NOT_FOUND', message: '公告不存在' }
         });
         return;
       }
@@ -89,14 +89,14 @@ export class AnnouncementsController {
     try {
       const input: CreateAnnouncementInput = {
         ...req.body,
-        created_by: (req as any).user?.id,
+        created_by: (req as any).user?.id
       };
 
       // 艹，基础校验
       if (!input.title?.trim()) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: '标题不能为空' },
+          error: { code: 'VALIDATION_ERROR', message: '标题不能为空' }
         });
         return;
       }
@@ -104,7 +104,7 @@ export class AnnouncementsController {
       if (!input.content?.trim()) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: '内容不能为空' },
+          error: { code: 'VALIDATION_ERROR', message: '内容不能为空' }
         });
         return;
       }
@@ -133,7 +133,7 @@ export class AnnouncementsController {
       if (error.message.includes('不存在')) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: error.message },
+          error: { code: 'NOT_FOUND', message: error.message }
         });
         return;
       }
@@ -153,7 +153,7 @@ export class AnnouncementsController {
       if (!deleted) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: '公告不存在' },
+          error: { code: 'NOT_FOUND', message: '公告不存在' }
         });
         return;
       }

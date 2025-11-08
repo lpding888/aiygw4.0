@@ -3,7 +3,7 @@
  * 艹，会员权益CRUD！
  */
 
-import db from '../db';
+import { db } from '../config/database.js';
 
 export interface MembershipBenefit {
   id: number;
@@ -37,7 +37,7 @@ export async function createBenefit(input: CreateBenefitInput): Promise<Membersh
   const [id] = await db('membership_benefits').insert({
     ...input,
     created_at: db.fn.now(),
-    updated_at: db.fn.now(),
+    updated_at: db.fn.now()
   });
 
   const created = await getBenefitById(id);
@@ -51,14 +51,16 @@ export async function createBenefit(input: CreateBenefitInput): Promise<Membersh
  * 根据ID获取权益
  */
 export async function getBenefitById(id: number): Promise<MembershipBenefit | null> {
-  return await db('membership_benefits').where({ id }).first();
+  const result = await db('membership_benefits').where({ id }).first();
+  return result ?? null;
 }
 
 /**
  * 根据key获取权益
  */
 export async function getBenefitByKey(key: string): Promise<MembershipBenefit | null> {
-  return await db('membership_benefits').where({ key }).first();
+  const result = await db('membership_benefits').where({ key }).first();
+  return result ?? null;
 }
 
 /**

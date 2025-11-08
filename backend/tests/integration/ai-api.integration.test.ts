@@ -10,9 +10,10 @@
  */
 
 import request from 'supertest';
-import app from '../../src/app';
-import db from '../../src/db/connection';
-import providerEndpointsRepo from '../../src/repositories/providerEndpoints.repo';
+import type { Express } from 'express';
+import { createApp } from '../../src/app.js';
+import { db } from '../../src/config/database.js';
+import * as providerEndpointsRepo from '../../src/repositories/providerEndpoints.repo.js';
 import axios from 'axios';
 
 // Mock axios
@@ -20,6 +21,12 @@ jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('AI API Integration Tests', () => {
+  let app: Express;
+
+  beforeAll(async () => {
+    app = await createApp();
+  });
+
   let testProvider: any;
 
   beforeAll(async () => {
@@ -34,13 +41,13 @@ describe('AI API Integration Tests', () => {
       endpoint_url: 'https://api.openai.com/v1/chat/completions',
       auth_type: 'bearer',
       credentials_encrypted: JSON.stringify({
-        api_key: 'sk-test-integration-key',
+        api_key: 'sk-test-integration-key'
       }),
       weight: 100,
       timeout_ms: 30000,
       is_active: true,
       created_at: new Date(),
-      updated_at: new Date(),
+      updated_at: new Date()
     };
 
     await db('provider_endpoints').insert(testProvider);
@@ -69,16 +76,16 @@ describe('AI API Integration Tests', () => {
             index: 0,
             message: {
               role: 'assistant',
-              content: '你好！我是AI助手，很高兴为您服务！',
+              content: '你好！我是AI助手，很高兴为您服务！'
             },
-            finish_reason: 'stop',
-          },
+            finish_reason: 'stop'
+          }
         ],
         usage: {
           prompt_tokens: 10,
           completion_tokens: 15,
-          total_tokens: 25,
-        },
+          total_tokens: 25
+        }
       };
 
       mockedAxios.post.mockResolvedValue({ data: mockOpenAIResponse });
@@ -88,10 +95,8 @@ describe('AI API Integration Tests', () => {
         .post('/api/ai/chat')
         .send({
           model: 'gpt-4',
-          messages: [
-            { role: 'user', content: '你好' },
-          ],
-          temperature: 0.7,
+          messages: [{ role: 'user', content: '你好' }],
+          temperature: 0.7
         })
         .set('Authorization', 'Bearer test-jwt-token')
         .expect(200);
@@ -106,16 +111,16 @@ describe('AI API Integration Tests', () => {
           messages: expect.arrayContaining([
             expect.objectContaining({
               role: 'user',
-              content: '你好',
-            }),
+              content: '你好'
+            })
           ]),
-          temperature: 0.7,
+          temperature: 0.7
         }),
         expect.objectContaining({
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
-            Authorization: 'Bearer sk-test-integration-key',
-          }),
+            Authorization: 'Bearer sk-test-integration-key'
+          })
         })
       );
     });
@@ -139,19 +144,19 @@ describe('AI API Integration Tests', () => {
                   type: 'function',
                   function: {
                     name: 'get_weather',
-                    arguments: '{"location":"Beijing"}',
-                  },
-                },
-              ],
+                    arguments: '{"location":"Beijing"}'
+                  }
+                }
+              ]
             },
-            finish_reason: 'tool_calls',
-          },
+            finish_reason: 'tool_calls'
+          }
         ],
         usage: {
           prompt_tokens: 50,
           completion_tokens: 20,
-          total_tokens: 70,
-        },
+          total_tokens: 70
+        }
       };
 
       mockedAxios.post.mockResolvedValue({ data: mockToolCallResponse });
@@ -161,9 +166,7 @@ describe('AI API Integration Tests', () => {
         .post('/api/ai/chat')
         .send({
           model: 'gpt-4',
-          messages: [
-            { role: 'user', content: '北京今天天气怎么样？' },
-          ],
+          messages: [{ role: 'user', content: '北京今天天气怎么样？' }],
           tools: [
             {
               type: 'function',
@@ -175,15 +178,15 @@ describe('AI API Integration Tests', () => {
                   properties: {
                     location: {
                       type: 'string',
-                      description: '城市名称',
-                    },
+                      description: '城市名称'
+                    }
                   },
-                  required: ['location'],
-                },
-              },
-            },
+                  required: ['location']
+                }
+              }
+            }
           ],
-          tool_choice: 'auto',
+          tool_choice: 'auto'
         })
         .set('Authorization', 'Bearer test-jwt-token')
         .expect(200);
@@ -198,11 +201,11 @@ describe('AI API Integration Tests', () => {
             expect.objectContaining({
               type: 'function',
               function: expect.objectContaining({
-                name: 'get_weather',
-              }),
-            }),
+                name: 'get_weather'
+              })
+            })
           ]),
-          tool_choice: 'auto',
+          tool_choice: 'auto'
         }),
         expect.any(Object)
       );
@@ -217,16 +220,14 @@ describe('AI API Integration Tests', () => {
         .post('/api/ai/chat')
         .send({
           model: 'gpt-4',
-          messages: [
-            { role: 'user', content: 'Test' },
-          ],
+          messages: [{ role: 'user', content: 'Test' }]
         })
         .set('Authorization', 'Bearer test-jwt-token')
         .expect(500);
 
       // Assert
       expect(response.body).toMatchObject({
-        error: expect.any(String),
+        error: expect.any(String)
       });
     });
 
@@ -236,15 +237,13 @@ describe('AI API Integration Tests', () => {
         .post('/api/ai/chat')
         .send({
           model: 'gpt-4',
-          messages: [
-            { role: 'user', content: 'Test' },
-          ],
+          messages: [{ role: 'user', content: 'Test' }]
         })
         .expect(401);
 
       // Assert
       expect(response.body).toMatchObject({
-        error: expect.stringContaining('Unauthorized'),
+        error: expect.stringContaining('Unauthorized')
       });
     });
 
@@ -260,7 +259,7 @@ describe('AI API Integration Tests', () => {
 
       // Assert
       expect(response.body).toMatchObject({
-        error: expect.any(String),
+        error: expect.any(String)
       });
     });
   });
@@ -272,12 +271,12 @@ describe('AI API Integration Tests', () => {
         'data: {"id":"chatcmpl-stream","object":"chat.completion.chunk","created":123,"model":"gpt-4","choices":[{"index":0,"delta":{"role":"assistant","content":"你"},"finish_reason":null}]}\n\n',
         'data: {"id":"chatcmpl-stream","object":"chat.completion.chunk","created":123,"model":"gpt-4","choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}\n\n',
         'data: {"id":"chatcmpl-stream","object":"chat.completion.chunk","created":123,"model":"gpt-4","choices":[{"index":0,"delta":{"content":"！"},"finish_reason":"stop"}]}\n\n',
-        'data: [DONE]\n\n',
+        'data: [DONE]\n\n'
       ];
 
       // Mock stream response
-      const mockStream = {
-        on: jest.fn((event, callback) => {
+      const mockStream: any = { // 艹，显式声明any类型避免隐式推导！
+        on: jest.fn((event: string, callback: any): any => { // 艹，显式声明返回类型！
           if (event === 'data') {
             mockStreamChunks.forEach((chunk) => {
               callback(Buffer.from(chunk));
@@ -286,7 +285,7 @@ describe('AI API Integration Tests', () => {
             setTimeout(callback, 100);
           }
           return mockStream;
-        }),
+        })
       };
 
       mockedAxios.post.mockResolvedValue({ data: mockStream });
@@ -296,10 +295,8 @@ describe('AI API Integration Tests', () => {
         .post('/api/ai/chat')
         .send({
           model: 'gpt-4',
-          messages: [
-            { role: 'user', content: '你好' },
-          ],
-          stream: true,
+          messages: [{ role: 'user', content: '你好' }],
+          stream: true
         })
         .set('Authorization', 'Bearer test-jwt-token')
         .expect(200);
@@ -309,10 +306,10 @@ describe('AI API Integration Tests', () => {
       expect(mockedAxios.post).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          stream: true,
+          stream: true
         }),
         expect.objectContaining({
-          responseType: 'stream',
+          responseType: 'stream'
         })
       );
     });
@@ -334,7 +331,7 @@ describe('AI API Integration Tests', () => {
         weight: 70,
         is_active: true,
         created_at: new Date(),
-        updated_at: new Date(),
+        updated_at: new Date()
       };
 
       provider2 = {
@@ -347,7 +344,7 @@ describe('AI API Integration Tests', () => {
         weight: 30,
         is_active: true,
         created_at: new Date(),
-        updated_at: new Date(),
+        updated_at: new Date()
       };
 
       await db('provider_endpoints').insert([provider1, provider2]);
@@ -370,9 +367,9 @@ describe('AI API Integration Tests', () => {
           {
             index: 0,
             message: { role: 'assistant', content: 'Response' },
-            finish_reason: 'stop',
-          },
-        ],
+            finish_reason: 'stop'
+          }
+        ]
       };
 
       mockedAxios.post.mockResolvedValue({ data: mockResponse });
@@ -385,7 +382,7 @@ describe('AI API Integration Tests', () => {
             .post('/api/ai/chat')
             .send({
               model: 'gpt-4',
-              messages: [{ role: 'user', content: 'Test' }],
+              messages: [{ role: 'user', content: 'Test' }]
             })
             .set('Authorization', 'Bearer test-jwt-token')
         );
@@ -405,7 +402,7 @@ describe('AI API Integration Tests', () => {
         .send({
           model: 'gpt-4',
           messages: [{ role: 'user', content: 'Test' }],
-          temperature: 3.0, // 超出范围
+          temperature: 3.0 // 超出范围
         })
         .set('Authorization', 'Bearer test-jwt-token')
         .expect(400);
@@ -421,7 +418,7 @@ describe('AI API Integration Tests', () => {
         .send({
           model: 'gpt-4',
           messages: [{ role: 'user', content: 'Test' }],
-          max_tokens: -1, // 负数
+          max_tokens: -1 // 负数
         })
         .set('Authorization', 'Bearer test-jwt-token')
         .expect(400);

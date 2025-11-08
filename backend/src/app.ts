@@ -1,151 +1,186 @@
-/**
- * Express应用配置
- * 艹，主应用入口！集成所有routes和middleware
- */
-
-import express, { Express, Request, Response, NextFunction } from 'express';
+import express, { type Express } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
 
-// 艹，导入所有routes
-// 基础CMS路由
-import authRoutes from './routes/auth.routes';
-import usersRoutes from './routes/users.routes';
-import providersRoutes from './routes/providers.routes';
-import announcementsRoutes from './routes/announcements.routes';
-import bannersRoutes from './routes/banners.routes';
-import membershipPlansRoutes from './routes/membershipPlans.routes';
-import membershipBenefitsRoutes from './routes/membershipBenefits.routes';
-import contentTextsRoutes from './routes/contentTexts.routes';
-import auditLogsRoutes from './routes/auditLogs.routes';
-import importExportRoutes from './routes/importExport.routes';
+import { requestIdMiddleware } from './middlewares/request-id.middleware.js';
+import { appErrorHandler, notFoundHandler } from './middlewares/error-handler.js';
+import { loggerStream } from './utils/logger.js';
+import { startAnnouncementScheduler } from './services/announcementScheduler.service.js';
+import { startBannerScheduler } from './services/bannerScheduler.service.js';
+import cronJobsService from './services/cronJobs.service.js';
 
-// P0核心功能路由
-import aiRoutes from './routes/ai.route';
-import kbRoutes from './routes/admin/kb.route';
-import uploadsRoutes from './routes/admin/uploads.route';
+type RouterModule = { default?: express.Router } | express.Router;
 
-// 核心业务路由（CommonJS格式）
-const featureCatalogRoutes = require('./routes/feature-catalog.routes');
-const uiRoutes = require('./routes/ui.routes');
-const pipelineSchemasRoutes = require('./routes/pipelineSchemas.routes');
-const pipelineExecutionRoutes = require('./routes/pipelineExecution.routes');
-const mcpEndpointsRoutes = require('./routes/mcpEndpoints.routes');
-const buildingAIRoutes = require('./routes/buildingai-adaptor.routes');
+interface RouteDefinition {
+  mountPath: string;
+  modulePath: string;
+}
 
-// 艹，导入调度器
-import { startAnnouncementScheduler } from './services/announcementScheduler.service';
-import { startBannerScheduler } from './services/bannerScheduler.service';
+const routeDefinitions: RouteDefinition[] = [
+  { mountPath: '/', modulePath: './routes/health.routes.js' },
+  { mountPath: '/api/auth', modulePath: './routes/auth.routes.js' },
+  { mountPath: '/api/users', modulePath: './routes/users.routes.js' },
+  { mountPath: '/api', modulePath: './routes/providers.routes.js' },
+  { mountPath: '/api', modulePath: './routes/announcements.routes.js' },
+  { mountPath: '/api', modulePath: './routes/banners.routes.js' },
+  { mountPath: '/api', modulePath: './routes/membershipPlans.routes.js' },
+  { mountPath: '/api', modulePath: './routes/membershipBenefits.routes.js' },
+  { mountPath: '/api', modulePath: './routes/contentTexts.routes.js' },
+  { mountPath: '/api', modulePath: './routes/auditLogs.routes.js' },
+  { mountPath: '/api', modulePath: './routes/importExport.routes.js' },
+  { mountPath: '/api/ai', modulePath: './routes/ai.route.js' },
+  { mountPath: '/api/admin/kb', modulePath: './routes/admin/kb.route.js' },
+  { mountPath: '/api/admin/uploads', modulePath: './routes/admin/uploads.route.js' },
+  { mountPath: '/api/admin/features', modulePath: './routes/feature-catalog.routes.js' },
+  { mountPath: '/api/admin/ui', modulePath: './routes/ui.routes.js' },
+  { mountPath: '/api/admin/pipeline-schemas', modulePath: './routes/pipelineSchemas.routes.js' },
+  {
+    mountPath: '/api/admin/pipeline-execution',
+    modulePath: './routes/pipelineExecution.routes.js'
+  },
+  { mountPath: '/api/admin/mcp-endpoints', modulePath: './routes/mcpEndpoints.routes.js' },
+  { mountPath: '/api/buildingai', modulePath: './routes/buildingai-adaptor.routes.js' },
+  { mountPath: '/api/membership', modulePath: './routes/membership.routes.js' },
+  { mountPath: '/api/media', modulePath: './routes/media.routes.js' },
+  { mountPath: '/api/task', modulePath: './routes/task.routes.js' },
+  // 前台功能列表与表单Schema
+  { mountPath: '/api/features', modulePath: './routes/feature.routes.js' },
+  { mountPath: '/api/assets', modulePath: './routes/asset.routes.js' },
+  { mountPath: '/api/admin', modulePath: './routes/admin.routes.js' },
+  { mountPath: '/api/system-config', modulePath: './routes/systemConfig.routes.js' },
+  { mountPath: '/api/scf', modulePath: './routes/scfCallback.routes.js' },
+  { mountPath: '/api/cache', modulePath: './routes/cache.routes.js' },
+  { mountPath: '/api/distribution', modulePath: './routes/distribution.routes.js' },
+  { mountPath: '/api/circuit-breaker', modulePath: './routes/circuitBreaker.routes.js' },
+  { mountPath: '/api/payment', modulePath: './routes/payment.routes.js' },
+  { mountPath: '/api/auth/wechat', modulePath: './routes/wechat-login.routes.js' },
+  { mountPath: '/api/ai', modulePath: './routes/buildingai-adaptor.routes.js' },
+  { mountPath: '/api/invite-codes', modulePath: './routes/invite-code.routes.js' },
+  { mountPath: '/api/user-profile', modulePath: './routes/user-profile.routes.js' },
+  { mountPath: '/api/referral-validation', modulePath: './routes/referral-validation.routes.js' },
+  { mountPath: '/api/kms', modulePath: './routes/kms.routes.js' },
+  { mountPath: '/api/admin/errors', modulePath: './routes/error-management.routes.js' },
+  { mountPath: '/api/docs', modulePath: './routes/docs.routes.js' },
+  { mountPath: '/api/ui', modulePath: './routes/ui.routes.js' },
+  { mountPath: '/api/cms/features', modulePath: './routes/cmsFeatures.routes.js' },
+  { mountPath: '/api/cms/providers', modulePath: './routes/cmsProviders.routes.js' },
+  { mountPath: '/api/pipeline-schemas', modulePath: './routes/pipelineSchemas.routes.js' },
+  { mountPath: '/api/pipeline-executions', modulePath: './routes/pipelineExecution.routes.js' },
+  { mountPath: '/api/mcp-endpoints', modulePath: './routes/mcpEndpoints.routes.js' },
+  { mountPath: '/api/prompt-templates', modulePath: './routes/promptTemplates.routes.js' }
+];
 
-const app: Express = express();
+const loadRouter = async (modulePath: string): Promise<express.Router> => {
+  const module = (await import(modulePath)) as RouterModule;
+  const rawRouter = module && 'default' in module ? module.default : module;
+  const router = rawRouter as express.Router | undefined;
+  if (!router) {
+    throw new Error(`模块 ${modulePath} 未导出 Router`);
+  }
+  return router;
+};
 
-// ===== 基础中间件 =====
-app.use(helmet()); // 安全头部
+const registerRoutes = async (app: Express): Promise<void> => {
+  for (const { mountPath, modulePath } of routeDefinitions) {
+    const router = await loadRouter(modulePath);
+    app.use(mountPath, router);
+  }
+};
 
-// 艹，CORS配置！必须支持credentials才能传Cookie！
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
-    credentials: true, // 允许Cookie跨域
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  })
-);
-
-app.use(express.json()); // 解析JSON
-app.use(express.urlencoded({ extended: true })); // 解析表单
-app.use(cookieParser()); // 艹，解析Cookie！
-app.use(morgan('combined')); // 日志
-
-// ===== 限流 =====
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15分钟
-  max: 100, // 限制100次请求
-  message: '请求过于频繁，请稍后再试',
-});
-app.use('/api/', limiter);
-
-// ===== 健康检查 =====
-app.get('/health', (req: Request, res: Response) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// ===== 注册所有routes =====
-// 认证相关（公开）
-app.use('/api/auth', authRoutes);
-
-// 用户相关（需要登录）
-app.use('/api/users', usersRoutes);
-
-// CMS相关
-app.use('/api', providersRoutes);
-app.use('/api', announcementsRoutes);
-app.use('/api', bannersRoutes);
-app.use('/api', membershipPlansRoutes);
-app.use('/api', membershipBenefitsRoutes);
-app.use('/api', contentTextsRoutes);
-app.use('/api', auditLogsRoutes);
-app.use('/api', importExportRoutes);
-
-// P0核心功能路由
-// 艹，这些是P0阶段的核心API，必须注册！
-app.use('/api/ai', aiRoutes);                    // 统一推理API（OpenAI兼容）
-app.use('/api/admin/kb', kbRoutes);              // 知识库管理
-app.use('/api/admin/uploads', uploadsRoutes);    // COS直传STS
-
-// 核心业务功能路由
-app.use('/api/admin/features', featureCatalogRoutes);     // 功能目录管理
-app.use('/api/admin/ui', uiRoutes);                       // UI Schema动态渲染
-app.use('/api/admin/pipeline-schemas', pipelineSchemasRoutes);  // Pipeline Schema管理
-app.use('/api/admin/pipeline-execution', pipelineExecutionRoutes); // Pipeline执行
-app.use('/api/admin/mcp-endpoints', mcpEndpointsRoutes);  // MCP端点管理
-app.use('/api/buildingai', buildingAIRoutes);             // BuildingAI侧车集成
-
-// ===== 404处理 =====
-app.use((req: Request, res: Response) => {
-  res.status(404).json({
-    success: false,
-    error: {
-      code: 'NOT_FOUND',
-      message: `路由未找到: ${req.method} ${req.path}`,
-    },
+const createRateLimiter = () =>
+  rateLimit({
+    legacyHeaders: false,
+    standardHeaders: true,
+    windowMs: Number.parseInt(process.env.RATE_LIMIT_WINDOW_MS ?? '60000', 10),
+    limit: Number.parseInt(process.env.RATE_LIMIT_MAX_REQUESTS ?? '100', 10),
+    message: '请求过于频繁，请稍后再试'
   });
-});
 
-// ===== 全局错误处理 =====
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  console.error('[ERROR]', err);
+export interface CreateAppOptions {
+  corsOrigins?: string[] | string;
+}
 
-  const statusCode = err.statusCode || 500;
-  const message = err.message || '服务器内部错误';
+export async function createApp(options: CreateAppOptions = {}): Promise<Express> {
+  const app = express();
 
-  res.status(statusCode).json({
-    success: false,
-    error: {
-      code: err.code || 'INTERNAL_ERROR',
-      message,
-      ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
-    },
+  app.disable('x-powered-by');
+  app.use(requestIdMiddleware);
+  app.use(helmet());
+
+  const allowedOrigins =
+    options.corsOrigins ??
+    (process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : ['http://localhost:3001']);
+
+  app.use(
+    cors({
+      origin: allowedOrigins,
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID']
+    })
+  );
+
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use(cookieParser());
+  app.use(morgan('combined', { stream: loggerStream }));
+  app.use(createRateLimiter());
+
+  app.get('/', (_req, res) => {
+    res.json({
+      message: '欢迎使用AI照片处理后端API',
+      version: '1.0.0',
+      status: 'running',
+      timestamp: new Date().toISOString()
+    });
   });
-});
 
-// ===== 启动定时调度器 =====
+  app.get('/health', (_req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  await registerRoutes(app);
+
+  app.use(notFoundHandler);
+  app.use(appErrorHandler);
+
+  return app;
+}
+
 let announcementScheduler: NodeJS.Timeout | null = null;
 let bannerScheduler: NodeJS.Timeout | null = null;
 
-export function startSchedulers(): void {
-  console.log('[APP] 启动定时调度器');
+export const startSchedulers = (): void => {
   announcementScheduler = startAnnouncementScheduler();
   bannerScheduler = startBannerScheduler();
-}
+  // 启动基于 node-cron 的定时任务集合
+  try {
+    cronJobsService.startAll();
+  } catch (err) {
+    // 这个SB错误别阻塞主进程，打个日志继续跑
+    console.error('[App] 启动cron失败', err);
+  }
+};
 
-export function stopSchedulers(): void {
-  console.log('[APP] 停止定时调度器');
-  if (announcementScheduler) clearInterval(announcementScheduler);
-  if (bannerScheduler) clearInterval(bannerScheduler);
-}
+export const stopSchedulers = (): void => {
+  if (announcementScheduler) {
+    clearInterval(announcementScheduler);
+    announcementScheduler = null;
+  }
+  if (bannerScheduler) {
+    clearInterval(bannerScheduler);
+    bannerScheduler = null;
+  }
+  try {
+    cronJobsService.stopAll();
+  } catch (err) {
+    console.error('[App] 停止cron失败', err);
+  }
+};
 
-export default app;
+// 艹，创建默认app实例供测试和老版本代码使用！
+const defaultApp = await createApp();
+export default defaultApp;

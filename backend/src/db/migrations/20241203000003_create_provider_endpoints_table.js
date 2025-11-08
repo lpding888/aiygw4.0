@@ -2,7 +2,7 @@
  * 创建供应商端点表
  */
 
-exports.up = function(knex) {
+exports.up = function (knex) {
   return knex.schema.createTable('provider_endpoints', (table) => {
     table.string('id').primary().defaultTo(knex.raw('(UUID())'));
     table.string('name').notNullable().comment('供应商名称');
@@ -28,6 +28,6 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
+exports.down = function (knex) {
   return knex.schema.dropTable('provider_endpoints');
 };

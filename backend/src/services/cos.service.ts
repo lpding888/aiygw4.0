@@ -16,7 +16,7 @@ const cosConfig = {
   SecretId: process.env.COS_SECRET_ID || '',
   SecretKey: process.env.COS_SECRET_KEY || '',
   Bucket: process.env.COS_BUCKET || '',
-  Region: process.env.COS_REGION || 'ap-guangzhou',
+  Region: process.env.COS_REGION || 'ap-guangzhou'
 };
 
 // 验证配置
@@ -37,7 +37,7 @@ const isConfigured = validateConfig();
 const cos = isConfigured
   ? new COS({
       SecretId: cosConfig.SecretId,
-      SecretKey: cosConfig.SecretKey,
+      SecretKey: cosConfig.SecretKey
     })
   : null;
 
@@ -63,9 +63,9 @@ export async function getUploadSignedUrl(options: {
         Key: key,
         Method: 'PUT',
         Expires: expiresInSeconds,
-        Sign: true,
+        Sign: true
       },
-      (err, data) => {
+      (err: any, data: any) => {
         if (err) {
           console.error('[COS] 生成预签名URL失败:', err.message);
           reject(new Error(`生成预签名URL失败: ${err.message}`));
@@ -102,7 +102,7 @@ export async function getUploadCredentials(options: {
     uploadUrl,
     bucket: cosConfig.Bucket,
     region: cosConfig.Region,
-    key: options.key,
+    key: options.key
   };
 }
 
@@ -128,9 +128,9 @@ export async function uploadFile(options: {
         Region: cosConfig.Region,
         Key: key,
         Body: body,
-        ContentType: contentType,
+        ContentType: contentType
       },
-      (err, data) => {
+      (err: any, data: any) => {
         if (err) {
           console.error('[COS] 上传失败:', err.message);
           reject(new Error(`COS上传失败: ${err.message}`));
@@ -158,9 +158,9 @@ export async function deleteFile(key: string): Promise<void> {
       {
         Bucket: cosConfig.Bucket,
         Region: cosConfig.Region,
-        Key: key,
+        Key: key
       },
-      (err) => {
+      (err: any) => {
         if (err) {
           console.error('[COS] 删除失败:', err.message);
           reject(new Error(`COS删除失败: ${err.message}`));

@@ -4,17 +4,14 @@
  * 测试覆盖：重试策略、超时控制、AbortSignal传播
  */
 
-import {
-  BaseProvider,
-  ILogger,
-} from '../../../src/providers/base/base-provider';
+import { BaseProvider, ILogger } from '../../../src/providers/base/base-provider.js';
 import {
   ExecContext,
   ExecResult,
   RetryPolicy,
   ProviderErrorCode,
-  ProviderError,
-} from '../../../src/providers/types';
+  ProviderError
+} from '../../../src/providers/types.js';
 
 /**
  * 模拟Logger（避免测试输出污染）
@@ -94,7 +91,7 @@ class TestProvider extends BaseProvider {
     // 模拟抛出异常
     if (this.shouldThrow) {
       throw new ProviderError(this.errorCode, '执行失败', {
-        attempt: this.executionCount,
+        attempt: this.executionCount
       });
     }
 
@@ -102,7 +99,7 @@ class TestProvider extends BaseProvider {
     if (this.shouldSucceed) {
       return {
         success: true,
-        data: { result: 'success', attempt: this.executionCount },
+        data: { result: 'success', attempt: this.executionCount }
       };
     } else {
       return {
@@ -110,8 +107,8 @@ class TestProvider extends BaseProvider {
         error: {
           code: this.errorCode,
           message: '执行失败',
-          details: { attempt: this.executionCount },
-        },
+          details: { attempt: this.executionCount }
+        }
       };
     }
   }
@@ -143,15 +140,13 @@ describe('BaseProvider - 单元测试', () => {
     test('应该拒绝非对象输入', async () => {
       const context: ExecContext = {
         taskId: 'test-001',
-        input: 'invalid-input', // 非对象
+        input: 'invalid-input' // 非对象
       };
 
       const result = await provider.execute(context);
 
       expect(result.success).toBe(false);
-      expect(result.error?.code).toBe(
-        ProviderErrorCode.ERR_PROVIDER_VALIDATION_FAILED
-      );
+      expect(result.error?.code).toBe(ProviderErrorCode.ERR_PROVIDER_VALIDATION_FAILED);
       expect(result.error?.message).toContain('输入参数必须是对象');
       expect(provider.executionCount).toBe(0); // 不应该执行
     });
@@ -159,7 +154,7 @@ describe('BaseProvider - 单元测试', () => {
     test('应该接受有效的对象输入', async () => {
       const context: ExecContext = {
         taskId: 'test-002',
-        input: { key: 'value' },
+        input: { key: 'value' }
       };
 
       const result = await provider.execute(context);
@@ -175,7 +170,7 @@ describe('BaseProvider - 单元测试', () => {
 
       const context: ExecContext = {
         taskId: 'test-003',
-        input: { test: true },
+        input: { test: true }
       };
 
       const result = await provider.execute(context);
@@ -189,7 +184,7 @@ describe('BaseProvider - 单元测试', () => {
         maxRetries: 3,
         initialDelay: 10, // 使用较小的延迟加速测试
         maxDelay: 100,
-        backoffMultiplier: 2,
+        backoffMultiplier: 2
       };
 
       provider = new TestProvider(retryPolicy, mockLogger);
@@ -197,7 +192,7 @@ describe('BaseProvider - 单元测试', () => {
 
       const context: ExecContext = {
         taskId: 'test-004',
-        input: { test: true },
+        input: { test: true }
       };
 
       const startTime = Date.now();
@@ -214,7 +209,7 @@ describe('BaseProvider - 单元测试', () => {
         maxRetries: 3,
         initialDelay: 10,
         maxDelay: 100,
-        backoffMultiplier: 2,
+        backoffMultiplier: 2
       };
 
       provider = new TestProvider(retryPolicy, mockLogger);
@@ -233,7 +228,7 @@ describe('BaseProvider - 单元测试', () => {
 
       const context: ExecContext = {
         taskId: 'test-005',
-        input: { test: true },
+        input: { test: true }
       };
 
       const result = await provider.execute(context);
@@ -247,7 +242,7 @@ describe('BaseProvider - 单元测试', () => {
         maxRetries: 2,
         initialDelay: 10,
         maxDelay: 100,
-        backoffMultiplier: 2,
+        backoffMultiplier: 2
       };
 
       provider = new TestProvider(retryPolicy, mockLogger);
@@ -255,15 +250,13 @@ describe('BaseProvider - 单元测试', () => {
 
       const context: ExecContext = {
         taskId: 'test-006',
-        input: { test: true },
+        input: { test: true }
       };
 
       const result = await provider.execute(context);
 
       expect(result.success).toBe(false);
-      expect(result.error?.code).toBe(
-        ProviderErrorCode.ERR_PROVIDER_MAX_RETRIES_EXCEEDED
-      );
+      expect(result.error?.code).toBe(ProviderErrorCode.ERR_PROVIDER_MAX_RETRIES_EXCEEDED);
       expect(provider.executionCount).toBe(3); // 1次初始 + 2次重试
     });
 
@@ -273,7 +266,7 @@ describe('BaseProvider - 单元测试', () => {
         initialDelay: 10,
         maxDelay: 100,
         backoffMultiplier: 2,
-        retryableErrors: [], // 空数组，但超时和校验错误默认不重试
+        retryableErrors: [] // 空数组，但超时和校验错误默认不重试
       };
 
       provider = new TestProvider(retryPolicy, mockLogger);
@@ -282,7 +275,7 @@ describe('BaseProvider - 单元测试', () => {
 
       const context: ExecContext = {
         taskId: 'test-007',
-        input: { test: true },
+        input: { test: true }
       };
 
       const result = await provider.execute(context);
@@ -299,7 +292,7 @@ describe('BaseProvider - 单元测试', () => {
       const context: ExecContext = {
         taskId: 'test-008',
         input: { test: true },
-        timeout: 50, // 超时时间50ms
+        timeout: 50 // 超时时间50ms
       };
 
       const startTime = Date.now();
@@ -317,7 +310,7 @@ describe('BaseProvider - 单元测试', () => {
       const context: ExecContext = {
         taskId: 'test-009',
         input: { test: true },
-        timeout: 200, // 超时时间200ms
+        timeout: 200 // 超时时间200ms
       };
 
       const result = await provider.execute(context);
@@ -332,7 +325,7 @@ describe('BaseProvider - 单元测试', () => {
 
       const context: ExecContext = {
         taskId: 'test-010',
-        input: { test: true },
+        input: { test: true }
         // 不传timeout，应该使用默认值
       };
 
@@ -352,7 +345,7 @@ describe('BaseProvider - 单元测试', () => {
         taskId: 'test-011',
         input: { test: true },
         signal: abortController.signal,
-        timeout: 5000, // 设置较长的超时，确保是外部信号中止
+        timeout: 5000 // 设置较长的超时，确保是外部信号中止
       };
 
       // 50ms后中止
@@ -374,7 +367,7 @@ describe('BaseProvider - 单元测试', () => {
         maxRetries: 3,
         initialDelay: 10,
         maxDelay: 100,
-        backoffMultiplier: 2,
+        backoffMultiplier: 2
       };
 
       provider = new TestProvider(retryPolicy, mockLogger);
@@ -392,7 +385,7 @@ describe('BaseProvider - 单元测试', () => {
 
       const context: ExecContext = {
         taskId: 'test-012',
-        input: { test: true },
+        input: { test: true }
       };
 
       await provider.execute(context);
@@ -405,7 +398,7 @@ describe('BaseProvider - 单元测试', () => {
     test('应该记录参数校验失败日志', async () => {
       const context: ExecContext = {
         taskId: 'test-013',
-        input: null, // 无效输入
+        input: null // 无效输入
       };
 
       await provider.execute(context);
@@ -420,7 +413,7 @@ describe('BaseProvider - 单元测试', () => {
         maxRetries: 2,
         initialDelay: 10,
         maxDelay: 100,
-        backoffMultiplier: 2,
+        backoffMultiplier: 2
       };
 
       provider = new TestProvider(retryPolicy, mockLogger);
@@ -428,16 +421,14 @@ describe('BaseProvider - 单元测试', () => {
 
       const context: ExecContext = {
         taskId: 'test-014',
-        input: { test: true },
+        input: { test: true }
       };
 
       await provider.execute(context);
 
       const warnLogs = mockLogger.logs.filter((log) => log.level === 'warn');
       expect(warnLogs.length).toBeGreaterThan(0);
-      expect(warnLogs.some((log) => log.message.includes('准备重试'))).toBe(
-        true
-      );
+      expect(warnLogs.some((log) => log.message.includes('准备重试'))).toBe(true);
     });
 
     test('应该记录执行失败日志', async () => {
@@ -447,7 +438,7 @@ describe('BaseProvider - 单元测试', () => {
         maxRetries: 0, // 不重试，直接失败
         initialDelay: 10,
         maxDelay: 100,
-        backoffMultiplier: 2,
+        backoffMultiplier: 2
       };
 
       provider = new TestProvider(retryPolicy, mockLogger);
@@ -455,7 +446,7 @@ describe('BaseProvider - 单元测试', () => {
 
       const context: ExecContext = {
         taskId: 'test-015',
-        input: { test: true },
+        input: { test: true }
       };
 
       await provider.execute(context);
@@ -464,8 +455,7 @@ describe('BaseProvider - 单元测试', () => {
       expect(errorLogs.length).toBeGreaterThan(0);
       // 艹，修改期望，应该记录"重试次数耗尽"或"执行失败"
       const hasFailureLog = errorLogs.some(
-        (log) =>
-          log.message.includes('执行失败') || log.message.includes('重试次数耗尽')
+        (log) => log.message.includes('执行失败') || log.message.includes('重试次数耗尽')
       );
       expect(hasFailureLog).toBe(true);
     });
@@ -484,7 +474,7 @@ describe('BaseProvider - 单元测试', () => {
         maxRetries: 5,
         initialDelay: 100,
         maxDelay: 10000,
-        backoffMultiplier: 2,
+        backoffMultiplier: 2
       };
 
       provider = new TestProvider(retryPolicy, mockLogger);
@@ -507,7 +497,7 @@ describe('BaseProvider - 单元测试', () => {
         maxRetries: 10,
         initialDelay: 100,
         maxDelay: 500, // 最大延迟500ms
-        backoffMultiplier: 2,
+        backoffMultiplier: 2
       };
 
       provider = new TestProvider(retryPolicy, mockLogger);

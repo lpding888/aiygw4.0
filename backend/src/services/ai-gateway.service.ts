@@ -12,8 +12,8 @@
  */
 
 import axios, { AxiosInstance } from 'axios';
-import providerEndpointsRepo from '../repositories/providerEndpoints.repo';
-import logger from '../utils/logger';
+import * as providerEndpointsRepo from '../repositories/providerEndpoints.repo.js';
+import logger from '../utils/logger.js';
 import { EventEmitter } from 'events';
 
 /**
@@ -115,7 +115,7 @@ class AIGatewayService {
     try {
       // 选择Provider
       const provider = providerRef
-        ? await providerEndpointsRepo.findByRef(providerRef)
+        ? await providerEndpointsRepo.getProviderEndpoint(providerRef)
         : await this.selectProvider(request.model);
 
       if (!provider) {
@@ -124,7 +124,7 @@ class AIGatewayService {
 
       logger.info(
         `[AIGateway] Chat请求: provider=${provider.provider_ref} ` +
-        `model=${request.model} stream=${request.stream || false}`
+          `model=${request.model} stream=${request.stream || false}`
       );
 
       // 获取适配器
@@ -134,28 +134,23 @@ class AIGatewayService {
       const adaptedRequest = adapter.adaptRequest(request);
 
       // 调用Provider API
-      const response = await axios.post(
-        provider.endpoint_url,
-        adaptedRequest,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            ...this.getAuthHeaders(provider),
-          },
-          timeout: provider.timeout_ms || 30000,
-        }
-      );
+      const response = await axios.post(provider.endpoint_url, adaptedRequest, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.getAuthHeaders(provider)
+        },
+        timeout: provider.timeout_ms || 30000
+      });
 
       // 适配响应
       const adaptedResponse = adapter.adaptResponse(response.data);
 
       logger.info(
         `[AIGateway] Chat响应成功: provider=${provider.provider_ref} ` +
-        `tokens=${adaptedResponse.usage?.total_tokens || 'N/A'}`
+          `tokens=${adaptedResponse.usage?.total_tokens || 'N/A'}`
       );
 
       return adaptedResponse;
-
     } catch (error: any) {
       logger.error('[AIGateway] Chat请求失败:', error);
       throw new Error(`Chat failed: ${error.message}`);
@@ -168,17 +163,14 @@ class AIGatewayService {
    * @param providerRef - Provider引用（可选）
    * @returns EventEmitter (事件: 'data', 'end', 'error')
    */
-  async chatStream(
-    request: ChatRequest,
-    providerRef?: string
-  ): Promise<EventEmitter> {
+  async chatStream(request: ChatRequest, providerRef?: string): Promise<EventEmitter> {
     const emitter = new EventEmitter();
 
     (async () => {
       try {
         // 选择Provider
         const provider = providerRef
-          ? await providerEndpointsRepo.findByRef(providerRef)
+          ? await providerEndpointsRepo.getProviderEndpoint(providerRef)
           : await this.selectProvider(request.model);
 
         if (!provider) {
@@ -187,8 +179,7 @@ class AIGatewayService {
         }
 
         logger.info(
-          `[AIGateway] Chat流式请求: provider=${provider.provider_ref} ` +
-          `model=${request.model}`
+          `[AIGateway] Chat流式请求: provider=${provider.provider_ref} ` + `model=${request.model}`
         );
 
         // 获取适配器
@@ -198,18 +189,14 @@ class AIGatewayService {
         const adaptedRequest = adapter.adaptRequest({ ...request, stream: true });
 
         // 调用Provider API（流式）
-        const response = await axios.post(
-          provider.endpoint_url,
-          adaptedRequest,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              ...this.getAuthHeaders(provider),
-            },
-            timeout: provider.timeout_ms || 60000,
-            responseType: 'stream',
-          }
-        );
+        const response = await axios.post(provider.endpoint_url, adaptedRequest, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...this.getAuthHeaders(provider)
+          },
+          timeout: provider.timeout_ms || 60000,
+          responseType: 'stream'
+        });
 
         // 处理流式响应
         let buffer = '';
@@ -251,7 +238,6 @@ class AIGatewayService {
           logger.error('[AIGateway] Chat流式响应错误:', err);
           emitter.emit('error', err);
         });
-
       } catch (error: any) {
         logger.error('[AIGateway] Chat流式请求失败:', error);
         emitter.emit('error', error);
@@ -269,20 +255,18 @@ class AIGatewayService {
     // 简化实现：选择第一个可用的Provider
     // 实际项目中应该实现负载均衡、权重选择等策略
 
-    const providers = await providerEndpointsRepo.findAll({
-      isActive: true,
-    });
+    const providers = await providerEndpointsRepo.listProviderEndpoints({});
 
     if (providers.length === 0) {
       throw new Error('No available providers');
     }
 
     // 按权重选择
-    const totalWeight = providers.reduce((sum, p) => sum + (p.weight || 100), 0);
+    const totalWeight = providers.reduce((sum: number, p: any) => sum + (p.weight || 100), 0);
     let random = Math.random() * totalWeight;
 
     for (const provider of providers) {
-      random -= provider.weight || 100;
+      random -= (provider as any).weight || 100;
       if (random <= 0) {
         return provider;
       }
@@ -300,8 +284,8 @@ class AIGatewayService {
     const providerType = providerName.toLowerCase().includes('openai')
       ? 'openai'
       : providerName.toLowerCase().includes('anthropic')
-      ? 'anthropic'
-      : 'buildingai';
+        ? 'anthropic'
+        : 'buildingai';
 
     const adapter = this.adapters.get(providerType);
     if (!adapter) {
@@ -340,7 +324,7 @@ class OpenAIAdapter implements ProviderAdapter {
       stream: request.stream,
       tools: request.tools,
       tool_choice: request.tool_choice,
-      user: request.user,
+      user: request.user
     };
   }
 
@@ -367,12 +351,12 @@ class AnthropicAdapter implements ProviderAdapter {
       model: request.model,
       messages: request.messages.map((msg) => ({
         role: msg.role === 'assistant' ? 'assistant' : 'user',
-        content: msg.content,
+        content: msg.content
       })),
       max_tokens: request.max_tokens || 1024,
       temperature: request.temperature,
       top_p: request.top_p,
-      stream: request.stream,
+      stream: request.stream
     };
   }
 
@@ -388,18 +372,16 @@ class AnthropicAdapter implements ProviderAdapter {
           index: 0,
           message: {
             role: 'assistant',
-            content: response.content[0]?.text || '',
+            content: response.content[0]?.text || ''
           },
-          finish_reason: response.stop_reason,
-        },
+          finish_reason: response.stop_reason
+        }
       ],
       usage: {
         prompt_tokens: response.usage?.input_tokens || 0,
         completion_tokens: response.usage?.output_tokens || 0,
-        total_tokens:
-          (response.usage?.input_tokens || 0) +
-          (response.usage?.output_tokens || 0),
-      },
+        total_tokens: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0)
+      }
     };
   }
 
@@ -417,11 +399,11 @@ class AnthropicAdapter implements ProviderAdapter {
               index: 0,
               delta: {
                 role: 'assistant',
-                content: data.delta?.text || '',
+                content: data.delta?.text || ''
               },
-              finish_reason: null,
-            },
-          ],
+              finish_reason: null
+            }
+          ]
         };
       }
       return null;
@@ -442,7 +424,7 @@ class BuildingAIAdapter implements ProviderAdapter {
       messages: request.messages,
       temperature: request.temperature,
       max_tokens: request.max_tokens,
-      stream: request.stream,
+      stream: request.stream
     };
   }
 

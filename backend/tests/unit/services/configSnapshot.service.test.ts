@@ -3,11 +3,11 @@
  * 艹，测试配置快照的创建和回滚逻辑！
  */
 
-import * as snapshotService from '../../../src/services/configSnapshot.service';
-import db from '../../../src/db';
+import * as snapshotService from '../../../src/services/configSnapshot.service.js';
+import db from '../../../src/db/index.js';
 
 // Mock db
-jest.mock('../../../src/db', () => {
+jest.mock('../../../src/db/index.js', () => {
   const mockDb: any = jest.fn(() => ({
     insert: jest.fn().mockResolvedValue([1]),
     where: jest.fn().mockReturnThis(),
@@ -17,11 +17,11 @@ jest.mock('../../../src/db', () => {
     limit: jest.fn().mockReturnThis(),
     offset: jest.fn().mockReturnThis(),
     update: jest.fn().mockResolvedValue(1),
-    delete: jest.fn().mockResolvedValue(1),
+    delete: jest.fn().mockResolvedValue(1)
   }));
 
   mockDb.fn = {
-    now: jest.fn(() => new Date()),
+    now: jest.fn(() => new Date())
   };
 
   return mockDb;
@@ -40,12 +40,12 @@ describe('ConfigSnapshot Service - 单元测试', () => {
         config_type: 'provider',
         config_ref: 'test-001',
         config_data: { name: '测试配置' },
-        created_by: 1,
+        created_by: 1
       };
 
       // Mock insert返回ID
       (db as any).mockReturnValueOnce({
-        insert: jest.fn().mockResolvedValue([123]),
+        insert: jest.fn().mockResolvedValue([123])
       });
 
       // Mock getSnapshotById
@@ -60,8 +60,8 @@ describe('ConfigSnapshot Service - 单元测试', () => {
           config_data: JSON.stringify(input.config_data),
           created_by: input.created_by,
           created_at: new Date(),
-          is_rollback: false,
-        }),
+          is_rollback: false
+        })
       });
 
       const snapshot = await snapshotService.createSnapshot(input);
@@ -82,12 +82,12 @@ describe('ConfigSnapshot Service - 单元测试', () => {
         config_ref: 'test-001',
         config_data: JSON.stringify({ name: '测试' }),
         created_at: new Date(),
-        is_rollback: false,
+        is_rollback: false
       };
 
       (db as any).mockReturnValueOnce({
         where: jest.fn().mockReturnThis(),
-        first: jest.fn().mockResolvedValue(mockSnapshot),
+        first: jest.fn().mockResolvedValue(mockSnapshot)
       });
 
       const snapshot = await snapshotService.getSnapshotById(1);
@@ -100,7 +100,7 @@ describe('ConfigSnapshot Service - 单元测试', () => {
     test('不存在的快照应该返回null', async () => {
       (db as any).mockReturnValueOnce({
         where: jest.fn().mockReturnThis(),
-        first: jest.fn().mockResolvedValue(null),
+        first: jest.fn().mockResolvedValue(null)
       });
 
       const snapshot = await snapshotService.getSnapshotById(999);
@@ -117,27 +117,27 @@ describe('ConfigSnapshot Service - 单元测试', () => {
           snapshot_name: '快照1',
           config_type: 'provider',
           config_data: JSON.stringify({ data: 1 }),
-          created_at: new Date(),
+          created_at: new Date()
         },
         {
           id: 2,
           snapshot_name: '快照2',
           config_type: 'provider',
           config_data: JSON.stringify({ data: 2 }),
-          created_at: new Date(),
-        },
+          created_at: new Date()
+        }
       ];
 
       (db as any).mockReturnValueOnce({
         select: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
-        offset: jest.fn().mockResolvedValue(mockSnapshots),
+        offset: jest.fn().mockResolvedValue(mockSnapshots)
       });
 
       const snapshots = await snapshotService.listSnapshots({
         limit: 10,
-        offset: 0,
+        offset: 0
       });
 
       expect(snapshots).toHaveLength(2);
@@ -151,12 +151,12 @@ describe('ConfigSnapshot Service - 单元测试', () => {
         orderBy: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
         offset: jest.fn().mockReturnThis(),
-        where: jest.fn().mockResolvedValue([]),
+        where: jest.fn().mockResolvedValue([])
       });
 
       await snapshotService.listSnapshots({
         config_type: 'provider',
-        limit: 10,
+        limit: 10
       });
 
       expect(db).toHaveBeenCalledWith('config_snapshots');
@@ -167,7 +167,7 @@ describe('ConfigSnapshot Service - 单元测试', () => {
     test('应该成功删除快照', async () => {
       (db as any).mockReturnValueOnce({
         where: jest.fn().mockReturnThis(),
-        delete: jest.fn().mockResolvedValue(1),
+        delete: jest.fn().mockResolvedValue(1)
       });
 
       const result = await snapshotService.deleteSnapshot(1);
@@ -178,7 +178,7 @@ describe('ConfigSnapshot Service - 单元测试', () => {
     test('删除不存在的快照应该返回false', async () => {
       (db as any).mockReturnValueOnce({
         where: jest.fn().mockReturnThis(),
-        delete: jest.fn().mockResolvedValue(0),
+        delete: jest.fn().mockResolvedValue(0)
       });
 
       const result = await snapshotService.deleteSnapshot(999);
@@ -194,18 +194,18 @@ describe('ConfigSnapshot Service - 单元测试', () => {
         provider_name: '测试Provider',
         endpoint_url: 'https://api.example.com',
         credentials_encrypted: 'encrypted',
-        auth_type: 'api_key',
+        auth_type: 'api_key'
       };
 
       // Mock读取当前配置
       (db as any).mockReturnValueOnce({
         where: jest.fn().mockReturnThis(),
-        first: jest.fn().mockResolvedValue(mockProvider),
+        first: jest.fn().mockResolvedValue(mockProvider)
       });
 
       // Mock创建快照
       (db as any).mockReturnValueOnce({
-        insert: jest.fn().mockResolvedValue([1]),
+        insert: jest.fn().mockResolvedValue([1])
       });
 
       // Mock getSnapshotById
@@ -217,8 +217,8 @@ describe('ConfigSnapshot Service - 单元测试', () => {
           config_type: 'provider',
           config_ref: 'test-001',
           config_data: JSON.stringify(mockProvider),
-          created_at: new Date(),
-        }),
+          created_at: new Date()
+        })
       });
 
       await snapshotService.autoSnapshotProvider('test-001', 1);
@@ -230,7 +230,7 @@ describe('ConfigSnapshot Service - 单元测试', () => {
     test('Provider不存在时应该不创建快照', async () => {
       (db as any).mockReturnValueOnce({
         where: jest.fn().mockReturnThis(),
-        first: jest.fn().mockResolvedValue(null),
+        first: jest.fn().mockResolvedValue(null)
       });
 
       await snapshotService.autoSnapshotProvider('non-existent');

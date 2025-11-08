@@ -32,7 +32,7 @@ exports.up = function (knex) {
 
     // 唯一约束（page + section + key + language唯一）
     table.unique(['page', 'section', 'key', 'language'], {
-      indexName: 'unique_text_identifier',
+      indexName: 'unique_text_identifier'
       // 处理NULL section的情况，数据库层面可能需要额外处理
     });
 

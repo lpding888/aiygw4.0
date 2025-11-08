@@ -5,10 +5,10 @@
  * 3. 退款记录表
  */
 
-exports.up = function(knex) {
+exports.up = function (knex) {
   return Promise.all([
     // 支付订单表
-    knex.schema.createTable('payment_orders', function(table) {
+    knex.schema.createTable('payment_orders', function (table) {
       table.string('id', 32).primary().comment('支付订单ID');
       table.string('user_id', 32).notNullable().comment('用户ID');
       table.string('order_no', 64).notNullable().unique().comment('订单号');
@@ -19,7 +19,10 @@ exports.up = function(knex) {
       table.decimal('amount', 10, 2).notNullable().comment('支付金额');
       table.string('currency', 3).defaultTo('CNY').comment('货币类型');
       table.string('payment_method', 20).notNullable().comment('支付方式: alipay, wechat');
-      table.string('status', 20).defaultTo('pending').comment('订单状态: pending, paid, cancelled, refunded, partial_refunded');
+      table
+        .string('status', 20)
+        .defaultTo('pending')
+        .comment('订单状态: pending, paid, cancelled, refunded, partial_refunded');
       table.string('trade_no', 64).nullable().comment('第三方交易号');
       table.text('payment_params').nullable().comment('支付参数(JSON)');
       table.text('payment_result').nullable().comment('支付结果(JSON)');
@@ -41,7 +44,7 @@ exports.up = function(knex) {
     }),
 
     // 支付记录表
-    knex.schema.createTable('payment_transactions', function(table) {
+    knex.schema.createTable('payment_transactions', function (table) {
       table.string('id', 32).primary().comment('支付记录ID');
       table.string('order_id', 32).notNullable().comment('支付订单ID');
       table.string('user_id', 32).notNullable().comment('用户ID');
@@ -70,7 +73,7 @@ exports.up = function(knex) {
     }),
 
     // 退款记录表
-    knex.schema.createTable('refund_records', function(table) {
+    knex.schema.createTable('refund_records', function (table) {
       table.string('id', 32).primary().comment('退款记录ID');
       table.string('order_id', 32).notNullable().comment('原支付订单ID');
       table.string('user_id', 32).notNullable().comment('用户ID');
@@ -78,7 +81,10 @@ exports.up = function(knex) {
       table.string('payment_method', 20).notNullable().comment('原支付方式');
       table.decimal('order_amount', 10, 2).notNullable().comment('原订单金额');
       table.decimal('refund_amount', 10, 2).notNullable().comment('退款金额');
-      table.string('status', 20).defaultTo('pending').comment('退款状态: pending, success, failed, cancelled');
+      table
+        .string('status', 20)
+        .defaultTo('pending')
+        .comment('退款状态: pending, success, failed, cancelled');
       table.string('refund_reason', 200).nullable().comment('退款原因');
       table.string('gateway_refund_no', 64).nullable().comment('支付网关退款单号');
       table.text('refund_result').nullable().comment('退款结果(JSON)');
@@ -97,13 +103,12 @@ exports.up = function(knex) {
       table.index('status', 'idx_refund_records_status');
       table.index('created_at', 'idx_refund_records_created');
     })
-  ])
-  .then(() => {
+  ]).then(() => {
     console.log('✓ 支付相关表创建成功');
   });
 };
 
-exports.down = function(knex) {
+exports.down = function (knex) {
   return Promise.all([
     knex.schema.dropTableIfExists('refund_records'),
     knex.schema.dropTableIfExists('payment_transactions'),

@@ -14,7 +14,10 @@ exports.up = function (knex) {
     // 版本信息
     table.integer('version').notNullable().comment('版本号（1,2,3...）');
     table.boolean('is_current').defaultTo(false).comment('是否为当前使用版本');
-    table.enum('publish_status', ['draft', 'published', 'archived']).defaultTo('draft').comment('发布状态');
+    table
+      .enum('publish_status', ['draft', 'published', 'archived'])
+      .defaultTo('draft')
+      .comment('发布状态');
 
     // Prompt内容
     table.text('template', 'longtext').notNullable().comment('Handlebars模板内容');

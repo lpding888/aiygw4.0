@@ -3,7 +3,7 @@
  * 艹，这个tm负责所有用户数据库操作！
  */
 
-import db from '../db';
+import { db } from '../config/database.js';
 
 /**
  * 用户接口
@@ -83,7 +83,7 @@ export async function createUser(input: CreateUserInput): Promise<User> {
     quota_expireAt: null,
     referrer_id: input.referrer_id || null,
     created_at: now,
-    updated_at: now,
+    updated_at: now
   };
 
   await db('users').insert(userData);
@@ -107,7 +107,7 @@ export async function updateUser(
     .where({ id })
     .update({
       ...updates,
-      updated_at: new Date(),
+      updated_at: new Date()
     });
 
   if (affected === 0) {

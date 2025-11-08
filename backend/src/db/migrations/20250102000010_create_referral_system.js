@@ -9,15 +9,21 @@
  * - 推荐效果统计
  */
 
-exports.up = async function(knex) {
+exports.up = async function (knex) {
   // 推荐关系表
   await knex.schema.createTable('referrals', (table) => {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('referrer_id', 36).notNullable().comment('推荐人ID');
     table.string('referee_id', 36).notNullable().comment('被推荐人ID');
     table.string('referral_code', 50).nullable().comment('推荐码');
-    table.enum('status', ['pending', 'validated', 'completed', 'failed', 'cancelled']).defaultTo('pending').comment('推荐状态');
-    table.enum('type', ['user', 'invite_code', 'link', 'qr_code']).defaultTo('user').comment('推荐类型');
+    table
+      .enum('status', ['pending', 'validated', 'completed', 'failed', 'cancelled'])
+      .defaultTo('pending')
+      .comment('推荐状态');
+    table
+      .enum('type', ['user', 'invite_code', 'link', 'qr_code'])
+      .defaultTo('user')
+      .comment('推荐类型');
     table.string('source', 100).nullable().comment('推荐来源');
     table.string('campaign', 100).nullable().comment('推荐活动');
     table.json('referral_data').nullable().comment('推荐数据');
@@ -51,7 +57,16 @@ exports.up = async function(knex) {
   await knex.schema.createTable('referrer_qualifications', (table) => {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('user_id', 36).notNullable().comment('用户ID');
-    table.enum('qualification_type', ['active_user', 'premium_member', 'verified_user', 'content_creator', 'partner']).notNullable().comment('资格类型');
+    table
+      .enum('qualification_type', [
+        'active_user',
+        'premium_member',
+        'verified_user',
+        'content_creator',
+        'partner'
+      ])
+      .notNullable()
+      .comment('资格类型');
     table.boolean('is_qualified').defaultTo(false).comment('是否具备资格');
     table.json('qualification_criteria').nullable().comment('资格标准');
     table.json('qualification_data').nullable().comment('资格数据');
@@ -113,7 +128,16 @@ exports.up = async function(knex) {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('name', 100).notNullable().comment('规则名称');
     table.text('description').nullable().comment('规则描述');
-    table.enum('rule_type', ['account_age', 'activity_level', 'purchase_history', 'verification_status', 'custom']).notNullable().comment('规则类型');
+    table
+      .enum('rule_type', [
+        'account_age',
+        'activity_level',
+        'purchase_history',
+        'verification_status',
+        'custom'
+      ])
+      .notNullable()
+      .comment('规则类型');
     table.json('conditions').notNullable().comment('验证条件');
     table.json('actions').notNullable().comment('验证动作');
     table.boolean('is_active').defaultTo(true).comment('是否激活');
@@ -134,8 +158,19 @@ exports.up = async function(knex) {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('referral_id', 36).notNullable().comment('推荐ID');
     table.string('rule_id', 36).notNullable().comment('规则ID');
-    table.enum('validation_type', ['referrer_check', 'referee_check', 'relationship_check', 'fraud_check']).notNullable().comment('验证类型');
-    table.enum('status', ['pending', 'passed', 'failed', 'skipped']).defaultTo('pending').comment('验证状态');
+    table
+      .enum('validation_type', [
+        'referrer_check',
+        'referee_check',
+        'relationship_check',
+        'fraud_check'
+      ])
+      .notNullable()
+      .comment('验证类型');
+    table
+      .enum('status', ['pending', 'passed', 'failed', 'skipped'])
+      .defaultTo('pending')
+      .comment('验证状态');
     table.json('validation_data').nullable().comment('验证数据');
     table.json('result_data').nullable().comment('结果数据');
     table.text('failure_reason').nullable().comment('失败原因');
@@ -147,7 +182,11 @@ exports.up = async function(knex) {
 
     // 外键约束
     table.foreign('referral_id').references('id').inTable('referrals').onDelete('CASCADE');
-    table.foreign('rule_id').references('id').inTable('referral_validation_rules').onDelete('CASCADE');
+    table
+      .foreign('rule_id')
+      .references('id')
+      .inTable('referral_validation_rules')
+      .onDelete('CASCADE');
 
     // 索引
     table.index(['referral_id']);
@@ -163,11 +202,27 @@ exports.up = async function(knex) {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('name', 100).notNullable().comment('奖励名称');
     table.text('description').nullable().comment('奖励描述');
-    table.enum('reward_type', ['cash', 'credit', 'discount', 'points', 'premium_days', 'feature_unlock']).notNullable().comment('奖励类型');
+    table
+      .enum('reward_type', [
+        'cash',
+        'credit',
+        'discount',
+        'points',
+        'premium_days',
+        'feature_unlock'
+      ])
+      .notNullable()
+      .comment('奖励类型');
     table.json('reward_config').notNullable().comment('奖励配置');
-    table.enum('trigger_condition', ['registration', 'first_purchase', 'subscription', 'custom']).notNullable().comment('触发条件');
+    table
+      .enum('trigger_condition', ['registration', 'first_purchase', 'subscription', 'custom'])
+      .notNullable()
+      .comment('触发条件');
     table.json('trigger_config').nullable().comment('触发配置');
-    table.enum('recipient', ['referrer', 'referee', 'both']).defaultTo('referrer').comment('接收方');
+    table
+      .enum('recipient', ['referrer', 'referee', 'both'])
+      .defaultTo('referrer')
+      .comment('接收方');
     table.boolean('is_active').defaultTo(true).comment('是否激活');
     table.integer('priority').defaultTo(0).comment('优先级');
     table.decimal('reward_value', 15, 4).defaultTo(0).comment('奖励价值');
@@ -196,7 +251,10 @@ exports.up = async function(knex) {
     table.string('reward_id', 36).notNullable().comment('奖励配置ID');
     table.string('recipient_id', 36).notNullable().comment('接收人ID');
     table.enum('recipient_type', ['referrer', 'referee']).notNullable().comment('接收人类型');
-    table.enum('status', ['pending', 'granted', 'failed', 'expired']).defaultTo('pending').comment('发放状态');
+    table
+      .enum('status', ['pending', 'granted', 'failed', 'expired'])
+      .defaultTo('pending')
+      .comment('发放状态');
     table.decimal('reward_value', 15, 4).defaultTo(0).comment('奖励价值');
     table.string('currency', 10).defaultTo('CNY').comment('货币单位');
     table.json('grant_data').nullable().comment('发放数据');
@@ -257,13 +315,29 @@ exports.up = async function(knex) {
   await knex.schema.createTable('referral_fraud_detection', (table) => {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('referral_id', 36).notNullable().comment('推荐ID');
-    table.enum('fraud_type', ['self_referral', 'duplicate_account', 'fake_account', 'incentive_abuse', 'ip_mismatch', 'device_fingerprint']).notNullable().comment('欺诈类型');
-    table.enum('risk_level', ['low', 'medium', 'high', 'critical']).defaultTo('medium').comment('风险等级');
+    table
+      .enum('fraud_type', [
+        'self_referral',
+        'duplicate_account',
+        'fake_account',
+        'incentive_abuse',
+        'ip_mismatch',
+        'device_fingerprint'
+      ])
+      .notNullable()
+      .comment('欺诈类型');
+    table
+      .enum('risk_level', ['low', 'medium', 'high', 'critical'])
+      .defaultTo('medium')
+      .comment('风险等级');
     table.decimal('risk_score', 5, 2).defaultTo(0).comment('风险分数');
     table.json('detection_data').nullable().comment('检测数据');
     table.json('evidence').nullable().comment('证据数据');
     table.text('detection_reason').nullable().comment('检测原因');
-    table.enum('status', ['detected', 'investigating', 'confirmed', 'false_positive', 'resolved']).defaultTo('detected').comment('处理状态');
+    table
+      .enum('status', ['detected', 'investigating', 'confirmed', 'false_positive', 'resolved'])
+      .defaultTo('detected')
+      .comment('处理状态');
     table.text('resolution_notes').nullable().comment('处理备注');
     table.string('investigated_by', 36).nullable().comment('调查人ID');
     table.timestamp('detected_at').defaultTo(knex.fn.now()).comment('检测时间');
@@ -284,7 +358,7 @@ exports.up = async function(knex) {
   });
 };
 
-exports.down = async function(knex) {
+exports.down = async function (knex) {
   await knex.schema.dropTableIfExists('referral_fraud_detection');
   await knex.schema.dropTableIfExists('referral_statistics');
   await knex.schema.dropTableIfExists('referral_reward_grants');

@@ -5,8 +5,8 @@
  * 采用AES-256-GCM加密算法
  */
 
-exports.up = function(knex) {
-  return knex.schema.createTable('kms_secrets', function(table) {
+exports.up = function (knex) {
+  return knex.schema.createTable('kms_secrets', function (table) {
     // 主键：格式 kms_时间戳_随机字符串
     table.string('id', 100).primary().comment('密钥ID');
 
@@ -35,6 +35,6 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
+exports.down = function (knex) {
   return knex.schema.dropTableIfExists('kms_secrets');
 };

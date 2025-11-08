@@ -9,9 +9,9 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
-import aiGateway, { ChatRequest } from '../services/ai-gateway.service';
-import { authenticateToken } from '../middlewares/auth.middleware';
-import logger from '../utils/logger';
+import aiGateway, { ChatRequest } from '../services/ai-gateway.service.js';
+import { authenticate as authenticateToken } from '../middlewares/auth.middleware.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -24,7 +24,7 @@ const validate = (req: Request, res: Response, next: NextFunction) => {
     return res.status(400).json({
       success: false,
       errors: errors.array(),
-      requestId: (req as any).id,
+      requestId: (req as any).id
     });
   }
   next();
@@ -50,20 +50,12 @@ router.post(
   '/chat',
   authenticateToken,
   [
-    body('model')
-      .isString()
-      .trim()
-      .notEmpty()
-      .withMessage('model is required'),
-    body('messages')
-      .isArray({ min: 1 })
-      .withMessage('messages must be a non-empty array'),
+    body('model').isString().trim().notEmpty().withMessage('model is required'),
+    body('messages').isArray({ min: 1 }).withMessage('messages must be a non-empty array'),
     body('messages.*.role')
       .isIn(['system', 'user', 'assistant', 'tool'])
       .withMessage('message role must be system, user, assistant or tool'),
-    body('messages.*.content')
-      .isString()
-      .withMessage('message content must be a string'),
+    body('messages.*.content').isString().withMessage('message content must be a string'),
     body('temperature')
       .optional()
       .isFloat({ min: 0, max: 2 })
@@ -76,15 +68,8 @@ router.post(
       .optional()
       .isFloat({ min: 0, max: 1 })
       .withMessage('top_p must be between 0 and 1'),
-    body('stream')
-      .optional()
-      .isBoolean()
-      .withMessage('stream must be a boolean'),
-    body('provider')
-      .optional()
-      .isString()
-      .trim()
-      .withMessage('provider must be a string'),
+    body('stream').optional().isBoolean().withMessage('stream must be a boolean'),
+    body('provider').optional().isString().trim().withMessage('provider must be a string')
   ],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -95,7 +80,7 @@ router.post(
 
       logger.info(
         `[AIRoute] Chat请求: userId=${userId} model=${chatRequest.model} ` +
-        `stream=${chatRequest.stream || false}`
+          `stream=${chatRequest.stream || false}`
       );
 
       // 流式响应
@@ -129,8 +114,8 @@ router.post(
             `data: ${JSON.stringify({
               error: {
                 message: error.message,
-                type: 'stream_error',
-              },
+                type: 'stream_error'
+              }
             })}\n\n`
           );
           res.end();
@@ -141,7 +126,6 @@ router.post(
           logger.info('[AIRoute] 客户端断开连接');
           emitter.removeAllListeners();
         });
-
       } else {
         // 非流式响应
         const response = await aiGateway.chat(chatRequest, provider);
@@ -149,10 +133,9 @@ router.post(
         res.json({
           success: true,
           data: response,
-          requestId: (req as any).id,
+          requestId: (req as any).id
         });
       }
-
     } catch (error: any) {
       logger.error('[AIRoute] Chat请求失败:', error);
       next(error);
@@ -176,16 +159,8 @@ router.post(
   '/completions',
   authenticateToken,
   [
-    body('model')
-      .isString()
-      .trim()
-      .notEmpty()
-      .withMessage('model is required'),
-    body('prompt')
-      .isString()
-      .trim()
-      .notEmpty()
-      .withMessage('prompt is required'),
+    body('model').isString().trim().notEmpty().withMessage('model is required'),
+    body('prompt').isString().trim().notEmpty().withMessage('prompt is required'),
     body('temperature')
       .optional()
       .isFloat({ min: 0, max: 2 })
@@ -194,10 +169,7 @@ router.post(
       .optional()
       .isInt({ min: 1 })
       .withMessage('max_tokens must be a positive integer'),
-    body('stream')
-      .optional()
-      .isBoolean()
-      .withMessage('stream must be a boolean'),
+    body('stream').optional().isBoolean().withMessage('stream must be a boolean')
   ],
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
@@ -206,8 +178,7 @@ router.post(
       const { model, prompt, temperature, max_tokens, stream, provider } = req.body;
 
       logger.info(
-        `[AIRoute] Completions请求: userId=${userId} model=${model} ` +
-        `stream=${stream || false}`
+        `[AIRoute] Completions请求: userId=${userId} model=${model} ` + `stream=${stream || false}`
       );
 
       // 转换为Chat格式
@@ -216,12 +187,12 @@ router.post(
         messages: [
           {
             role: 'user',
-            content: prompt,
-          },
+            content: prompt
+          }
         ],
         temperature,
         max_tokens,
-        stream,
+        stream
       };
 
       // 流式响应
@@ -248,8 +219,8 @@ router.post(
             `data: ${JSON.stringify({
               error: {
                 message: error.message,
-                type: 'stream_error',
-              },
+                type: 'stream_error'
+              }
             })}\n\n`
           );
           res.end();
@@ -258,7 +229,6 @@ router.post(
         req.on('close', () => {
           emitter.removeAllListeners();
         });
-
       } else {
         // 非流式响应
         const response = await aiGateway.chat(chatRequest, provider);
@@ -266,10 +236,9 @@ router.post(
         res.json({
           success: true,
           data: response,
-          requestId: (req as any).id,
+          requestId: (req as any).id
         });
       }
-
     } catch (error: any) {
       logger.error('[AIRoute] Completions请求失败:', error);
       next(error);
@@ -282,25 +251,21 @@ router.post(
  *
  * GET /ai/health
  */
-router.get(
-  '/health',
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      res.json({
-        success: true,
-        data: {
-          service: 'ai-gateway',
-          status: 'healthy',
-          timestamp: new Date().toISOString(),
-        },
-        requestId: (req as any).id,
-      });
-
-    } catch (error: any) {
-      logger.error('[AIRoute] 健康检查失败:', error);
-      next(error);
-    }
+router.get('/health', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        service: 'ai-gateway',
+        status: 'healthy',
+        timestamp: new Date().toISOString()
+      },
+      requestId: (req as any).id
+    });
+  } catch (error: any) {
+    logger.error('[AIRoute] 健康检查失败:', error);
+    next(error);
   }
-);
+});
 
 export default router;

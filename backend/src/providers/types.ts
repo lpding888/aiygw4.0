@@ -135,7 +135,7 @@ export enum ProviderErrorCode {
   ERR_PROVIDER_VALIDATION_FAILED = 'ERR_PROVIDER_VALIDATION_FAILED',
 
   /** Provider重试次数耗尽 */
-  ERR_PROVIDER_MAX_RETRIES_EXCEEDED = 'ERR_PROVIDER_MAX_RETRIES_EXCEEDED',
+  ERR_PROVIDER_MAX_RETRIES_EXCEEDED = 'ERR_PROVIDER_MAX_RETRIES_EXCEEDED'
 }
 
 /**
@@ -166,7 +166,7 @@ export const DEFAULT_RETRY_POLICY: RetryPolicy = {
   initialDelay: 1000,
   maxDelay: 10000,
   backoffMultiplier: 2,
-  retryableErrors: [],
+  retryableErrors: []
 };
 
 /**

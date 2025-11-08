@@ -4,11 +4,11 @@
  * 支持CSV和JSON格式
  */
 
-import * as textRepo from '../repositories/contentTexts.repo';
-import * as announcementRepo from '../repositories/announcements.repo';
-import * as bannerRepo from '../repositories/banners.repo';
-import * as planRepo from '../repositories/membershipPlans.repo';
-import * as benefitRepo from '../repositories/membershipBenefits.repo';
+import * as textRepo from '../repositories/contentTexts.repo.js';
+import * as announcementRepo from '../repositories/announcements.repo.js';
+import * as bannerRepo from '../repositories/banners.repo.js';
+import * as planRepo from '../repositories/membershipPlans.repo.js';
+import * as benefitRepo from '../repositories/membershipBenefits.repo.js';
 
 /**
  * 导出文案为JSON
@@ -20,7 +20,7 @@ export async function exportContentTextsJSON(options?: {
   const texts = await textRepo.listTexts({
     page: options?.page,
     language: options?.language,
-    limit: 10000, // 艹，大批量导出
+    limit: 10000 // 艹，大批量导出
   });
 
   return texts.map((t) => ({
@@ -30,7 +30,7 @@ export async function exportContentTextsJSON(options?: {
     language: t.language,
     value: t.value,
     description: t.description,
-    status: t.status,
+    status: t.status
   }));
 }
 
@@ -124,7 +124,7 @@ export function parseCSV(csvContent: string): any[] {
  */
 export async function exportAnnouncementsJSON(): Promise<any[]> {
   const announcements = await announcementRepo.listAnnouncements({
-    limit: 10000,
+    limit: 10000
   });
 
   return announcements.map((a) => ({
@@ -136,7 +136,7 @@ export async function exportAnnouncementsJSON(): Promise<any[]> {
     status: a.status,
     publish_at: a.publish_at,
     expire_at: a.expire_at,
-    target_audience: a.target_audience,
+    target_audience: a.target_audience
   }));
 }
 
@@ -145,7 +145,7 @@ export async function exportAnnouncementsJSON(): Promise<any[]> {
  */
 export async function exportBannersJSON(): Promise<any[]> {
   const banners = await bannerRepo.listBanners({
-    limit: 10000,
+    limit: 10000
   });
 
   return banners.map((b) => ({
@@ -157,7 +157,7 @@ export async function exportBannersJSON(): Promise<any[]> {
     status: b.status,
     publish_at: b.publish_at,
     expire_at: b.expire_at,
-    target_audience: b.target_audience,
+    target_audience: b.target_audience
   }));
 }
 
@@ -166,7 +166,7 @@ export async function exportBannersJSON(): Promise<any[]> {
  */
 export async function exportPlansJSON(): Promise<any[]> {
   const plans = await planRepo.listPlans({
-    limit: 10000,
+    limit: 10000
   });
 
   return plans.map((p) => ({
@@ -182,7 +182,7 @@ export async function exportPlansJSON(): Promise<any[]> {
     status: p.status,
     sort_order: p.sort_order,
     is_default: p.is_default,
-    is_popular: p.is_popular,
+    is_popular: p.is_popular
   }));
 }
 
@@ -191,7 +191,7 @@ export async function exportPlansJSON(): Promise<any[]> {
  */
 export async function exportBenefitsJSON(): Promise<any[]> {
   const benefits = await benefitRepo.listBenefits({
-    limit: 10000,
+    limit: 10000
   });
 
   return benefits.map((b) => ({
@@ -202,7 +202,7 @@ export async function exportBenefitsJSON(): Promise<any[]> {
     value: b.value,
     icon: b.icon,
     color: b.color,
-    status: b.status,
+    status: b.status
   }));
 }
 

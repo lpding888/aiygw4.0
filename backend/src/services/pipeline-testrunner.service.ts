@@ -51,7 +51,7 @@ interface MockNodeResult {
 }
 
 class PipelineTestRunnerService extends EventEmitter {
-  private activeExecutions = new Map<string, TestExecution>();
+  private activeExecutions = new Map<string, any>();
   private mockData = new Map<string, MockNodeResult>();
 
   constructor() {
@@ -77,11 +77,7 @@ class PipelineTestRunnerService extends EventEmitter {
         processingTime: Math.random() * 500 + 100
       },
       duration: Math.random() * 1000 + 200,
-      logs: [
-        '🔄 正在转换数据',
-        '应用转换规则',
-        '数据转换完成'
-      ]
+      logs: ['🔄 正在转换数据', '应用转换规则', '数据转换完成']
     });
 
     this.mockData.set('FILTER', {
@@ -91,11 +87,7 @@ class PipelineTestRunnerService extends EventEmitter {
         filterCriteria: 'default'
       },
       duration: Math.random() * 500 + 100,
-      logs: [
-        '🔍 正在过滤数据',
-        '应用过滤条件',
-        '过滤完成'
-      ]
+      logs: ['🔍 正在过滤数据', '应用过滤条件', '过滤完成']
     });
 
     this.mockData.set('MERGE', {
@@ -105,11 +97,7 @@ class PipelineTestRunnerService extends EventEmitter {
         sourceCount: 2
       },
       duration: Math.random() * 800 + 200,
-      logs: [
-        '🔗 正在合并数据',
-        '合并多个数据源',
-        '数据合并完成'
-      ]
+      logs: ['🔗 正在合并数据', '合并多个数据源', '数据合并完成']
     });
 
     this.mockData.set('CONDITION', {
@@ -119,11 +107,7 @@ class PipelineTestRunnerService extends EventEmitter {
         evaluationTime: Math.random() * 100 + 50
       },
       duration: Math.random() * 300 + 50,
-      logs: [
-        '🤔 正在评估条件',
-        '条件表达式: true',
-        '选择分支: true'
-      ]
+      logs: ['🤔 正在评估条件', '条件表达式: true', '选择分支: true']
     });
 
     this.mockData.set('END', {
@@ -133,11 +117,7 @@ class PipelineTestRunnerService extends EventEmitter {
         summary: 'Pipeline执行完成'
       },
       duration: 50,
-      logs: [
-        '✅ Pipeline执行完成',
-        '生成执行报告',
-        '清理执行环境'
-      ]
+      logs: ['✅ Pipeline执行完成', '生成执行报告', '清理执行环境']
     });
   }
 
@@ -147,7 +127,7 @@ class PipelineTestRunnerService extends EventEmitter {
   async startTest(pipelineId: string, mode: 'mock' | 'real' = 'mock'): Promise<string> {
     const executionId = this.generateExecutionId();
 
-    const execution: TestExecution = {
+    const execution: any = {
       id: executionId,
       pipelineId,
       mode,
@@ -173,7 +153,7 @@ class PipelineTestRunnerService extends EventEmitter {
     });
 
     // 异步执行Pipeline
-    this.executePipeline(executionId).catch(error => {
+    this.executePipeline(executionId).catch((error) => {
       logger.error('Pipeline试跑失败', { executionId, error: error.message });
     });
 
@@ -216,18 +196,22 @@ class PipelineTestRunnerService extends EventEmitter {
       if (execution.status !== 'cancelled') {
         execution.status = execution.summary.failedSteps === 0 ? 'completed' : 'failed';
         execution.endTime = new Date();
-        execution.summary.totalDuration = execution.endTime.getTime() - execution.startTime.getTime();
+        execution.summary.totalDuration =
+          execution.endTime.getTime() - execution.startTime.getTime();
         execution.summary.success = execution.summary.failedSteps === 0;
       }
 
       // 发送完成事件
-      this.emitExecutionEvent(executionId, execution.status === 'completed' ? 'completed' : 'failed', {
-        message: `Pipeline试跑${execution.status === 'completed' ? '完成' : '失败'}`,
-        summary: execution.summary,
-        timestamp: new Date()
-      });
-
-    } catch (error) {
+      this.emitExecutionEvent(
+        executionId,
+        execution.status === 'completed' ? 'completed' : 'failed',
+        {
+          message: `Pipeline试跑${execution.status === 'completed' ? '完成' : '失败'}`,
+          summary: execution.summary,
+          timestamp: new Date()
+        }
+      );
+    } catch (error: any) {
       execution.status = 'failed';
       execution.endTime = new Date();
       execution.summary.totalDuration = execution.endTime.getTime() - execution.startTime.getTime();
@@ -247,10 +231,10 @@ class PipelineTestRunnerService extends EventEmitter {
     const execution = this.activeExecutions.get(executionId);
     if (!execution || execution.status === 'cancelled') return;
 
-    const stepResult = {
+    const stepResult: any = {
       nodeId: node.id,
       stepName: node.name,
-      status: 'pending' as const,
+      status: 'pending',
       startTime: new Date(),
       logs: [] as string[],
       metrics: {
@@ -302,16 +286,19 @@ class PipelineTestRunnerService extends EventEmitter {
       }
 
       // 发送节点完成事件
-      this.emitExecutionEvent(executionId, stepResult.status === 'completed' ? 'node_completed' : 'node_failed', {
-        nodeId: node.id,
-        nodeName: node.name,
-        status: stepResult.status,
-        duration: stepResult.metrics.duration,
-        logs: stepResult.logs,
-        timestamp: new Date()
-      });
-
-    } catch (error) {
+      this.emitExecutionEvent(
+        executionId,
+        stepResult.status === 'completed' ? 'node_completed' : 'node_failed',
+        {
+          nodeId: node.id,
+          nodeName: node.name,
+          status: stepResult.status,
+          duration: stepResult.metrics.duration,
+          logs: stepResult.logs,
+          timestamp: new Date()
+        }
+      );
+    } catch (error: any) {
       stepResult.status = 'failed';
       stepResult.endTime = new Date();
       stepResult.error = error.message;
@@ -334,13 +321,18 @@ class PipelineTestRunnerService extends EventEmitter {
    */
   private async executeMockNode(node: any): Promise<MockNodeResult> {
     const mockResult = this.mockData.get(node.type) || this.mockData.get('TRANSFORM');
+    if (!mockResult) {
+      throw new Error(`未找到节点类型 ${node.type} 的Mock数据`);
+    }
 
     // 模拟执行延迟
     await this.delay(mockResult.duration);
 
     return {
-      ...mockResult,
-      logs: mockResult.logs.map(log => `[${node.name}] ${log}`)
+      output: mockResult.output,
+      duration: mockResult.duration,
+      logs: mockResult.logs.map((log) => `[${node.name}] ${log}`),
+      error: mockResult.error
     };
   }
 
@@ -381,8 +373,7 @@ class PipelineTestRunnerService extends EventEmitter {
         duration,
         logs
       };
-
-    } catch (error) {
+    } catch (error: any) {
       const duration = Date.now() - startTime;
       logs.push(`[真实模式] 节点执行失败: ${error.message}`);
 
@@ -426,11 +417,7 @@ class PipelineTestRunnerService extends EventEmitter {
         score: Math.random() * 100,
         confidence: Math.random() * 0.3 + 0.7,
         tags: ['tag1', 'tag2', 'tag3'],
-        insights: [
-          '图片质量良好',
-          '色彩饱和度适中',
-          '主体清晰可见'
-        ]
+        insights: ['图片质量良好', '色彩饱和度适中', '主体清晰可见']
       },
       processingTime: Math.random() * 2000 + 1000
     };
@@ -512,7 +499,11 @@ class PipelineTestRunnerService extends EventEmitter {
     const completedIds: string[] = [];
 
     for (const [executionId, execution] of this.activeExecutions) {
-      if (execution.status === 'completed' || execution.status === 'failed' || execution.status === 'cancelled') {
+      if (
+        execution.status === 'completed' ||
+        execution.status === 'failed' ||
+        execution.status === 'cancelled'
+      ) {
         completedIds.push(executionId);
       }
     }
@@ -558,10 +549,34 @@ class PipelineTestRunnerService extends EventEmitter {
       id: pipelineId,
       nodes: [
         { id: 'start', type: 'START', name: '开始', inputs: [], outputs: ['input_data'] },
-        { id: 'transform1', type: 'TRANSFORM', name: '数据转换1', inputs: ['input_data'], outputs: ['transformed_data1'] },
-        { id: 'filter1', type: 'FILTER', name: '数据过滤', inputs: ['transformed_data1'], outputs: ['filtered_data'] },
-        { id: 'condition1', type: 'CONDITION', name: '条件判断', inputs: ['filtered_data'], outputs: ['branch_true', 'branch_false'] },
-        { id: 'merge1', type: 'MERGE', name: '数据合并', inputs: ['branch_true', 'branch_false'], outputs: ['final_data'] },
+        {
+          id: 'transform1',
+          type: 'TRANSFORM',
+          name: '数据转换1',
+          inputs: ['input_data'],
+          outputs: ['transformed_data1']
+        },
+        {
+          id: 'filter1',
+          type: 'FILTER',
+          name: '数据过滤',
+          inputs: ['transformed_data1'],
+          outputs: ['filtered_data']
+        },
+        {
+          id: 'condition1',
+          type: 'CONDITION',
+          name: '条件判断',
+          inputs: ['filtered_data'],
+          outputs: ['branch_true', 'branch_false']
+        },
+        {
+          id: 'merge1',
+          type: 'MERGE',
+          name: '数据合并',
+          inputs: ['branch_true', 'branch_false'],
+          outputs: ['final_data']
+        },
         { id: 'end', type: 'END', name: '结束', inputs: ['final_data'], outputs: [] }
       ],
       edges: [
@@ -579,7 +594,7 @@ class PipelineTestRunnerService extends EventEmitter {
    * 延迟函数
    */
   private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
@@ -598,15 +613,15 @@ class PipelineTestRunnerService extends EventEmitter {
     return {
       active: executions.length,
       byStatus: {
-        pending: executions.filter(e => e.status === 'pending').length,
-        running: executions.filter(e => e.status === 'running').length,
-        completed: executions.filter(e => e.status === 'completed').length,
-        failed: executions.filter(e => e.status === 'failed').length,
-        cancelled: executions.filter(e => e.status === 'cancelled').length
+        pending: executions.filter((e) => e.status === 'pending').length,
+        running: executions.filter((e) => e.status === 'running').length,
+        completed: executions.filter((e) => e.status === 'completed').length,
+        failed: executions.filter((e) => e.status === 'failed').length,
+        cancelled: executions.filter((e) => e.status === 'cancelled').length
       },
       byMode: {
-        mock: executions.filter(e => e.mode === 'mock').length,
-        real: executions.filter(e => e.mode === 'real').length
+        mock: executions.filter((e) => e.mode === 'mock').length,
+        real: executions.filter((e) => e.mode === 'real').length
       }
     };
   }
@@ -616,10 +631,13 @@ class PipelineTestRunnerService extends EventEmitter {
 const pipelineTestRunnerService = new PipelineTestRunnerService();
 
 // 定期清理已完成的试跑
-setInterval(() => {
-  pipelineTestRunnerService.cleanupCompletedTests().catch(error => {
-    logger.error('清理Pipeline试跑失败:', error);
-  });
-}, 5 * 60 * 1000); // 每5分钟清理一次
+setInterval(
+  () => {
+    pipelineTestRunnerService.cleanupCompletedTests().catch((error) => {
+      logger.error('清理Pipeline试跑失败:', error);
+    });
+  },
+  5 * 60 * 1000
+); // 每5分钟清理一次
 
 module.exports = pipelineTestRunnerService;

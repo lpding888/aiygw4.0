@@ -4,10 +4,10 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { ImportExportController } from '../../../src/controllers/importExport.controller';
-import * as importExportService from '../../../src/services/importExport.service';
+import { ImportExportController } from '../../../src/controllers/importExport.controller.ts';
+import * as importExportService from '../../../src/services/importExport.service.ts';
 
-jest.mock('../../../src/services/importExport.service');
+jest.mock('../../../src/services/importExport.service.ts');
 
 describe('ImportExportController - 单元测试', () => {
   let controller: ImportExportController;
@@ -17,12 +17,12 @@ describe('ImportExportController - 单元测试', () => {
 
   beforeEach(() => {
     controller = new ImportExportController();
-    mockReq = { params: {}, query: {}, body: {}, user: { id: 1 } };
+    mockReq = { params: {}, query: {}, body: {}, user: { id: '1', role: 'admin' } }; // 艹，必须包含id和role！
     mockRes = {
       json: jest.fn().mockReturnThis(),
       status: jest.fn().mockReturnThis(),
       send: jest.fn().mockReturnThis(),
-      setHeader: jest.fn().mockReturnThis(),
+      setHeader: jest.fn().mockReturnThis()
     };
     mockNext = jest.fn();
     jest.clearAllMocks();
@@ -40,7 +40,7 @@ describe('ImportExportController - 单元测试', () => {
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
-        data: mockData,
+        data: mockData
       });
     });
 
@@ -72,15 +72,15 @@ describe('ImportExportController - 单元测试', () => {
       (importExportService.importContentTextsJSON as jest.Mock).mockResolvedValue({
         created: 2,
         updated: 1,
-        errors: [],
+        errors: []
       });
 
       mockReq.body = {
         data: [
           { page: 'home', key: 'title', value: '标题' },
-          { page: 'home', key: 'subtitle', value: '副标题' },
+          { page: 'home', key: 'subtitle', value: '副标题' }
         ],
-        format: 'json',
+        format: 'json'
       };
 
       await controller.importContentTexts(mockReq as Request, mockRes as Response, mockNext);
@@ -88,7 +88,7 @@ describe('ImportExportController - 单元测试', () => {
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
         data: expect.objectContaining({ created: 2, updated: 1 }),
-        message: expect.any(String),
+        message: expect.any(String)
       });
     });
 

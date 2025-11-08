@@ -99,7 +99,7 @@ async function testListModels() {
       logSuccess(`Found ${response.data.length} models`);
       if (response.data.length > 0) {
         logInfo('  Sample models:');
-        response.data.slice(0, 3).forEach(model => {
+        response.data.slice(0, 3).forEach((model) => {
           logInfo(`    - ${model.name || model.id} (${model.provider || 'unknown'})`);
         });
       }
@@ -267,7 +267,7 @@ async function runAllTests() {
 }
 
 // 运行测试
-runAllTests().catch(error => {
+runAllTests().catch((error) => {
   logError(`Unexpected error: ${error.message}`);
   console.error(error);
   process.exit(1);

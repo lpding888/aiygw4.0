@@ -1,11 +1,12 @@
-const express = require('express');
-const rateLimit = require('express-rate-limit');
-const securityService = require('../../services/security.service');
-const { authenticateToken, requireAdmin } = require('../../middlewares/auth.middleware');
-const { requirePermission } = require('../../middlewares/require-permission.middleware');
-const { body, param, query } = require('express-validator');
-const validate = require('../../middlewares/validate.middleware');
-const logger = require('../../utils/logger');
+import express, { Request, Response, NextFunction } from 'express';
+import rateLimit from 'express-rate-limit';
+import * as securityService from '../../services/security.service.js';
+import { authenticate as authenticateToken } from '../../middlewares/auth.middleware.js';
+import { requireAdmin } from '../../middlewares/adminAuth.middleware.js';
+import { requirePermission } from '../../middlewares/require-permission.middleware.js';
+import { body, param, query } from 'express-validator';
+import { validate } from '../../middlewares/validate.middleware.js';
+import logger from '../../utils/logger.js';
 
 const router = express.Router();
 
@@ -27,9 +28,7 @@ const rateLimitConfigValidation = [
   body('windowMs')
     .isInt({ min: 1000, max: 3600000 })
     .withMessage('时间窗口必须是1000-3600000毫秒之间'),
-  body('maxRequests')
-    .isInt({ min: 1, max: 10000 })
-    .withMessage('最大请求数必须是1-10000之间'),
+  body('maxRequests').isInt({ min: 1, max: 10000 }).withMessage('最大请求数必须是1-10000之间'),
   body('key')
     .notEmpty()
     .withMessage('限流键不能为空')
@@ -38,15 +37,9 @@ const rateLimitConfigValidation = [
 ];
 
 const dataMaskingValidation = [
-  body('data')
-    .notEmpty()
-    .withMessage('数据不能为空'),
-  body('rules')
-    .isArray({ min: 1 })
-    .withMessage('脱敏规则不能为空'),
-  body('rules.*.field')
-    .notEmpty()
-    .withMessage('字段名不能为空'),
+  body('data').notEmpty().withMessage('数据不能为空'),
+  body('rules').isArray({ min: 1 }).withMessage('脱敏规则不能为空'),
+  body('rules.*.field').notEmpty().withMessage('字段名不能为空'),
   body('rules.*.type')
     .isIn(['email', 'phone', 'id_card', 'bank_card', 'password', 'token', 'custom'])
     .withMessage('无效的脱敏类型')
@@ -61,22 +54,12 @@ const auditLogValidation = [
     .optional()
     .isIn(['low', 'medium', 'high', 'critical'])
     .withMessage('无效的严重级别'),
-  query('page')
-    .optional()
-    .isInt({ min: 1, max: 1000 })
-    .withMessage('页码必须是1-1000之间的整数'),
-  query('limit')
-    .optional()
-    .isInt({ min: 1, max: 200 })
-    .withMessage('每页数量必须是1-200之间的整数')
+  query('page').optional().isInt({ min: 1, max: 1000 }).withMessage('页码必须是1-1000之间的整数'),
+  query('limit').optional().isInt({ min: 1, max: 200 }).withMessage('每页数量必须是1-200之间的整数')
 ];
 
 const suspiciousActivityValidation = [
-  body('ip')
-    .notEmpty()
-    .withMessage('IP地址不能为空')
-    .isIP()
-    .withMessage('无效的IP地址'),
+  body('ip').notEmpty().withMessage('IP地址不能为空').isIP().withMessage('无效的IP地址'),
   body('timeWindowMs')
     .optional()
     .isInt({ min: 60000, max: 3600000 })
@@ -94,62 +77,64 @@ router.use(authenticateToken);
 router.use(securityRateLimit);
 
 // 应用权限中间件
-router.use(requirePermission({
-  resource: 'security',
-  actions: ['read']
-}));
+router.use(
+  requirePermission({
+    resource: 'security',
+    actions: ['read']
+  })
+);
 
 /**
  * 获取安全统计信息
  * GET /api/admin/security/stats
  */
-router.get('/stats',
-  async (req, res, next) => {
-    try {
-      const stats = await securityService.getSecurityStats();
+router.get('/stats', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const stats = await securityService.getSecurityStats();
 
-      res.json({
-        success: true,
-        data: stats,
-        requestId: req.id
-      });
-    } catch (error) {
-      logger.error('获取安全统计失败:', error);
-      next(error);
-    }
+    res.json({
+      success: true,
+      data: stats,
+      requestId: req.id
+    });
+  } catch (error) {
+    logger.error('获取安全统计失败:', error);
+    next(error);
   }
-);
+});
 
 /**
  * 执行健康检查
  * GET /api/admin/security/health
  */
-router.get('/health',
-  async (req, res, next) => {
-    try {
-      const healthResult = await securityService.performHealthChecks();
+router.get('/health', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const healthResult = await securityService.performHealthChecks();
 
-      res.status(healthResult.overall === 'healthy' ? 200 :
-                   healthResult.overall === 'warning' ? 200 : 503).json({
+    res
+      .status(
+        healthResult.overall === 'healthy' ? 200 : healthResult.overall === 'warning' ? 200 : 503
+      )
+      .json({
         success: healthResult.overall !== 'unhealthy',
         data: healthResult,
         requestId: req.id
       });
-    } catch (error) {
-      logger.error('健康检查失败:', error);
-      next(error);
-    }
+  } catch (error) {
+    logger.error('健康检查失败:', error);
+    next(error);
   }
-);
+});
 
 /**
  * 获取安全审计日志
  * GET /api/admin/security/audit-logs
  */
-router.get('/audit-logs',
+router.get(
+  '/audit-logs',
   auditLogValidation,
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const {
         type,
@@ -158,21 +143,21 @@ router.get('/audit-logs',
         ip,
         startDate,
         endDate,
-        page = 1,
-        limit = 50
+        page = '1',
+        limit = '50'
       } = req.query;
 
       const filters: any = {
-        page: parseInt(page),
-        limit: parseInt(limit)
+        page: parseInt(page as string),
+        limit: parseInt(limit as string)
       };
 
       if (type) filters.type = type;
       if (severity) filters.severity = severity;
       if (userId) filters.userId = userId;
       if (ip) filters.ip = ip;
-      if (startDate) filters.startDate = new Date(startDate);
-      if (endDate) filters.endDate = new Date(endDate);
+      if (startDate) filters.startDate = new Date(startDate as string);
+      if (endDate) filters.endDate = new Date(endDate as string);
 
       const result = await securityService.getAuditLogs(filters);
 
@@ -189,23 +174,26 @@ router.get('/audit-logs',
 );
 
 // ============ 需要管理权限的路由 ============
-router.use(requirePermission({
-  resource: 'security',
-  actions: ['manage', 'test']
-}));
+router.use(
+  requirePermission({
+    resource: 'security',
+    actions: ['manage', 'test']
+  })
+);
 
 /**
  * 检查频率限制
  * POST /api/admin/security/rate-limit/check
  */
-router.post('/rate-limit/check',
+router.post(
+  '/rate-limit/check',
   requirePermission({
     resource: 'security',
     actions: ['manage']
   }),
   rateLimitConfigValidation,
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { windowMs, maxRequests, key } = req.body;
 
@@ -219,7 +207,7 @@ router.post('/rate-limit/check',
         key,
         allowed: result.allowed,
         remaining: result.remaining,
-        checkedBy: req.user.id,
+        checkedBy: req.user?.id,
         ip: req.ip
       });
 
@@ -239,16 +227,15 @@ router.post('/rate-limit/check',
  * 重置频率限制
  * DELETE /api/admin/security/rate-limit/:key
  */
-router.delete('/rate-limit/:key',
+router.delete(
+  '/rate-limit/:key',
   requirePermission({
     resource: 'security',
     actions: ['manage']
   }),
-  param('key')
-    .notEmpty()
-    .withMessage('限流键不能为空'),
+  param('key').notEmpty().withMessage('限流键不能为空'),
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { key } = req.params;
 
@@ -257,7 +244,7 @@ router.delete('/rate-limit/:key',
       logger.info('频率限制重置', {
         key,
         success,
-        resetBy: req.user.id,
+        resetBy: req.user?.id,
         ip: req.ip
       });
 
@@ -277,14 +264,15 @@ router.delete('/rate-limit/:key',
  * 数据脱敏测试
  * POST /api/admin/security/data-masking
  */
-router.post('/data-masking',
+router.post(
+  '/data-masking',
   requirePermission({
     resource: 'security',
     actions: ['test']
   }),
   dataMaskingValidation,
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { data, rules } = req.body;
 
@@ -293,7 +281,7 @@ router.post('/data-masking',
       logger.info('数据脱敏测试', {
         rulesCount: rules.length,
         fieldsCount: Object.keys(data).length,
-        testedBy: req.user.id,
+        testedBy: req.user?.id,
         ip: req.ip
       });
 
@@ -317,26 +305,27 @@ router.post('/data-masking',
  * 检测可疑活动
  * POST /api/admin/security/suspicious-activity/detect
  */
-router.post('/suspicious-activity/detect',
+router.post(
+  '/suspicious-activity/detect',
   requirePermission({
     resource: 'security',
     actions: ['manage']
   }),
   suspiciousActivityValidation,
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { ip, timeWindowMs = 300000 } = req.body;
 
       const result = await securityService.detectSuspiciousActivity(ip, timeWindowMs);
 
       logger.info('可疑活动检测', {
-        ip,
+        targetIp: ip,
         suspicious: result.suspicious,
         riskScore: result.riskScore,
         reasonsCount: result.reasons.length,
-        detectedBy: req.user.id,
-        ip: req.ip
+        detectedBy: req.user?.id,
+        requestIp: req.ip
       });
 
       res.json({
@@ -355,7 +344,8 @@ router.post('/suspicious-activity/detect',
  * 手动记录安全事件
  * POST /api/admin/security/audit-logs
  */
-router.post('/audit-logs',
+router.post(
+  '/audit-logs',
   requirePermission({
     resource: 'security',
     actions: ['manage']
@@ -363,63 +353,36 @@ router.post('/audit-logs',
   body('type')
     .isIn(['rate_limit', 'data_access', 'auth_attempt', 'permission_denied', 'suspicious_activity'])
     .withMessage('无效的日志类型'),
-  body('severity')
-    .isIn(['low', 'medium', 'high', 'critical'])
-    .withMessage('无效的严重级别'),
-  body('ip')
-    .notEmpty()
-    .withMessage('IP地址不能为空')
-    .isIP()
-    .withMessage('无效的IP地址'),
-  body('endpoint')
-    .notEmpty()
-    .withMessage('端点不能为空'),
-  body('method')
-    .isIn(['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
-    .withMessage('无效的HTTP方法'),
-  body('details')
-    .optional()
-    .isObject()
-    .withMessage('详情必须是对象'),
+  body('severity').isIn(['low', 'medium', 'high', 'critical']).withMessage('无效的严重级别'),
+  body('ip').notEmpty().withMessage('IP地址不能为空').isIP().withMessage('无效的IP地址'),
+  body('endpoint').notEmpty().withMessage('端点不能为空'),
+  body('method').isIn(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']).withMessage('无效的HTTP方法'),
+  body('details').optional().isObject().withMessage('详情必须是对象'),
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const {
-        type,
-        severity,
-        userId,
-        ip,
-        userAgent,
-        endpoint,
-        method,
-        details = {}
-      } = req.body;
+      const { type, severity, userId, ip, userAgent, endpoint, method, details = {} } = req.body;
 
       await securityService.logSecurityEvent({
         type,
         severity,
-        userId,
-        ip,
-        userAgent,
-        endpoint,
-        method,
-        details,
-        // 自动添加请求信息
+        // 使用请求中的值或从req中获取
         userId: userId || req.user?.id,
         ip: ip || req.ip,
         userAgent: userAgent || req.get('User-Agent'),
         endpoint: endpoint || req.path,
-        method: method || req.method
+        method: method || req.method,
+        details
       });
 
       logger.info('安全事件记录', {
         type,
         severity,
-        ip,
-        endpoint,
-        method,
-        loggedBy: req.user.id,
-        ip: req.ip
+        ip: ip || req.ip,
+        endpoint: endpoint || req.path,
+        method: method || req.method,
+        loggedBy: req.user?.id,
+        requestIp: req.ip
       });
 
       res.status(201).json({
@@ -438,12 +401,13 @@ router.post('/audit-logs',
  * 获取脱敏规则示例
  * GET /api/admin/security/masking-rules/examples
  */
-router.get('/masking-rules/examples',
+router.get(
+  '/masking-rules/examples',
   requirePermission({
     resource: 'security',
     actions: ['read']
   }),
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const examples = [
         {
@@ -501,12 +465,13 @@ router.get('/masking-rules/examples',
  * 获取限流配置示例
  * GET /api/admin/security/rate-limit/examples
  */
-router.get('/rate-limit/examples',
+router.get(
+  '/rate-limit/examples',
   requirePermission({
     resource: 'security',
     actions: ['read']
   }),
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const examples = [
         {
@@ -563,7 +528,8 @@ router.get('/rate-limit/examples',
  * 测试数据脱敏
  * POST /api/admin/security/masking-test
  */
-router.post('/masking-test',
+router.post(
+  '/masking-test',
   requirePermission({
     resource: 'security',
     actions: ['test']
@@ -571,11 +537,9 @@ router.post('/masking-test',
   body('testType')
     .isIn(['email', 'phone', 'id_card', 'bank_card', 'password', 'token', 'custom'])
     .withMessage('无效的测试类型'),
-  body('value')
-    .notEmpty()
-    .withMessage('测试值不能为空'),
+  body('value').notEmpty().withMessage('测试值不能为空'),
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { testType, value } = req.body;
 
@@ -590,7 +554,7 @@ router.post('/masking-test',
         testType,
         originalLength: value.length,
         maskedLength: maskedValue.length,
-        testedBy: req.user.id,
+        testedBy: req.user?.id,
         ip: req.ip
       });
 
@@ -610,4 +574,4 @@ router.post('/masking-test',
   }
 );
 
-module.exports = router;
+export default router;

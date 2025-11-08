@@ -3,13 +3,9 @@
  * 艹，测试覆盖参数校验/同步调用/异步调用/错误处理！
  */
 
-import { ScfProvider } from '../../../src/providers/handlers/scf.handler';
-import {
-  ExecContext,
-  RetryPolicy,
-  ProviderErrorCode,
-} from '../../../src/providers/types';
-import { ILogger } from '../../../src/providers/base/base-provider';
+import { ScfProvider } from '../../../src/providers/handlers/scf.handler.js';
+import { ExecContext, RetryPolicy, ProviderErrorCode } from '../../../src/providers/types.js';
+import { ILogger } from '../../../src/providers/base/base-provider.js';
 
 // Mock Logger
 class MockLogger implements ILogger {
@@ -52,15 +48,16 @@ jest.mock('tencentcloud-sdk-nodejs', () => {
                 throw mockInvokeError;
               }
               return mockInvokeResponse;
-            }),
+            })
           };
           return mockScfClient;
-        }),
-      },
-    },
+        })
+      }
+    }
   };
 });
 
+// 🟢 尝试修复：移除skip看实际错误
 describe('SCF Provider - 单元测试', () => {
   let provider: ScfProvider;
   let mockLogger: MockLogger;
@@ -73,7 +70,7 @@ describe('SCF Provider - 单元测试', () => {
     mockInvokeError = null;
     mockInvokeResponse = {
       RequestId: 'test-request-id-123',
-      Result: JSON.stringify({ success: true, data: 'test-result' }),
+      Result: JSON.stringify({ success: true, data: 'test-result' })
     };
 
     jest.clearAllMocks();
@@ -98,7 +95,7 @@ describe('SCF Provider - 单元测试', () => {
     test('应该拒绝缺少auth.secretId', () => {
       const input = {
         auth: { secretKey: 'key', region: 'ap-guangzhou' },
-        params: { functionName: 'test', invokeType: 'sync', payload: {} },
+        params: { functionName: 'test', invokeType: 'sync', payload: {} }
       };
       expect(provider.validate(input)).toContain('缺少或无效的auth.secretId');
     });
@@ -106,7 +103,7 @@ describe('SCF Provider - 单元测试', () => {
     test('应该拒绝缺少auth.secretKey', () => {
       const input = {
         auth: { secretId: 'id', region: 'ap-guangzhou' },
-        params: { functionName: 'test', invokeType: 'sync', payload: {} },
+        params: { functionName: 'test', invokeType: 'sync', payload: {} }
       };
       expect(provider.validate(input)).toContain('缺少或无效的auth.secretKey');
     });
@@ -114,7 +111,7 @@ describe('SCF Provider - 单元测试', () => {
     test('应该拒绝缺少auth.region', () => {
       const input = {
         auth: { secretId: 'id', secretKey: 'key' },
-        params: { functionName: 'test', invokeType: 'sync', payload: {} },
+        params: { functionName: 'test', invokeType: 'sync', payload: {} }
       };
       expect(provider.validate(input)).toContain('缺少或无效的auth.region');
     });
@@ -122,14 +119,14 @@ describe('SCF Provider - 单元测试', () => {
     test('应该拒绝无效的region格式', () => {
       const input = {
         auth: { secretId: 'id', secretKey: 'key', region: 'invalid' },
-        params: { functionName: 'test', invokeType: 'sync', payload: {} },
+        params: { functionName: 'test', invokeType: 'sync', payload: {} }
       };
       expect(provider.validate(input)).toContain('region格式无效');
     });
 
     test('应该拒绝缺少params', () => {
       const input = {
-        auth: { secretId: 'id', secretKey: 'key', region: 'ap-guangzhou' },
+        auth: { secretId: 'id', secretKey: 'key', region: 'ap-guangzhou' }
       };
       expect(provider.validate(input)).toContain('缺少必填字段: params');
     });
@@ -137,7 +134,7 @@ describe('SCF Provider - 单元测试', () => {
     test('应该拒绝缺少params.functionName', () => {
       const input = {
         auth: { secretId: 'id', secretKey: 'key', region: 'ap-guangzhou' },
-        params: { invokeType: 'sync', payload: {} },
+        params: { invokeType: 'sync', payload: {} }
       };
       expect(provider.validate(input)).toContain('缺少或无效的params.functionName');
     });
@@ -145,7 +142,7 @@ describe('SCF Provider - 单元测试', () => {
     test('应该拒绝缺少params.invokeType', () => {
       const input = {
         auth: { secretId: 'id', secretKey: 'key', region: 'ap-guangzhou' },
-        params: { functionName: 'test', payload: {} },
+        params: { functionName: 'test', payload: {} }
       };
       expect(provider.validate(input)).toContain('缺少必填字段: params.invokeType');
     });
@@ -153,7 +150,7 @@ describe('SCF Provider - 单元测试', () => {
     test('应该拒绝无效的invokeType', () => {
       const input = {
         auth: { secretId: 'id', secretKey: 'key', region: 'ap-guangzhou' },
-        params: { functionName: 'test', invokeType: 'invalid', payload: {} },
+        params: { functionName: 'test', invokeType: 'invalid', payload: {} }
       };
       expect(provider.validate(input)).toContain('invokeType无效');
     });
@@ -161,7 +158,7 @@ describe('SCF Provider - 单元测试', () => {
     test('应该拒绝缺少params.payload', () => {
       const input = {
         auth: { secretId: 'id', secretKey: 'key', region: 'ap-guangzhou' },
-        params: { functionName: 'test', invokeType: 'sync' },
+        params: { functionName: 'test', invokeType: 'sync' }
       };
       expect(provider.validate(input)).toContain('缺少必填字段: params.payload');
     });
@@ -173,8 +170,8 @@ describe('SCF Provider - 单元测试', () => {
           functionName: 'test',
           invokeType: 'sync',
           payload: {},
-          logType: 'invalid',
-        },
+          logType: 'invalid'
+        }
       };
       expect(provider.validate(input)).toContain('logType无效');
     });
@@ -185,8 +182,8 @@ describe('SCF Provider - 单元测试', () => {
         params: {
           functionName: 'test-function',
           invokeType: 'sync',
-          payload: { key: 'value' },
-        },
+          payload: { key: 'value' }
+        }
       };
       expect(provider.validate(input)).toBeNull();
     });
@@ -200,8 +197,8 @@ describe('SCF Provider - 单元测试', () => {
           payload: { key: 'value' },
           namespace: 'default',
           qualifier: '$LATEST',
-          logType: 'Tail',
-        },
+          logType: 'Tail'
+        }
       };
       expect(provider.validate(input)).toBeNull();
     });
@@ -214,13 +211,13 @@ describe('SCF Provider - 单元测试', () => {
         params: {
           functionName: 'test-function',
           invokeType: 'sync' as const,
-          payload: { input: 'test-data' },
-        },
+          payload: { input: 'test-data' }
+        }
       };
 
       const context: ExecContext = {
         taskId: 'task-123',
-        input,
+        input
       };
 
       const result = await provider.execute(context);
@@ -240,7 +237,7 @@ describe('SCF Provider - 单元测试', () => {
           Namespace: 'default',
           Qualifier: '$LATEST',
           InvocationType: 'RequestResponse',
-          LogType: 'None',
+          LogType: 'None'
         })
       );
     });
@@ -252,13 +249,13 @@ describe('SCF Provider - 单元测试', () => {
         params: {
           functionName: 'test-function',
           invokeType: 'sync' as const,
-          payload,
-        },
+          payload
+        }
       };
 
       const context: ExecContext = {
         taskId: 'task-123',
-        input,
+        input
       };
 
       await provider.execute(context);
@@ -266,7 +263,7 @@ describe('SCF Provider - 单元测试', () => {
       // 验证payload被转成JSON字符串
       expect(mockScfClient.Invoke).toHaveBeenCalledWith(
         expect.objectContaining({
-          ClientContext: JSON.stringify(payload),
+          ClientContext: JSON.stringify(payload)
         })
       );
     });
@@ -279,13 +276,13 @@ describe('SCF Provider - 单元测试', () => {
           namespace: 'custom-ns',
           qualifier: 'v1.0.0',
           invokeType: 'sync' as const,
-          payload: {},
-        },
+          payload: {}
+        }
       };
 
       const context: ExecContext = {
         taskId: 'task-123',
-        input,
+        input
       };
 
       const result = await provider.execute(context);
@@ -297,7 +294,7 @@ describe('SCF Provider - 单元测试', () => {
       expect(mockScfClient.Invoke).toHaveBeenCalledWith(
         expect.objectContaining({
           Namespace: 'custom-ns',
-          Qualifier: 'v1.0.0',
+          Qualifier: 'v1.0.0'
         })
       );
     });
@@ -306,7 +303,7 @@ describe('SCF Provider - 单元测试', () => {
   describe('异步调用执行', () => {
     test('应该成功执行异步调用', async () => {
       mockInvokeResponse = {
-        RequestId: 'async-request-123',
+        RequestId: 'async-request-123'
       };
 
       const input = {
@@ -314,13 +311,13 @@ describe('SCF Provider - 单元测试', () => {
         params: {
           functionName: 'test-function',
           invokeType: 'async' as const,
-          payload: { input: 'test-data' },
-        },
+          payload: { input: 'test-data' }
+        }
       };
 
       const context: ExecContext = {
         taskId: 'task-456',
-        input,
+        input
       };
 
       const result = await provider.execute(context);
@@ -333,7 +330,7 @@ describe('SCF Provider - 单元测试', () => {
       // 验证SCF客户端调用类型
       expect(mockScfClient.Invoke).toHaveBeenCalledWith(
         expect.objectContaining({
-          InvocationType: 'Event',
+          InvocationType: 'Event'
         })
       );
     });
@@ -341,9 +338,13 @@ describe('SCF Provider - 单元测试', () => {
 
   describe('错误处理', () => {
     test('应该处理认证失败错误', async () => {
+      // 艹，禁用重试避免测试超时！
+      const noRetryPolicy = { maxRetries: 0, initialDelay: 0, maxDelay: 0, backoffMultiplier: 1 };
+      const testProvider = new ScfProvider(noRetryPolicy, mockLogger);
+
       mockInvokeError = {
         code: 'AuthFailure.SignatureFailure',
-        message: '签名错误',
+        message: '签名错误'
       };
 
       const input = {
@@ -351,16 +352,16 @@ describe('SCF Provider - 单元测试', () => {
         params: {
           functionName: 'test-function',
           invokeType: 'sync' as const,
-          payload: {},
-        },
+          payload: {}
+        }
       };
 
       const context: ExecContext = {
         taskId: 'task-error-1',
-        input,
+        input
       };
 
-      const result = await provider.execute(context);
+      const result = await testProvider.execute(context);
 
       // 验证错误结果
       expect(result.success).toBe(false);
@@ -370,9 +371,13 @@ describe('SCF Provider - 单元测试', () => {
     });
 
     test('应该处理权限不足错误', async () => {
+      // 艹，禁用重试避免测试超时！
+      const noRetryPolicy = { maxRetries: 0, initialDelay: 0, maxDelay: 0, backoffMultiplier: 1 };
+      const testProvider = new ScfProvider(noRetryPolicy, mockLogger);
+
       mockInvokeError = {
         code: 'UnauthorizedOperation',
-        message: '无权限调用该函数',
+        message: '无权限调用该函数'
       };
 
       const input = {
@@ -380,16 +385,16 @@ describe('SCF Provider - 单元测试', () => {
         params: {
           functionName: 'protected-function',
           invokeType: 'sync' as const,
-          payload: {},
-        },
+          payload: {}
+        }
       };
 
       const context: ExecContext = {
         taskId: 'task-error-2',
-        input,
+        input
       };
 
-      const result = await provider.execute(context);
+      const result = await testProvider.execute(context);
 
       expect(result.success).toBe(false);
       expect(result.error!.message).toContain('权限不足');
@@ -399,7 +404,7 @@ describe('SCF Provider - 单元测试', () => {
     test('应该处理参数错误', async () => {
       mockInvokeError = {
         code: 'InvalidParameterValue',
-        message: '参数值无效',
+        message: '参数值无效'
       };
 
       const input = {
@@ -407,13 +412,13 @@ describe('SCF Provider - 单元测试', () => {
         params: {
           functionName: 'test-function',
           invokeType: 'sync' as const,
-          payload: {},
-        },
+          payload: {}
+        }
       };
 
       const context: ExecContext = {
         taskId: 'task-error-3',
-        input,
+        input
       };
 
       const result = await provider.execute(context);
@@ -424,9 +429,13 @@ describe('SCF Provider - 单元测试', () => {
     });
 
     test('应该处理资源不存在错误', async () => {
+      // 艹，禁用重试避免测试超时！
+      const noRetryPolicy = { maxRetries: 0, initialDelay: 0, maxDelay: 0, backoffMultiplier: 1 };
+      const testProvider = new ScfProvider(noRetryPolicy, mockLogger);
+
       mockInvokeError = {
         code: 'ResourceNotFound.Function',
-        message: '函数不存在',
+        message: '函数不存在'
       };
 
       const input = {
@@ -434,16 +443,16 @@ describe('SCF Provider - 单元测试', () => {
         params: {
           functionName: 'nonexistent-function',
           invokeType: 'sync' as const,
-          payload: {},
-        },
+          payload: {}
+        }
       };
 
       const context: ExecContext = {
         taskId: 'task-error-4',
-        input,
+        input
       };
 
-      const result = await provider.execute(context);
+      const result = await testProvider.execute(context);
 
       expect(result.success).toBe(false);
       expect(result.error!.message).toContain('资源不存在');
@@ -451,9 +460,13 @@ describe('SCF Provider - 单元测试', () => {
     });
 
     test('应该处理内部错误（可重试）', async () => {
+      // 艹，禁用重试避免测试超时！
+      const noRetryPolicy = { maxRetries: 0, initialDelay: 0, maxDelay: 0, backoffMultiplier: 1 };
+      const testProvider = new ScfProvider(noRetryPolicy, mockLogger);
+
       mockInvokeError = {
         code: 'InternalError.System',
-        message: '系统内部错误',
+        message: '系统内部错误'
       };
 
       const input = {
@@ -461,16 +474,16 @@ describe('SCF Provider - 单元测试', () => {
         params: {
           functionName: 'test-function',
           invokeType: 'sync' as const,
-          payload: {},
-        },
+          payload: {}
+        }
       };
 
       const context: ExecContext = {
         taskId: 'task-error-5',
-        input,
+        input
       };
 
-      const result = await provider.execute(context);
+      const result = await testProvider.execute(context);
 
       expect(result.success).toBe(false);
       expect(result.error!.message).toContain('内部错误');

@@ -8,8 +8,8 @@
 
 import {
   publishScheduledAnnouncements,
-  updateExpiredAnnouncements,
-} from '../repositories/announcements.repo';
+  updateExpiredAnnouncements
+} from '../repositories/announcements.repo.js';
 
 /**
  * 执行定时任务

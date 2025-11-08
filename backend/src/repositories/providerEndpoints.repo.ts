@@ -7,8 +7,8 @@
  * - 读取时自动解密（可选缓存到内存）
  */
 
-import db from '../db';
-import { encryptFields, decryptFields } from '../utils/crypto';
+import { db } from '../config/database.js';
+import { encryptFields, decryptFields } from '../utils/crypto.js';
 
 /**
  * Provider端点接口
@@ -81,7 +81,7 @@ function getFromCache(providerRef: string): ProviderEndpoint | null {
 function setCache(providerRef: string, data: ProviderEndpoint): void {
   cache.set(providerRef, {
     data,
-    expireAt: Date.now() + CACHE_TTL,
+    expireAt: Date.now() + CACHE_TTL
   });
 }
 
@@ -105,14 +105,10 @@ function clearCache(providerRef?: string): void {
 export async function createProviderEndpoint(
   input: ProviderEndpointInput
 ): Promise<ProviderEndpoint> {
-  const { provider_ref, provider_name, endpoint_url, credentials, auth_type } =
-    input;
+  const { provider_ref, provider_name, endpoint_url, credentials, auth_type } = input;
 
   // 艹，加密凭证字段
-  const encrypted = encryptFields(
-    { credentials_encrypted: credentials },
-    SENSITIVE_FIELDS
-  );
+  const encrypted = encryptFields({ credentials_encrypted: credentials }, SENSITIVE_FIELDS);
 
   // 插入数据库
   await db('provider_endpoints').insert({
@@ -122,7 +118,7 @@ export async function createProviderEndpoint(
     credentials_encrypted: encrypted.credentials_encrypted,
     auth_type,
     created_at: db.fn.now(),
-    updated_at: db.fn.now(),
+    updated_at: db.fn.now()
   });
 
   console.log(`[REPO] Provider端点创建成功: ${provider_ref}`);
@@ -156,9 +152,7 @@ export async function getProviderEndpoint(
   }
 
   // 从数据库读取
-  const row = await db('provider_endpoints')
-    .where({ provider_ref: providerRef })
-    .first();
+  const row = await db('provider_endpoints').where({ provider_ref: providerRef }).first();
 
   if (!row) {
     return null;
@@ -195,7 +189,7 @@ export async function listProviderEndpoints(options: {
   const rows = await query;
 
   // 艹，批量解密（性能考虑，不使用缓存）
-  return rows.map((row) => decryptFields(row, SENSITIVE_FIELDS)) as ProviderEndpoint[];
+  return rows.map((row: any) => decryptFields(row, SENSITIVE_FIELDS)) as ProviderEndpoint[];
 }
 
 /**
@@ -209,7 +203,7 @@ export async function updateProviderEndpoint(
   updates: Partial<ProviderEndpointInput>
 ): Promise<ProviderEndpoint> {
   const updateData: any = {
-    updated_at: db.fn.now(),
+    updated_at: db.fn.now()
   };
 
   // 处理普通字段
@@ -260,12 +254,8 @@ export async function updateProviderEndpoint(
  * @param providerRef - Provider引用ID
  * @returns 是否成功删除
  */
-export async function deleteProviderEndpoint(
-  providerRef: string
-): Promise<boolean> {
-  const affected = await db('provider_endpoints')
-    .where({ provider_ref: providerRef })
-    .delete();
+export async function deleteProviderEndpoint(providerRef: string): Promise<boolean> {
+  const affected = await db('provider_endpoints').where({ provider_ref: providerRef }).delete();
 
   if (affected > 0) {
     console.log(`[REPO] Provider端点删除成功: ${providerRef}`);
@@ -281,15 +271,13 @@ export async function deleteProviderEndpoint(
  * @param providerRef - Provider引用ID
  * @returns 是否存在
  */
-export async function providerEndpointExists(
-  providerRef: string
-): Promise<boolean> {
-  const count = await db('provider_endpoints')
+export async function providerEndpointExists(providerRef: string): Promise<boolean> {
+  const result = await db('provider_endpoints')
     .where({ provider_ref: providerRef })
-    .count('* as count')
+    .count<{ count: string }>('* as count')
     .first();
 
-  return count && (count as any).count > 0;
+  return result ? parseInt(result.count) > 0 : false;
 }
 
 /**

@@ -3,7 +3,8 @@
  * 艹，这个tm负责公告的CRUD操作！
  */
 
-import db from '../db';
+import { db } from '../config/database.js';
+import type { Knex } from 'knex';
 
 /**
  * 公告接口
@@ -45,31 +46,30 @@ export interface CreateAnnouncementInput {
 /**
  * 创建公告
  */
-export async function createAnnouncement(
-  input: CreateAnnouncementInput
-): Promise<Announcement> {
-  const [id] = await db('announcements').insert({
+export async function createAnnouncement(input: CreateAnnouncementInput): Promise<Announcement> {
+  const inserted = (await db<Announcement>('announcements').insert({
     ...input,
     created_at: db.fn.now(),
-    updated_at: db.fn.now(),
-  });
+    updated_at: db.fn.now()
+  })) as number[];
 
-  const created = await getAnnouncementById(id);
+  const announcementId = inserted[0];
+
+  const created = await getAnnouncementById(announcementId);
   if (!created) {
     throw new Error('创建公告后读取失败');
   }
 
-  console.log(`[ANNOUNCEMENT] 公告创建成功: ${created.title} (ID: ${id})`);
+  console.log(`[ANNOUNCEMENT] 公告创建成功: ${created.title} (ID: ${announcementId})`);
   return created;
 }
 
 /**
  * 根据ID获取公告
  */
-export async function getAnnouncementById(
-  id: number
-): Promise<Announcement | null> {
-  return await db('announcements').where({ id }).first();
+export async function getAnnouncementById(id: number): Promise<Announcement | null> {
+  const result = await db<Announcement>('announcements').where({ id }).first();
+  return result ?? null;
 }
 
 /**
@@ -82,15 +82,9 @@ export async function listAnnouncements(options: {
   offset?: number;
   includeExpired?: boolean;
 }): Promise<Announcement[]> {
-  const {
-    status,
-    position,
-    limit = 50,
-    offset = 0,
-    includeExpired = false,
-  } = options;
+  const { status, position, limit = 50, offset = 0, includeExpired = false } = options;
 
-  let query = db('announcements')
+  let query = db<Announcement>('announcements')
     .select('*')
     .orderBy('priority', 'desc')
     .orderBy('created_at', 'desc')
@@ -98,19 +92,17 @@ export async function listAnnouncements(options: {
     .offset(offset);
 
   if (status) {
-    query = query.where({ status });
+    query = query.where('status', status);
   }
 
   if (position) {
-    query = query.where({ position });
+    query = query.where('position', position);
   }
 
   // 艹，默认不返回已过期的
   if (!includeExpired) {
-    query = query.where((builder) => {
-      builder
-        .whereNull('expire_at')
-        .orWhere('expire_at', '>', db.fn.now());
+    query = query.where((builder: Knex.QueryBuilder<Announcement, Announcement[]>) => {
+      builder.whereNull('expire_at').orWhere('expire_at', '>', db.fn.now());
     });
   }
 
@@ -126,13 +118,13 @@ export async function getActiveAnnouncements(options: {
 }): Promise<Announcement[]> {
   const { position, target_audience = 'all' } = options;
 
-  let query = db('announcements')
+  let query = db<Announcement>('announcements')
     .where({ status: 'published' })
-    .where((builder) => {
+    .where((builder: Knex.QueryBuilder<Announcement, Announcement[]>) => {
       // 艹，已到发布时间或没有设置发布时间
       builder.whereNull('publish_at').orWhere('publish_at', '<=', db.fn.now());
     })
-    .where((builder) => {
+    .where((builder: Knex.QueryBuilder<Announcement, Announcement[]>) => {
       // 艹，未过期或没有设置过期时间
       builder.whereNull('expire_at').orWhere('expire_at', '>', db.fn.now());
     })
@@ -140,7 +132,7 @@ export async function getActiveAnnouncements(options: {
     .orderBy('created_at', 'desc');
 
   if (position) {
-    query = query.where({ position });
+    query = query.where('position', position);
   }
 
   // 艹，受众过滤（all可以看到所有）
@@ -158,11 +150,11 @@ export async function updateAnnouncement(
   id: number,
   updates: Partial<CreateAnnouncementInput>
 ): Promise<Announcement> {
-  const affected = await db('announcements')
+  const affected = await db<Announcement>('announcements')
     .where({ id })
     .update({
       ...updates,
-      updated_at: db.fn.now(),
+      updated_at: db.fn.now()
     });
 
   if (affected === 0) {
@@ -182,7 +174,7 @@ export async function updateAnnouncement(
  * 删除公告
  */
 export async function deleteAnnouncement(id: number): Promise<boolean> {
-  const affected = await db('announcements').where({ id }).delete();
+  const affected = await db<Announcement>('announcements').where({ id }).delete();
 
   if (affected > 0) {
     console.log(`[ANNOUNCEMENT] 公告删除成功: ${id}`);
@@ -196,12 +188,12 @@ export async function deleteAnnouncement(id: number): Promise<boolean> {
  * 批量更新过期状态（定时任务使用）
  */
 export async function updateExpiredAnnouncements(): Promise<number> {
-  const affected = await db('announcements')
+  const affected = await db<Announcement>('announcements')
     .where({ status: 'published' })
     .where('expire_at', '<=', db.fn.now())
     .update({
       status: 'expired',
-      updated_at: db.fn.now(),
+      updated_at: db.fn.now()
     });
 
   if (affected > 0) {
@@ -215,13 +207,13 @@ export async function updateExpiredAnnouncements(): Promise<number> {
  * 批量发布到期的公告（定时任务使用）
  */
 export async function publishScheduledAnnouncements(): Promise<number> {
-  const affected = await db('announcements')
+  const affected = await db<Announcement>('announcements')
     .where({ status: 'draft' })
     .whereNotNull('publish_at')
     .where('publish_at', '<=', db.fn.now())
     .update({
       status: 'published',
-      updated_at: db.fn.now(),
+      updated_at: db.fn.now()
     });
 
   if (affected > 0) {

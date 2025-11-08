@@ -6,7 +6,7 @@
  */
 
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import logger from '../utils/logger';
+import logger from '../utils/logger.js';
 
 interface BuildingAIConfig {
   baseURL: string;
@@ -200,7 +200,8 @@ class BuildingAIClientService {
     }
 
     try {
-      const response = await this.client.post('/chat/completions',
+      const response = await this.client.post(
+        '/chat/completions',
         { ...request, stream: true },
         { responseType: 'stream' }
       );
@@ -265,14 +266,14 @@ class BuildingAIClientService {
    */
   private startHealthCheck() {
     // 立即执行一次
-    this.healthCheck().catch(err => {
+    this.healthCheck().catch((err) => {
       logger.error('Initial health check failed', err);
     });
 
     // 定期检查
     if (this.config.healthCheckInterval && this.config.healthCheckInterval > 0) {
       setInterval(() => {
-        this.healthCheck().catch(err => {
+        this.healthCheck().catch((err) => {
           logger.error('Periodic health check failed', err);
         });
       }, this.config.healthCheckInterval);

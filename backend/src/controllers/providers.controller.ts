@@ -4,8 +4,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import * as providerRepo from '../repositories/providerEndpoints.repo';
-import { ProviderEndpointInput } from '../repositories/providerEndpoints.repo';
+import * as providerRepo from '../repositories/providerEndpoints.repo.js';
+import type { ProviderEndpointInput } from '../repositories/providerEndpoints.repo.js';
 
 /**
  * Provider管理控制器
@@ -17,24 +17,20 @@ export class ProvidersController {
    */
   async listProviders(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const {
-        limit = 100,
-        offset = 0,
-        auth_type: authType,
-      } = req.query;
+      const { limit = 100, offset = 0, auth_type: authType } = req.query;
 
       // 调用仓储层
       const providers = await providerRepo.listProviderEndpoints({
         limit: parseInt(limit as string),
         offset: parseInt(offset as string),
-        authType: authType as string | undefined,
+        authType: authType as string | undefined
       });
 
       // 获取总数（艹，简单粗暴直接查一次）
       const allProviders = await providerRepo.listProviderEndpoints({
         limit: 10000, // 足够大
         offset: 0,
-        authType: authType as string | undefined,
+        authType: authType as string | undefined
       });
 
       res.json({
@@ -43,8 +39,8 @@ export class ProvidersController {
           items: providers,
           total: allProviders.length,
           limit: parseInt(limit as string),
-          offset: parseInt(offset as string),
-        },
+          offset: parseInt(offset as string)
+        }
       });
     } catch (error: any) {
       console.error(`[ProvidersController] 列出Provider失败: ${error.message}`);
@@ -67,15 +63,15 @@ export class ProvidersController {
           success: false,
           error: {
             code: 'NOT_FOUND',
-            message: `Provider端点不存在: ${provider_ref}`,
-          },
+            message: `Provider端点不存在: ${provider_ref}`
+          }
         });
         return;
       }
 
       res.json({
         success: true,
-        data: provider,
+        data: provider
       });
     } catch (error: any) {
       console.error(`[ProvidersController] 获取Provider失败: ${error.message}`);
@@ -98,8 +94,8 @@ export class ProvidersController {
           success: false,
           error: {
             code: 'VALIDATION_ERROR',
-            message: validationError,
-          },
+            message: validationError
+          }
         });
         return;
       }
@@ -111,8 +107,8 @@ export class ProvidersController {
           success: false,
           error: {
             code: 'CONFLICT',
-            message: `Provider引用ID已存在: ${input.provider_ref}`,
-          },
+            message: `Provider引用ID已存在: ${input.provider_ref}`
+          }
         });
         return;
       }
@@ -125,12 +121,12 @@ export class ProvidersController {
         action: 'CREATE',
         provider_ref: created.provider_ref,
         user_id: (req as any).user?.id || null,
-        details: { provider_name: created.provider_name },
+        details: { provider_name: created.provider_name }
       });
 
       res.status(201).json({
         success: true,
-        data: created,
+        data: created
       });
     } catch (error: any) {
       console.error(`[ProvidersController] 创建Provider失败: ${error.message}`);
@@ -154,30 +150,27 @@ export class ProvidersController {
           success: false,
           error: {
             code: 'VALIDATION_ERROR',
-            message: validationError,
-          },
+            message: validationError
+          }
         });
         return;
       }
 
       // 更新Provider
       try {
-        const updated = await providerRepo.updateProviderEndpoint(
-          provider_ref,
-          updates
-        );
+        const updated = await providerRepo.updateProviderEndpoint(provider_ref, updates);
 
         // 记录审计日志
         await this.recordAuditLog({
           action: 'UPDATE',
           provider_ref: updated.provider_ref,
           user_id: (req as any).user?.id || null,
-          details: updates,
+          details: updates
         });
 
         res.json({
           success: true,
-          data: updated,
+          data: updated
         });
       } catch (error: any) {
         if (error.message.includes('不存在')) {
@@ -185,8 +178,8 @@ export class ProvidersController {
             success: false,
             error: {
               code: 'NOT_FOUND',
-              message: error.message,
-            },
+              message: error.message
+            }
           });
           return;
         }
@@ -213,8 +206,8 @@ export class ProvidersController {
           success: false,
           error: {
             code: 'NOT_FOUND',
-            message: `Provider端点不存在: ${provider_ref}`,
-          },
+            message: `Provider端点不存在: ${provider_ref}`
+          }
         });
         return;
       }
@@ -224,12 +217,12 @@ export class ProvidersController {
         action: 'DELETE',
         provider_ref,
         user_id: (req as any).user?.id || null,
-        details: {},
+        details: {}
       });
 
       res.json({
         success: true,
-        message: 'Provider端点已删除',
+        message: 'Provider端点已删除'
       });
     } catch (error: any) {
       console.error(`[ProvidersController] 删除Provider失败: ${error.message}`);
@@ -253,8 +246,8 @@ export class ProvidersController {
           success: false,
           error: {
             code: 'NOT_FOUND',
-            message: `Provider端点不存在: ${provider_ref}`,
-          },
+            message: `Provider端点不存在: ${provider_ref}`
+          }
         });
         return;
       }
@@ -269,7 +262,7 @@ export class ProvidersController {
         action: 'TEST_CONNECTION',
         provider_ref,
         user_id: (req as any).user?.id || null,
-        details: { healthy, message },
+        details: { healthy, message }
       });
 
       res.json({
@@ -277,8 +270,8 @@ export class ProvidersController {
         data: {
           healthy,
           message,
-          tested_at: new Date().toISOString(),
-        },
+          tested_at: new Date().toISOString()
+        }
       });
     } catch (error: any) {
       console.error(`[ProvidersController] 测试连接失败: ${error.message}`);
@@ -360,7 +353,7 @@ export class ProvidersController {
       // 但先用console.log代替（后续实现审计日志表后再完善）
       console.log('[AUDIT] Provider操作日志:', {
         ...log,
-        timestamp: new Date().toISOString(),
+        timestamp: new Date().toISOString()
       });
 
       // TODO: 后续实现审计日志表后，写入数据库

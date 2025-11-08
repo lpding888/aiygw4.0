@@ -3,15 +3,19 @@
  * 用于存储API密钥、提示词、系统参数等动态配置
  */
 
-exports.up = function(knex) {
-  return knex.schema.createTable('system_configs', function(table) {
+exports.up = function (knex) {
+  return knex.schema.createTable('system_configs', function (table) {
     // 主键
     table.increments('id').primary();
 
     // 配置信息
     table.string('config_key', 100).notNullable().unique().comment('配置键名');
     table.text('config_value').comment('配置值(JSON字符串或纯文本)');
-    table.string('config_type', 20).notNullable().defaultTo('string').comment('配置类型: string, number, boolean, json, secret');
+    table
+      .string('config_type', 20)
+      .notNullable()
+      .defaultTo('string')
+      .comment('配置类型: string, number, boolean, json, secret');
     table.string('category', 50).notNullable().defaultTo('general').comment('配置分类');
     table.string('description', 500).comment('配置说明');
 
@@ -34,6 +38,6 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
+exports.down = function (knex) {
   return knex.schema.dropTableIfExists('system_configs');
 };

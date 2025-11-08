@@ -52,7 +52,7 @@ export function escapeHtml(str: string): string {
     '>': '&gt;',
     '"': '&quot;',
     "'": '&#39;',
-    '/': '&#x2F;',
+    '/': '&#x2F;'
   };
 
   return String(str).replace(/[&<>"'\/]/g, (match) => htmlEscapeMap[match]);
@@ -160,10 +160,7 @@ export function extractVariableReferences(template: any): string[] {
  * @param variables - 变量对象
  * @returns 缺失的变量名数组，如果全部存在则返回空数组
  */
-export function validateVariables(
-  template: any,
-  variables: Record<string, any>
-): string[] {
+export function validateVariables(template: any, variables: Record<string, any>): string[] {
   const references = extractVariableReferences(template);
   const missing: string[] = [];
 

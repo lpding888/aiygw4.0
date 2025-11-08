@@ -14,10 +14,12 @@
  * - 支持--yes自动确认（生产环境慎用）
  */
 
-import db from '../src/db/connection';
-import { pubSubService } from '../src/pubsub';
-import logger from '../src/utils/logger';
+// @ts-ignore - 艹，db/connection.js没有类型定义！
+import db from '../src/db/connection.js';
+import pubSubService from '../src/pubsub/index.js'; // 艹，用default import！
+import logger from '../src/utils/logger.js';
 import * as readline from 'readline';
+import type { Knex } from 'knex';
 
 /**
  * 配置快照类型
@@ -108,9 +110,7 @@ function showHelp() {
  * 查询快照列表
  */
 async function listSnapshots(scope: string, key?: string): Promise<ConfigSnapshot[]> {
-  let query = db('config_snapshots')
-    .where('scope', scope)
-    .orderBy('created_at', 'desc');
+  let query = db('config_snapshots').where('scope', scope).orderBy('created_at', 'desc');
 
   if (key) {
     query = query.where('key', key);
@@ -120,7 +120,7 @@ async function listSnapshots(scope: string, key?: string): Promise<ConfigSnapsho
 
   return snapshots.map((s: any) => ({
     ...s,
-    data: typeof s.data === 'string' ? JSON.parse(s.data) : s.data,
+    data: typeof s.data === 'string' ? JSON.parse(s.data) : s.data
   }));
 }
 
@@ -128,15 +128,13 @@ async function listSnapshots(scope: string, key?: string): Promise<ConfigSnapsho
  * 根据ID查询快照
  */
 async function getSnapshotById(snapshotId: string): Promise<ConfigSnapshot | null> {
-  const snapshot = await db('config_snapshots')
-    .where('id', snapshotId)
-    .first();
+  const snapshot = await db('config_snapshots').where('id', snapshotId).first();
 
   if (!snapshot) return null;
 
   return {
     ...snapshot,
-    data: typeof snapshot.data === 'string' ? JSON.parse(snapshot.data) : snapshot.data,
+    data: typeof snapshot.data === 'string' ? JSON.parse(snapshot.data) : snapshot.data
   };
 }
 
@@ -166,7 +164,7 @@ async function selectSnapshot(snapshots: ConfigSnapshot[]): Promise<ConfigSnapsh
   return new Promise((resolve) => {
     const rl = readline.createInterface({
       input: process.stdin,
-      output: process.stdout,
+      output: process.stdout
     });
 
     rl.question('请输入要回滚的快照序号（输入0取消）: ', (answer) => {
@@ -193,7 +191,7 @@ async function confirmRollback(snapshot: ConfigSnapshot): Promise<boolean> {
   return new Promise((resolve) => {
     const rl = readline.createInterface({
       input: process.stdin,
-      output: process.stdout,
+      output: process.stdout
     });
 
     console.log('\n⚠️  即将回滚配置：');
@@ -222,7 +220,7 @@ async function performRollback(snapshot: ConfigSnapshot): Promise<void> {
     announcement: 'system_configs',
     banner: 'system_configs',
     feature: 'feature_definitions',
-    mcp: 'mcp_endpoints',
+    mcp: 'mcp_endpoints'
   };
 
   const targetTable = tableMap[scope];
@@ -232,14 +230,14 @@ async function performRollback(snapshot: ConfigSnapshot): Promise<void> {
   }
 
   // 2. 开启事务执行回滚
-  await db.transaction(async (trx) => {
+  await db.transaction(async (trx: Knex.Transaction) => {
     // 2.1 更新目标表的配置
     await trx(targetTable)
       .where('id', key)
       .orWhere('key', key)
       .update({
         ...data,
-        updated_at: new Date(),
+        updated_at: new Date()
       });
 
     // 2.2 记录回滚日志到快照表
@@ -251,12 +249,10 @@ async function performRollback(snapshot: ConfigSnapshot): Promise<void> {
       action: 'rollback',
       description: `回滚到版本 ${version}`,
       created_at: new Date(),
-      updated_at: new Date(),
+      updated_at: new Date()
     });
 
-    logger.info(
-      `[Rollback] 配置回滚成功: scope=${scope} key=${key} version=${version}`
-    );
+    logger.info(`[Rollback] 配置回滚成功: scope=${scope} key=${key} version=${version}`);
   });
 
   // 3. 广播配置失效（通过Pub/Sub）
@@ -264,12 +260,10 @@ async function performRollback(snapshot: ConfigSnapshot): Promise<void> {
     scope,
     key,
     version: `${version}-rollback`,
-    timestamp: Date.now(),
+    timestamp: Date.now()
   });
 
-  logger.info(
-    `[Rollback] 配置失效已广播: scope=${scope} key=${key}`
-  );
+  logger.info(`[Rollback] 配置失效已广播: scope=${scope} key=${key}`);
 }
 
 /**
@@ -358,13 +352,14 @@ async function main() {
     process.exit(1);
   } finally {
     // 清理资源
-    await pubSubService.disconnect();
+    await pubSubService.close(); // 艹，方法名是close不是disconnect！
     await db.destroy();
   }
 }
 
 // 执行主函数
-if (require.main === module) {
+// 艹，ESM中不能用require.main === module，直接检查import.meta.url！
+if (import.meta.url === `file://${process.argv[1]}`.replace(/\\/g, '/')) {
   main().catch((error) => {
     console.error('❌ 脚本执行失败:', error);
     process.exit(1);

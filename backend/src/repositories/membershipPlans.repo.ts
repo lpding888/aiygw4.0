@@ -3,7 +3,7 @@
  * 艹，会员套餐CRUD+权益关联！
  */
 
-import db from '../db';
+import { db } from '../config/database.js';
 
 export interface MembershipPlan {
   id: number;
@@ -62,7 +62,7 @@ export async function createPlan(input: CreatePlanInput): Promise<MembershipPlan
   const [id] = await db('membership_plans').insert({
     ...input,
     created_at: db.fn.now(),
-    updated_at: db.fn.now(),
+    updated_at: db.fn.now()
   });
 
   const created = await getPlanById(id);
@@ -76,14 +76,16 @@ export async function createPlan(input: CreatePlanInput): Promise<MembershipPlan
  * 根据ID获取套餐
  */
 export async function getPlanById(id: number): Promise<MembershipPlan | null> {
-  return await db('membership_plans').where({ id }).first();
+  const result = await db('membership_plans').where({ id }).first();
+  return result ?? null;
 }
 
 /**
  * 根据slug获取套餐
  */
 export async function getPlanBySlug(slug: string): Promise<MembershipPlan | null> {
-  return await db('membership_plans').where({ slug }).first();
+  const result = await db('membership_plans').where({ slug }).first();
+  return result ?? null;
 }
 
 /**
@@ -200,7 +202,7 @@ export async function addBenefitToPlan(options: {
 }): Promise<void> {
   await db('plan_benefits').insert({
     ...options,
-    created_at: db.fn.now(),
+    created_at: db.fn.now()
   });
 
   console.log(`[PLAN] 权益添加成功: Plan ${options.plan_id} <- Benefit ${options.benefit_id}`);
@@ -240,7 +242,7 @@ export async function setBenefitsForPlan(
         benefits.map((b) => ({
           plan_id,
           ...b,
-          created_at: db.fn.now(),
+          created_at: db.fn.now()
         }))
       );
     }

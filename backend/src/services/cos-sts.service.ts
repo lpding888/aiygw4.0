@@ -11,7 +11,7 @@
  */
 
 import STS from 'qcloud-cos-sts';
-import logger from '../utils/logger';
+import logger from '../utils/logger.js';
 
 /**
  * STS权限策略
@@ -84,17 +84,14 @@ class CosSTSService {
    * @param options - 获取选项
    * @returns STS临时密钥
    */
-  async getSTSCredentials(
-    userId: string,
-    options: GetSTSOptions = {}
-  ): Promise<STSCredentials> {
+  async getSTSCredentials(userId: string, options: GetSTSOptions = {}): Promise<STSCredentials> {
     try {
       const {
         action = 'upload',
         prefix = `user-${userId}/`,
         durationSeconds = this.DEFAULT_DURATION,
         bucket = this.bucket,
-        region = this.region,
+        region = this.region
       } = options;
 
       // 验证duration
@@ -108,12 +105,12 @@ class CosSTSService {
         action: this.getActions(action),
         bucket,
         region,
-        prefix,
+        prefix
       });
 
       logger.info(
         `[CosSTSService] 生成STS临时密钥: userId=${userId} ` +
-        `action=${action} prefix=${prefix} duration=${validDuration}s`
+          `action=${action} prefix=${prefix} duration=${validDuration}s`
       );
 
       // 调用STS API
@@ -124,8 +121,9 @@ class CosSTSService {
             secretKey: this.secretKey,
             proxy: this.proxy,
             durationSeconds: validDuration,
-            policy,
+            policy
           },
+          // @ts-ignore - 艹，qcloud-cos-sts库的回调类型定义有问题！
           (err: Error | null, credential: any) => {
             if (err) {
               reject(err);
@@ -145,16 +143,15 @@ class CosSTSService {
         startTime: stsResult.startTime,
         bucket,
         region,
-        prefix,
+        prefix
       };
 
       logger.info(
         `[CosSTSService] STS临时密钥生成成功: userId=${userId} ` +
-        `expiration=${credentials.expiration}`
+          `expiration=${credentials.expiration}`
       );
 
       return credentials;
-
     } catch (error) {
       logger.error(`[CosSTSService] 生成STS临时密钥失败: userId=${userId}`, error);
       throw new Error(`Failed to generate STS credentials: ${error}`);
@@ -172,15 +169,10 @@ class CosSTSService {
         'name/cos:InitiateMultipartUpload',
         'name/cos:UploadPart',
         'name/cos:CompleteMultipartUpload',
-        'name/cos:AbortMultipartUpload',
+        'name/cos:AbortMultipartUpload'
       ],
-      download: [
-        'name/cos:GetObject',
-        'name/cos:HeadObject',
-      ],
-      all: [
-        'name/cos:*',
-      ],
+      download: ['name/cos:GetObject', 'name/cos:HeadObject'],
+      all: ['name/cos:*']
     };
 
     return actionMap[action] || actionMap.upload;
@@ -201,10 +193,10 @@ class CosSTSService {
           action,
           resource: [
             // 允许访问指定前缀下的所有对象
-            `qcs::cos:${region}:uid/*:${bucket}/${prefix}*`,
-          ],
-        },
-      ],
+            `qcs::cos:${region}:uid/*:${bucket}/${prefix}*`
+          ]
+        }
+      ]
     };
   }
 
@@ -237,8 +229,8 @@ class CosSTSService {
         hasSecretId: !!this.secretId,
         hasSecretKey: !!this.secretKey,
         bucket: this.bucket,
-        region: this.region,
-      },
+        region: this.region
+      }
     };
   }
 

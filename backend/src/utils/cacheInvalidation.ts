@@ -16,8 +16,8 @@
  * }
  */
 
-import Redis from 'ioredis';
-import { CacheManager } from './cache';
+import { Redis } from 'ioredis';
+import { CacheManager } from './cache.js';
 
 /**
  * 缓存失效消息类型
@@ -67,10 +67,9 @@ export class CacheInvalidationManager {
     // 初始化Redis连接
     const redisOptions = {
       host: config.redisConfig?.host || process.env.REDIS_HOST || 'localhost',
-      port:
-        config.redisConfig?.port || parseInt(process.env.REDIS_PORT || '6379'),
+      port: config.redisConfig?.port || parseInt(process.env.REDIS_PORT || '6379'),
       password: config.redisConfig?.password || process.env.REDIS_PASSWORD,
-      db: config.redisConfig?.db || parseInt(process.env.REDIS_DB || '0'),
+      db: config.redisConfig?.db || parseInt(process.env.REDIS_DB || '0')
     };
 
     if (process.env.REDIS_HOST || config.redisConfig) {
@@ -88,7 +87,7 @@ export class CacheInvalidationManager {
           this.isReady = true;
         });
 
-        this.publisher.on('error', (err) => {
+        this.publisher.on('error', (err: any) => {
           console.error('[CACHE_INVALIDATION] Publisher错误:', err.message);
         });
       } catch (error: any) {
@@ -112,7 +111,7 @@ export class CacheInvalidationManager {
   private setupSubscriber(): void {
     if (!this.subscriber) return;
 
-    this.subscriber.subscribe(this.channel, (err) => {
+    this.subscriber.subscribe(this.channel, (err: any) => {
       if (err) {
         console.error('[CACHE_INVALIDATION] 订阅失败:', err.message);
       } else {
@@ -120,7 +119,7 @@ export class CacheInvalidationManager {
       }
     });
 
-    this.subscriber.on('message', async (channel, message) => {
+    this.subscriber.on('message', async (channel: string, message: string) => {
       if (channel !== this.channel) return;
 
       try {
@@ -131,10 +130,7 @@ export class CacheInvalidationManager {
           return;
         }
 
-        console.log(
-          `[CACHE_INVALIDATION] 收到失效消息: ${msg.type}`,
-          msg.keys || msg.pattern
-        );
+        console.log(`[CACHE_INVALIDATION] 收到失效消息: ${msg.type}`, msg.keys || msg.pattern);
 
         await this.handleInvalidationMessage(msg);
       } catch (error: any) {
@@ -142,7 +138,7 @@ export class CacheInvalidationManager {
       }
     });
 
-    this.subscriber.on('error', (err) => {
+    this.subscriber.on('error', (err: any) => {
       console.error('[CACHE_INVALIDATION] Subscriber错误:', err.message);
     });
   }
@@ -150,9 +146,7 @@ export class CacheInvalidationManager {
   /**
    * 处理失效消息
    */
-  private async handleInvalidationMessage(
-    msg: CacheInvalidationMessage
-  ): Promise<void> {
+  private async handleInvalidationMessage(msg: CacheInvalidationMessage): Promise<void> {
     switch (msg.type) {
       case 'invalidate':
         // 精准失效指定key
@@ -193,7 +187,7 @@ export class CacheInvalidationManager {
       keys,
       namespace: namespace || 'cms',
       timestamp: Date.now(),
-      source: this.instanceId,
+      source: this.instanceId
     };
 
     try {
@@ -220,7 +214,7 @@ export class CacheInvalidationManager {
       pattern,
       namespace: namespace || 'cms',
       timestamp: Date.now(),
-      source: this.instanceId,
+      source: this.instanceId
     };
 
     try {
@@ -245,7 +239,7 @@ export class CacheInvalidationManager {
       type: 'clear',
       namespace: namespace || 'cms',
       timestamp: Date.now(),
-      source: this.instanceId,
+      source: this.instanceId
     };
 
     try {
@@ -272,8 +266,8 @@ export class CacheInvalidationManager {
 }
 
 // 导出全局单例实例
-import { globalCache } from './cache';
+import { globalCache } from './cache.js';
 
 export const globalInvalidation = new CacheInvalidationManager(globalCache, {
-  channel: 'cache:invalidation',
+  channel: 'cache:invalidation'
 });

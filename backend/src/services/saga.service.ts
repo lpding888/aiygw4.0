@@ -5,7 +5,7 @@
  * 支持预扣配额→确认|回滚的两阶段提交
  */
 
-const { knex } = require('../db/connection');
+import { db as knex } from '../db/index.js';
 const logger = require('../utils/logger');
 const { EventEmitter } = require('events');
 
@@ -51,7 +51,11 @@ export class SagaService extends EventEmitter {
     await this.saveSagaTransaction(transaction);
     this.activeSagas.set(transaction.id, transaction);
 
-    logger.info('Saga事务已创建', { sagaId, transactionId: transaction.id, stepCount: steps.length });
+    logger.info('Saga事务已创建', {
+      sagaId,
+      transactionId: transaction.id,
+      stepCount: steps.length
+    });
     return transaction;
   }
 
@@ -77,7 +81,10 @@ export class SagaService extends EventEmitter {
 
         // 设置步骤超时
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error(`步骤超时: ${step.name}`)), step.timeout || this.sagaTimeout);
+          setTimeout(
+            () => reject(new Error(`步骤超时: ${step.name}`)),
+            step.timeout || this.sagaTimeout
+          );
         });
 
         // 执行步骤
@@ -100,7 +107,7 @@ export class SagaService extends EventEmitter {
       this.emit('sagaCompleted', { transactionId, data: transaction.data });
 
       return true;
-    } catch (error) {
+    } catch (error: any) {
       transaction.error = error as Error;
       transaction.status = 'failed';
       await this.updateSagaTransaction(transaction);
@@ -136,7 +143,7 @@ export class SagaService extends EventEmitter {
           try {
             await step.compensate(stepData);
             this.emit('stepCompensated', { transactionId, stepId: step.id });
-          } catch (compensateError) {
+          } catch (compensateError: any) {
             logger.error(`补偿操作失败: ${step.name}`, {
               transactionId,
               stepId: step.id,
@@ -153,7 +160,7 @@ export class SagaService extends EventEmitter {
 
       logger.info('Saga补偿完成', { transactionId });
       this.emit('sagaCompensated', { transactionId });
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Saga补偿过程失败', { transactionId, error: error.message });
       throw error;
     }
@@ -247,12 +254,10 @@ export class SagaService extends EventEmitter {
         });
 
       // 更新任务状态
-      await trx('tasks')
-        .where('id', taskId)
-        .update({
-          status: 'confirmed',
-          updated_at: new Date()
-        });
+      await trx('tasks').where('id', taskId).update({
+        status: 'confirmed',
+        updated_at: new Date()
+      });
     });
 
     logger.info('配额扣减已确认', { taskId, userId: task.user_id, quotaCost: task.quota_cost });
@@ -322,8 +327,8 @@ export class SagaService extends EventEmitter {
       .count('* as count')
       .groupBy('status');
 
-    return stats.reduce((acc, row) => {
-      acc[row.status] = parseInt(row.count);
+    return stats.reduce((acc: any, row: any) => {
+      acc[row.status] = parseInt(String(row.count));
       return acc;
     }, {});
   }
@@ -333,10 +338,13 @@ export class SagaService extends EventEmitter {
 const sagaService = new SagaService();
 
 // 定期清理过期事务
-setInterval(() => {
-  sagaService.cleanupExpiredTransactions().catch(error => {
-    logger.error('清理Saga事务失败:', error);
-  });
-}, 60 * 60 * 1000); // 每小时清理一次
+setInterval(
+  () => {
+    sagaService.cleanupExpiredTransactions().catch((error) => {
+      logger.error('清理Saga事务失败:', error);
+    });
+  },
+  60 * 60 * 1000
+); // 每小时清理一次
 
 module.exports = sagaService;

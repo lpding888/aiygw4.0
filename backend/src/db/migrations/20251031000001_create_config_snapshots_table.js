@@ -26,11 +26,7 @@ exports.up = function (knex) {
 
     // 艹，是否已回滚标记
     table.boolean('is_rollback').defaultTo(false).comment('是否为回滚快照');
-    table
-      .integer('rollback_from_id')
-      .unsigned()
-      .nullable()
-      .comment('回滚来源快照ID');
+    table.integer('rollback_from_id').unsigned().nullable().comment('回滚来源快照ID');
 
     // 索引
     table.index('config_type');

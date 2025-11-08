@@ -4,7 +4,7 @@
  */
 
 import { Router } from 'express';
-import providersController from '../controllers/providers.controller';
+import providersController from '../controllers/providers.controller.js';
 
 const router = Router();
 
@@ -31,6 +31,9 @@ router.put('/:provider_ref', providersController.updateProvider.bind(providersCo
 router.delete('/:provider_ref', providersController.deleteProvider.bind(providersController));
 
 // 测试Provider连接
-router.post('/:provider_ref/test-connection', providersController.testConnection.bind(providersController));
+router.post(
+  '/:provider_ref/test-connection',
+  providersController.testConnection.bind(providersController)
+);
 
 export default router;

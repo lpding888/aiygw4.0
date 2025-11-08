@@ -13,9 +13,9 @@ import {
   listSnapshots,
   rollbackToSnapshot,
   createSnapshot,
-  getSnapshotById,
-} from '../services/configSnapshot.service';
-import db from '../db';
+  getSnapshotById
+} from '../services/configSnapshot.service.js'; // 艹，加上.js扩展名！
+import { db } from '../config/database.js'; // 艹，使用TS版本的database配置！
 
 /**
  * 解析命令行参数
@@ -46,7 +46,7 @@ async function listSnapshotsCommand(args: Record<string, string>): Promise<void>
   const snapshots = await listSnapshots({
     config_type: type,
     config_ref: ref,
-    limit,
+    limit
   });
 
   if (snapshots.length === 0) {
@@ -56,7 +56,8 @@ async function listSnapshotsCommand(args: Record<string, string>): Promise<void>
 
   console.log(`找到 ${snapshots.length} 个快照:\n`);
 
-  snapshots.forEach((snapshot) => {
+  snapshots.forEach((snapshot: any) => {
+    // 艹，这个snapshot类型从service来，暂时用any！
     console.log(`ID: ${snapshot.id}`);
     console.log(`名称: ${snapshot.snapshot_name}`);
     console.log(`类型: ${snapshot.config_type}`);
@@ -99,9 +100,7 @@ async function rollbackCommand(args: Record<string, string>): Promise<void> {
 
   // 2. 确认回滚
   if (!args.yes) {
-    console.log(
-      '艹，这是个危险操作！请再次确认：添加 --yes 参数确认回滚\n'
-    );
+    console.log('艹，这是个危险操作！请再次确认：添加 --yes 参数确认回滚\n');
     console.log('命令示例：');
     console.log(`npm run rollback -- --snapshot-id=${snapshotId} --yes\n`);
     process.exit(0);
@@ -145,9 +144,7 @@ async function createSnapshotCommand(args: Record<string, string>): Promise<void
         process.exit(1);
       }
 
-      config_data = await db('provider_endpoints')
-        .where({ provider_ref: ref })
-        .first();
+      config_data = await db('provider_endpoints').where({ provider_ref: ref }).first();
 
       if (!config_data) {
         console.error(`Provider不存在: ${ref}`);
@@ -167,7 +164,7 @@ async function createSnapshotCommand(args: Record<string, string>): Promise<void
     config_type: type,
     config_ref: ref,
     config_data,
-    created_by: 1, // 管理员
+    created_by: 1 // 管理员
   });
 
   console.log('\n艹，快照创建成功！\n');

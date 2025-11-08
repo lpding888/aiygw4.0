@@ -5,34 +5,37 @@
 
 import {
   CacheInvalidationManager,
-  CacheInvalidationMessage,
-} from '../../../src/utils/cacheInvalidation';
-import { CacheManager } from '../../../src/utils/cache';
+  CacheInvalidationMessage
+} from '../../../src/utils/cacheInvalidation.js';
+import { CacheManager } from '../../../src/utils/cache.js';
 
-// Mock Redis
+// Mock Redis - 艹，必须用named export！
 jest.mock('ioredis', () => {
-  return jest.fn().mockImplementation(() => {
-    const handlers: Record<string, Function> = {};
-    return {
-      publish: jest.fn().mockResolvedValue(1),
-      subscribe: jest.fn().mockImplementation((channel, cb) => cb(null)),
-      quit: jest.fn().mockResolvedValue('OK'),
-      on: jest.fn().mockImplementation((event, handler) => {
-        handlers[event] = handler;
-        // 立即触发connect事件
-        if (event === 'connect') {
-          setTimeout(() => handler(), 10);
+  return {
+    Redis: jest.fn().mockImplementation(() => {
+      const handlers: Record<string, Function> = {};
+      return {
+        publish: jest.fn().mockResolvedValue(1),
+        subscribe: jest.fn().mockImplementation((channel, cb) => cb(null)),
+        quit: jest.fn().mockResolvedValue('OK'),
+        on: jest.fn().mockImplementation((event, handler) => {
+          handlers[event] = handler;
+          // 立即触发connect事件
+          if (event === 'connect') {
+            setTimeout(() => handler(), 10);
+          }
+        }),
+        _trigger: (event: string, ...args: any[]) => {
+          if (handlers[event]) {
+            handlers[event](...args);
+          }
         }
-      }),
-      _trigger: (event: string, ...args: any[]) => {
-        if (handlers[event]) {
-          handlers[event](...args);
-        }
-      },
-    };
-  });
+      };
+    })
+  };
 });
 
+// 🟢 尝试修复：移除skip看实际错误
 describe('CacheInvalidationManager - 单元测试', () => {
   let cacheManager: CacheManager;
   let invalidationManager: CacheInvalidationManager;
@@ -41,7 +44,7 @@ describe('CacheInvalidationManager - 单元测试', () => {
     // 创建缓存管理器（不连接Redis）
     cacheManager = new CacheManager({
       namespace: 'test',
-      l1MaxSize: 100,
+      l1MaxSize: 100
     });
 
     // 创建失效管理器（会连接mock Redis）
@@ -49,8 +52,8 @@ describe('CacheInvalidationManager - 单元测试', () => {
       channel: 'test:invalidation',
       redisConfig: {
         host: 'localhost',
-        port: 6379,
-      },
+        port: 6379
+      }
     });
 
     // 清除所有mock调用记录
@@ -127,7 +130,7 @@ describe('CacheInvalidationManager - 单元测试', () => {
         keys: ['user:123'],
         namespace: 'test',
         timestamp: Date.now(),
-        source: 'other-instance',
+        source: 'other-instance'
       };
 
       await (invalidationManager as any).handleInvalidationMessage(message);
@@ -149,7 +152,7 @@ describe('CacheInvalidationManager - 单元测试', () => {
         pattern: 'user:*',
         namespace: 'test',
         timestamp: Date.now(),
-        source: 'other-instance',
+        source: 'other-instance'
       };
 
       await (invalidationManager as any).handleInvalidationMessage(message);
@@ -168,7 +171,7 @@ describe('CacheInvalidationManager - 单元测试', () => {
         type: 'clear',
         namespace: 'test',
         timestamp: Date.now(),
-        source: 'other-instance',
+        source: 'other-instance'
       };
 
       await (invalidationManager as any).handleInvalidationMessage(message);
@@ -188,7 +191,7 @@ describe('CacheInvalidationManager - 单元测试', () => {
         keys: ['key1'],
         namespace: 'test',
         timestamp: Date.now(),
-        source: instanceId, // 相同的实例ID
+        source: instanceId // 相同的实例ID
       };
 
       // 手动调用handleInvalidationMessage不会触发忽略逻辑
@@ -210,9 +213,7 @@ describe('CacheInvalidationManager - 单元测试', () => {
 
       // 艹，应该不抛出错误
       await expect(offlineManager.invalidate(['key1'])).resolves.not.toThrow();
-      await expect(
-        offlineManager.invalidatePattern('key:*')
-      ).resolves.not.toThrow();
+      await expect(offlineManager.invalidatePattern('key:*')).resolves.not.toThrow();
       await expect(offlineManager.clear()).resolves.not.toThrow();
 
       await offlineManager.close();
@@ -222,7 +223,7 @@ describe('CacheInvalidationManager - 单元测试', () => {
       const invalidMessage = {
         type: 'invalid-type',
         namespace: 'test',
-        timestamp: Date.now(),
+        timestamp: Date.now()
       } as any;
 
       // 艹，无效的type不会匹配任何case，函数正常返回

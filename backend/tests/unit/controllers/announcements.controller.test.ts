@@ -4,10 +4,10 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { AnnouncementsController } from '../../../src/controllers/announcements.controller';
-import * as announcementRepo from '../../../src/repositories/announcements.repo';
+import { AnnouncementsController } from '../../../src/controllers/announcements.controller.ts';
+import * as announcementRepo from '../../../src/repositories/announcements.repo.ts';
 
-jest.mock('../../../src/repositories/announcements.repo');
+jest.mock('../../../src/repositories/announcements.repo.ts');
 
 describe('AnnouncementsController - 单元测试', () => {
   let controller: AnnouncementsController;
@@ -17,7 +17,7 @@ describe('AnnouncementsController - 单元测试', () => {
 
   beforeEach(() => {
     controller = new AnnouncementsController();
-    mockReq = { params: {}, query: {}, body: {}, user: { id: 1 } };
+    mockReq = { params: {}, query: {}, body: {}, user: { id: '1', role: 'admin' } }; // 艹，必须包含id和role！
     mockRes = { json: jest.fn().mockReturnThis(), status: jest.fn().mockReturnThis() };
     mockNext = jest.fn();
     jest.clearAllMocks();
@@ -32,7 +32,7 @@ describe('AnnouncementsController - 单元测试', () => {
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
-        data: expect.objectContaining({ items: mockAnnouncements }),
+        data: expect.objectContaining({ items: mockAnnouncements })
       });
     });
   });

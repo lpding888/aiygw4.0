@@ -3,7 +3,7 @@
  * 艹，这个tm负责配置的快照创建和回滚！
  */
 
-import db from '../db';
+import db from '../db/index.js';
 
 /**
  * 配置快照接口
@@ -38,17 +38,8 @@ export interface CreateSnapshotInput {
  * @param input - 快照输入
  * @returns 创建的快照
  */
-export async function createSnapshot(
-  input: CreateSnapshotInput
-): Promise<ConfigSnapshot> {
-  const {
-    snapshot_name,
-    description,
-    config_type,
-    config_ref,
-    config_data,
-    created_by,
-  } = input;
+export async function createSnapshot(input: CreateSnapshotInput): Promise<ConfigSnapshot> {
+  const { snapshot_name, description, config_type, config_ref, config_data, created_by } = input;
 
   const [id] = await db('config_snapshots').insert({
     snapshot_name,
@@ -58,7 +49,7 @@ export async function createSnapshot(
     config_data: JSON.stringify(config_data),
     created_by,
     created_at: db.fn.now(),
-    is_rollback: false,
+    is_rollback: false
   });
 
   console.log(`[SNAPSHOT] 快照创建成功: ${snapshot_name} (ID: ${id})`);
@@ -85,7 +76,7 @@ export async function getSnapshotById(id: number): Promise<ConfigSnapshot | null
 
   return {
     ...row,
-    config_data: JSON.parse(row.config_data),
+    config_data: JSON.parse(row.config_data)
   };
 }
 
@@ -120,7 +111,7 @@ export async function listSnapshots(options: {
 
   return rows.map((row) => ({
     ...row,
-    config_data: JSON.parse(row.config_data),
+    config_data: JSON.parse(row.config_data)
   }));
 }
 
@@ -130,10 +121,7 @@ export async function listSnapshots(options: {
  * @param userId - 操作用户ID
  * @returns 回滚后的配置数据
  */
-export async function rollbackToSnapshot(
-  snapshotId: number,
-  userId?: number
-): Promise<any> {
+export async function rollbackToSnapshot(snapshotId: number, userId?: number): Promise<any> {
   // 1. 获取快照
   const snapshot = await getSnapshotById(snapshotId);
   if (!snapshot) {
@@ -172,12 +160,12 @@ export async function rollbackToSnapshot(
     config_type: snapshot.config_type,
     config_ref: snapshot.config_ref,
     config_data: result,
-    created_by: userId,
+    created_by: userId
   });
 
   // 4. 标记原快照为已回滚
   await db('config_snapshots').where({ id: snapshotId }).update({
-    is_rollback: true,
+    is_rollback: true
   });
 
   console.log(`[SNAPSHOT] 回滚成功: ${snapshot.snapshot_name}`);
@@ -197,15 +185,13 @@ async function rollbackProviderConfig(snapshot: ConfigSnapshot): Promise<any> {
 
   // 艹，这里应该调用providerEndpoints.repo的更新方法
   // 但为了避免循环依赖，暂时直接操作数据库
-  const affected = await db('provider_endpoints')
-    .where({ provider_ref: config_ref })
-    .update({
-      provider_name: config_data.provider_name,
-      endpoint_url: config_data.endpoint_url,
-      credentials_encrypted: config_data.credentials_encrypted,
-      auth_type: config_data.auth_type,
-      updated_at: db.fn.now(),
-    });
+  const affected = await db('provider_endpoints').where({ provider_ref: config_ref }).update({
+    provider_name: config_data.provider_name,
+    endpoint_url: config_data.endpoint_url,
+    credentials_encrypted: config_data.credentials_encrypted,
+    auth_type: config_data.auth_type,
+    updated_at: db.fn.now()
+  });
 
   if (affected === 0) {
     throw new Error(`Provider不存在: ${config_ref}`);
@@ -217,9 +203,7 @@ async function rollbackProviderConfig(snapshot: ConfigSnapshot): Promise<any> {
 /**
  * 回滚公告配置
  */
-async function rollbackAnnouncementConfig(
-  snapshot: ConfigSnapshot
-): Promise<any> {
+async function rollbackAnnouncementConfig(snapshot: ConfigSnapshot): Promise<any> {
   // TODO: 实现公告回滚（CMS-401实现后集成）
   console.log('[SNAPSHOT] 公告回滚功能待实现');
   return snapshot.config_data;
@@ -255,14 +239,9 @@ export async function deleteSnapshot(id: number): Promise<boolean> {
  * @param providerRef - Provider引用ID
  * @param userId - 操作用户ID
  */
-export async function autoSnapshotProvider(
-  providerRef: string,
-  userId?: number
-): Promise<void> {
+export async function autoSnapshotProvider(providerRef: string, userId?: number): Promise<void> {
   // 读取当前配置
-  const currentConfig = await db('provider_endpoints')
-    .where({ provider_ref: providerRef })
-    .first();
+  const currentConfig = await db('provider_endpoints').where({ provider_ref: providerRef }).first();
 
   if (!currentConfig) {
     return;
@@ -275,7 +254,7 @@ export async function autoSnapshotProvider(
     config_type: 'provider',
     config_ref: providerRef,
     config_data: currentConfig,
-    created_by: userId,
+    created_by: userId
   });
 
   console.log(`[SNAPSHOT] 已自动创建Provider快照: ${providerRef}`);

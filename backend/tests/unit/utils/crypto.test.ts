@@ -13,8 +13,8 @@ import {
   addKeyVersion,
   getCurrentKeyVersion,
   reencrypt,
-  EncryptedData,
-} from '../../../src/utils/crypto';
+  EncryptedData
+} from '../../../src/utils/crypto.js'; // 艹，加上.js扩展名！
 
 describe('Crypto Utils - 单元测试', () => {
   // 保存原始环境变量
@@ -22,9 +22,7 @@ describe('Crypto Utils - 单元测试', () => {
 
   beforeAll(() => {
     // 设置测试用密钥（Base64编码的32字节）
-    const testKey = Buffer.from('test-master-key-32-bytes-long!').toString(
-      'base64'
-    );
+    const testKey = Buffer.from('test-master-key-32-bytes-long!').toString('base64');
     process.env.MASTER_KEY = testKey;
   });
 
@@ -60,7 +58,7 @@ describe('Crypto Utils - 单元测试', () => {
       const plainObj = {
         username: '老王',
         password: 'super-secret-123',
-        apiKey: 'sk-xxx-yyy-zzz',
+        apiKey: 'sk-xxx-yyy-zzz'
       };
 
       const encrypted = encrypt(plainObj);
@@ -119,7 +117,7 @@ describe('Crypto Utils - 单元测试', () => {
       // 篡改密文
       const tampered: EncryptedData = {
         ...encrypted,
-        ciphertext: encrypted.ciphertext.slice(0, -1) + 'X', // 修改最后一个字符
+        ciphertext: encrypted.ciphertext.slice(0, -1) + 'X' // 修改最后一个字符
       };
 
       // 艹，解密应该失败
@@ -134,7 +132,7 @@ describe('Crypto Utils - 单元测试', () => {
       // 篡改IV
       const tampered: EncryptedData = {
         ...encrypted,
-        iv: Buffer.from('tampered-iv-1234').toString('base64'),
+        iv: Buffer.from('tampered-iv-1234').toString('base64')
       };
 
       expect(() => decrypt(tampered)).toThrow();
@@ -147,7 +145,7 @@ describe('Crypto Utils - 单元测试', () => {
       // 篡改authTag
       const tampered: EncryptedData = {
         ...encrypted,
-        authTag: Buffer.from('tampered-auth-tag').toString('base64'),
+        authTag: Buffer.from('tampered-auth-tag').toString('base64')
       };
 
       // 艹，GCM应该检测到authTag不匹配
@@ -163,7 +161,7 @@ describe('Crypto Utils - 单元测试', () => {
       // 修改为不存在的密钥版本
       const invalidVersion: EncryptedData = {
         ...encrypted,
-        keyVersion: 9999,
+        keyVersion: 9999
       };
 
       expect(() => decrypt(invalidVersion)).toThrow('密钥版本9999不存在');
@@ -181,7 +179,7 @@ describe('Crypto Utils - 单元测试', () => {
       // 尝试用密钥版本2解密（错误的密钥）
       const wrongKey: EncryptedData = {
         ...encrypted,
-        keyVersion: 2,
+        keyVersion: 2
       };
 
       expect(() => decrypt(wrongKey)).toThrow();
@@ -249,7 +247,7 @@ describe('Crypto Utils - 单元测试', () => {
       const plainObj = {
         username: '老王',
         password: 'secret-123',
-        metadata: { role: 'admin', level: 5 },
+        metadata: { role: 'admin', level: 5 }
       };
 
       // 用旧密钥加密
@@ -271,7 +269,7 @@ describe('Crypto Utils - 单元测试', () => {
         name: '老王',
         password: 'super-secret',
         apiKey: 'sk-xxx-yyy',
-        email: 'laowang@example.com',
+        email: 'laowang@example.com'
       };
 
       const sensitiveFields = ['password', 'apiKey'];
@@ -296,7 +294,7 @@ describe('Crypto Utils - 单元测试', () => {
         id: 123,
         name: '老王',
         password: 'super-secret',
-        apiKey: 'sk-xxx-yyy',
+        apiKey: 'sk-xxx-yyy'
       };
 
       const sensitiveFields = ['password', 'apiKey'];
@@ -314,7 +312,7 @@ describe('Crypto Utils - 单元测试', () => {
     test('应该处理不存在的敏感字段', () => {
       const obj = {
         id: 123,
-        name: '老王',
+        name: '老王'
       };
 
       const sensitiveFields = ['password', 'apiKey']; // 这些字段不存在
@@ -330,7 +328,7 @@ describe('Crypto Utils - 单元测试', () => {
       const obj = {
         id: 123,
         password: null,
-        apiKey: undefined,
+        apiKey: undefined
       };
 
       const sensitiveFields = ['password', 'apiKey'];
@@ -348,8 +346,8 @@ describe('Crypto Utils - 单元测试', () => {
         credentials: {
           username: '老王',
           password: 'secret',
-          apiKey: 'sk-xxx',
-        },
+          apiKey: 'sk-xxx'
+        }
       };
 
       const sensitiveFields = ['credentials'];
@@ -366,7 +364,7 @@ describe('Crypto Utils - 单元测试', () => {
     test('应该处理超长字段名', () => {
       const longFieldName = 'a'.repeat(1000);
       const obj = {
-        [longFieldName]: 'value',
+        [longFieldName]: 'value'
       };
 
       const encrypted = encryptFields(obj, [longFieldName]);
@@ -377,7 +375,7 @@ describe('Crypto Utils - 单元测试', () => {
 
     test('解密损坏的加密数据应该优雅失败', () => {
       const obj = {
-        password: 'invalid-encrypted-data-not-json',
+        password: 'invalid-encrypted-data-not-json'
       };
 
       const sensitiveFields = ['password'];
@@ -392,7 +390,7 @@ describe('Crypto Utils - 单元测试', () => {
     test('空敏感字段列表应该不加密任何字段', () => {
       const obj = {
         password: 'secret',
-        apiKey: 'sk-xxx',
+        apiKey: 'sk-xxx'
       };
 
       const encrypted = encryptFields(obj, []);

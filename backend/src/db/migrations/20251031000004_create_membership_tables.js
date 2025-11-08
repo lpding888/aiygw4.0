@@ -54,7 +54,10 @@ exports.up = async function (knex) {
     table.text('description').nullable().comment('权益描述');
 
     // 权益类型
-    table.enum('type', ['feature', 'quota', 'service', 'discount']).notNullable().comment('权益类型');
+    table
+      .enum('type', ['feature', 'quota', 'service', 'discount'])
+      .notNullable()
+      .comment('权益类型');
 
     // 权益值（根据type不同含义不同）
     table.string('value', 500).nullable().comment('权益值');

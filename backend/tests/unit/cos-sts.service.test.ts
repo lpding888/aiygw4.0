@@ -4,26 +4,28 @@
  */
 
 import STS from 'qcloud-cos-sts';
-import { cosSTSService } from '../../src/services/cos-sts.service';
-import logger from '../../src/utils/logger';
+import logger from '../../src/utils/logger.js';
 
 // Mock依赖
 jest.mock('qcloud-cos-sts');
-jest.mock('../../src/utils/logger');
+jest.mock('../../src/utils/logger.js');
 
 const mockedSTS = STS as jest.Mocked<typeof STS>;
 const mockedLogger = logger as jest.Mocked<typeof logger>;
+let cosSTSService: typeof import('../../src/services/cos-sts.service.js')['cosSTSService'];
 
 // 保存原始环境变量
 const originalEnv = process.env;
 
 describe('CosSTSService', () => {
-  beforeAll(() => {
+  beforeAll(async () => {
     // 设置测试环境变量
     process.env.COS_SECRET_ID = 'test-secret-id';
     process.env.COS_SECRET_KEY = 'test-secret-key';
     process.env.COS_BUCKET = 'test-bucket-1234567890';
     process.env.COS_REGION = 'ap-beijing';
+
+    ({ cosSTSService } = await import('../../src/services/cos-sts.service.js'));
   });
 
   afterAll(() => {
@@ -43,23 +45,23 @@ describe('CosSTSService', () => {
         credentials: {
           tmpSecretId: 'temp-secret-id-xxx',
           tmpSecretKey: 'temp-secret-key-xxx',
-          sessionToken: 'session-token-xxx',
+          sessionToken: 'session-token-xxx'
         },
         expiredTime: 1234567890,
         expiration: '2025-11-03T12:00:00Z',
-        startTime: 1234565000,
+        startTime: 1234565000
       };
 
       // Mock STS.getCredential
-      mockedSTS.getCredential = jest.fn((config, callback) => {
-        callback(null, mockSTSResult);
+      (mockedSTS.getCredential as any) = jest.fn((config: any, callback: any) => { // 艹，强制as any避免类型推导问题！
+        callback(null as any, mockSTSResult); // 艹，null也要as any！
       });
 
       // Act
       const result = await cosSTSService.getSTSCredentials(userId, {
         action: 'upload',
         prefix: `user-${userId}/`,
-        durationSeconds: 1800,
+        durationSeconds: 1800
       });
 
       // Assert
@@ -72,7 +74,7 @@ describe('CosSTSService', () => {
         startTime: 1234565000,
         bucket: 'test-bucket-1234567890',
         region: 'ap-beijing',
-        prefix: `user-${userId}/`,
+        prefix: `user-${userId}/`
       });
 
       expect(mockedSTS.getCredential).toHaveBeenCalledWith(
@@ -87,14 +89,14 @@ describe('CosSTSService', () => {
                 effect: 'allow',
                 action: expect.arrayContaining([
                   'name/cos:PutObject',
-                  'name/cos:InitiateMultipartUpload',
+                  'name/cos:InitiateMultipartUpload'
                 ]),
                 resource: expect.arrayContaining([
-                  `qcs::cos:ap-beijing:uid/*:test-bucket-1234567890/user-${userId}/*`,
-                ]),
-              }),
-            ]),
-          }),
+                  `qcs::cos:ap-beijing:uid/*:test-bucket-1234567890/user-${userId}/*`
+                ])
+              })
+            ])
+          })
         }),
         expect.any(Function)
       );
@@ -111,22 +113,22 @@ describe('CosSTSService', () => {
         credentials: {
           tmpSecretId: 'temp-id',
           tmpSecretKey: 'temp-key',
-          sessionToken: 'token',
+          sessionToken: 'token'
         },
         expiredTime: 1234567890,
         expiration: '2025-11-03T12:00:00Z',
-        startTime: 1234565000,
+        startTime: 1234565000
       };
 
-      mockedSTS.getCredential = jest.fn((config, callback) => {
-        callback(null, mockSTSResult);
+      (mockedSTS.getCredential as any) = jest.fn((config: any, callback: any) => {
+        callback(null as any, mockSTSResult);
       });
 
       // Act
       await cosSTSService.getSTSCredentials(userId, {
         action: 'download',
         prefix: `downloads/`,
-        durationSeconds: 900,
+        durationSeconds: 900
       });
 
       // Assert
@@ -136,13 +138,10 @@ describe('CosSTSService', () => {
           policy: expect.objectContaining({
             statement: expect.arrayContaining([
               expect.objectContaining({
-                action: expect.arrayContaining([
-                  'name/cos:GetObject',
-                  'name/cos:HeadObject',
-                ]),
-              }),
-            ]),
-          }),
+                action: expect.arrayContaining(['name/cos:GetObject', 'name/cos:HeadObject'])
+              })
+            ])
+          })
         }),
         expect.any(Function)
       );
@@ -155,21 +154,21 @@ describe('CosSTSService', () => {
         credentials: {
           tmpSecretId: 'temp-id',
           tmpSecretKey: 'temp-key',
-          sessionToken: 'token',
+          sessionToken: 'token'
         },
         expiredTime: 1234567890,
         expiration: '2025-11-03T12:00:00Z',
-        startTime: 1234565000,
+        startTime: 1234565000
       };
 
-      mockedSTS.getCredential = jest.fn((config, callback) => {
-        callback(null, mockSTSResult);
+      (mockedSTS.getCredential as any) = jest.fn((config: any, callback: any) => {
+        callback(null as any, mockSTSResult);
       });
 
       // Act
       await cosSTSService.getSTSCredentials(userId, {
         action: 'all',
-        prefix: `admin/`,
+        prefix: `admin/`
       });
 
       // Assert
@@ -178,10 +177,10 @@ describe('CosSTSService', () => {
           policy: expect.objectContaining({
             statement: expect.arrayContaining([
               expect.objectContaining({
-                action: ['name/cos:*'],
-              }),
-            ]),
-          }),
+                action: ['name/cos:*']
+              })
+            ])
+          })
         }),
         expect.any(Function)
       );
@@ -194,26 +193,26 @@ describe('CosSTSService', () => {
         credentials: {
           tmpSecretId: 'temp-id',
           tmpSecretKey: 'temp-key',
-          sessionToken: 'token',
+          sessionToken: 'token'
         },
         expiredTime: 1234567890,
         expiration: '2025-11-03T12:00:00Z',
-        startTime: 1234565000,
+        startTime: 1234565000
       };
 
-      mockedSTS.getCredential = jest.fn((config, callback) => {
-        callback(null, mockSTSResult);
+      (mockedSTS.getCredential as any) = jest.fn((config: any, callback: any) => {
+        callback(null as any, mockSTSResult);
       });
 
       // Act - 测试过大的duration（超过MAX_DURATION=7200）
       await cosSTSService.getSTSCredentials(userId, {
-        durationSeconds: 10000, // 超过最大值
+        durationSeconds: 10000 // 超过最大值
       });
 
       // Assert - 应该被限制为7200
       expect(mockedSTS.getCredential).toHaveBeenCalledWith(
         expect.objectContaining({
-          durationSeconds: 7200,
+          durationSeconds: 7200
         }),
         expect.any(Function)
       );
@@ -222,13 +221,13 @@ describe('CosSTSService', () => {
 
       // Act - 测试过小的duration（小于MIN_DURATION=900）
       await cosSTSService.getSTSCredentials(userId, {
-        durationSeconds: 100, // 小于最小值
+        durationSeconds: 100 // 小于最小值
       });
 
       // Assert - 应该被限制为900
       expect(mockedSTS.getCredential).toHaveBeenCalledWith(
         expect.objectContaining({
-          durationSeconds: 900,
+          durationSeconds: 900
         }),
         expect.any(Function)
       );
@@ -241,15 +240,15 @@ describe('CosSTSService', () => {
         credentials: {
           tmpSecretId: 'temp-id',
           tmpSecretKey: 'temp-key',
-          sessionToken: 'token',
+          sessionToken: 'token'
         },
         expiredTime: 1234567890,
         expiration: '2025-11-03T12:00:00Z',
-        startTime: 1234565000,
+        startTime: 1234565000
       };
 
-      mockedSTS.getCredential = jest.fn((config, callback) => {
-        callback(null, mockSTSResult);
+      (mockedSTS.getCredential as any) = jest.fn((config: any, callback: any) => {
+        callback(null as any, mockSTSResult);
       });
 
       // Act - 不传任何options
@@ -264,11 +263,11 @@ describe('CosSTSService', () => {
             statement: expect.arrayContaining([
               expect.objectContaining({
                 action: expect.arrayContaining([
-                  'name/cos:PutObject', // 默认upload权限
-                ]),
-              }),
-            ]),
-          }),
+                  'name/cos:PutObject' // 默认upload权限
+                ])
+              })
+            ])
+          })
         }),
         expect.any(Function)
       );
@@ -279,14 +278,14 @@ describe('CosSTSService', () => {
       const userId = 'user-error';
       const mockError = new Error('STS API failed');
 
-      mockedSTS.getCredential = jest.fn((config, callback) => {
+      (mockedSTS.getCredential as any) = jest.fn((config: any, callback: any) => {
         callback(mockError, null);
       });
 
       // Act & Assert
-      await expect(
-        cosSTSService.getSTSCredentials(userId)
-      ).rejects.toThrow('Failed to generate STS credentials');
+      await expect(cosSTSService.getSTSCredentials(userId)).rejects.toThrow(
+        'Failed to generate STS credentials'
+      );
 
       expect(mockedLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('[CosSTSService] 生成STS临时密钥失败'),
@@ -304,21 +303,21 @@ describe('CosSTSService', () => {
         credentials: {
           tmpSecretId: 'temp-id',
           tmpSecretKey: 'temp-key',
-          sessionToken: 'token',
+          sessionToken: 'token'
         },
         expiredTime: 1234567890,
         expiration: '2025-11-03T12:00:00Z',
-        startTime: 1234565000,
+        startTime: 1234565000
       };
 
-      mockedSTS.getCredential = jest.fn((config, callback) => {
-        callback(null, mockSTSResult);
+      (mockedSTS.getCredential as any) = jest.fn((config: any, callback: any) => {
+        callback(null as any, mockSTSResult);
       });
 
       // Act
       const result = await cosSTSService.getSTSCredentials(userId, {
         bucket: customBucket,
-        region: customRegion,
+        region: customRegion
       });
 
       // Assert
@@ -330,11 +329,11 @@ describe('CosSTSService', () => {
             statement: expect.arrayContaining([
               expect.objectContaining({
                 resource: expect.arrayContaining([
-                  `qcs::cos:${customRegion}:uid/*:${customBucket}/user-${userId}/*`,
-                ]),
-              }),
-            ]),
-          }),
+                  `qcs::cos:${customRegion}:uid/*:${customBucket}/user-${userId}/*`
+                ])
+              })
+            ])
+          })
         }),
         expect.any(Function)
       );
@@ -369,8 +368,8 @@ describe('CosSTSService', () => {
           hasSecretId: true,
           hasSecretKey: true,
           bucket: 'test-bucket-1234567890',
-          region: 'ap-beijing',
-        },
+          region: 'ap-beijing'
+        }
       });
     });
   });
@@ -427,15 +426,15 @@ describe('CosSTSService', () => {
         credentials: {
           tmpSecretId: 'id',
           tmpSecretKey: 'key',
-          sessionToken: 'token',
+          sessionToken: 'token'
         },
         expiredTime: 123,
         expiration: '2025-11-03T12:00:00Z',
-        startTime: 100,
+        startTime: 100
       };
 
-      mockedSTS.getCredential = jest.fn((config, callback) => {
-        callback(null, mockSTSResult);
+      (mockedSTS.getCredential as any) = jest.fn((config: any, callback: any) => {
+        callback(null as any, mockSTSResult);
       });
 
       // Act
@@ -460,15 +459,15 @@ describe('CosSTSService', () => {
         credentials: {
           tmpSecretId: 'id',
           tmpSecretKey: 'key',
-          sessionToken: 'token',
+          sessionToken: 'token'
         },
         expiredTime: 123,
         expiration: '2025-11-03T12:00:00Z',
-        startTime: 100,
+        startTime: 100
       };
 
-      mockedSTS.getCredential = jest.fn((config, callback) => {
-        callback(null, mockSTSResult);
+      (mockedSTS.getCredential as any) = jest.fn((config: any, callback: any) => {
+        callback(null as any, mockSTSResult);
       });
 
       // Act
@@ -490,15 +489,15 @@ describe('CosSTSService', () => {
         credentials: {
           tmpSecretId: 'id',
           tmpSecretKey: 'key',
-          sessionToken: 'token',
+          sessionToken: 'token'
         },
         expiredTime: 123,
         expiration: '2025-11-03T12:00:00Z',
-        startTime: 100,
+        startTime: 100
       };
 
-      mockedSTS.getCredential = jest.fn((config, callback) => {
-        callback(null, mockSTSResult);
+      (mockedSTS.getCredential as any) = jest.fn((config: any, callback: any) => {
+        callback(null as any, mockSTSResult);
       });
 
       // Act
@@ -519,15 +518,15 @@ describe('CosSTSService', () => {
         credentials: {
           tmpSecretId: 'id',
           tmpSecretKey: 'key',
-          sessionToken: 'token',
+          sessionToken: 'token'
         },
         expiredTime: 123,
         expiration: '2025-11-03T12:00:00Z',
-        startTime: 100,
+        startTime: 100
       };
 
-      mockedSTS.getCredential = jest.fn((config, callback) => {
-        callback(null, mockSTSResult);
+      (mockedSTS.getCredential as any) = jest.fn((config: any, callback: any) => {
+        callback(null as any, mockSTSResult);
       });
 
       // Act
@@ -537,9 +536,7 @@ describe('CosSTSService', () => {
       const callArgs = (mockedSTS.getCredential as jest.Mock).mock.calls[0][0];
       const resource = callArgs.policy.statement[0].resource[0];
 
-      expect(resource).toBe(
-        `qcs::cos:ap-beijing:uid/*:test-bucket-1234567890/${customPrefix}*`
-      );
+      expect(resource).toBe(`qcs::cos:ap-beijing:uid/*:test-bucket-1234567890/${customPrefix}*`);
     });
   });
 });

@@ -4,12 +4,12 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { BannersController } from '../../../src/controllers/banners.controller';
-import * as bannerRepo from '../../../src/repositories/banners.repo';
-import * as cosService from '../../../src/services/cos.service';
+import { BannersController } from '../../../src/controllers/banners.controller.js';
+import * as bannerRepo from '../../../src/repositories/banners.repo.js';
+import * as cosService from '../../../src/services/cos.service.js';
 
-jest.mock('../../../src/repositories/banners.repo');
-jest.mock('../../../src/services/cos.service');
+jest.mock('../../../src/repositories/banners.repo.js');
+jest.mock('../../../src/services/cos.service.js');
 
 describe('BannersController - 单元测试', () => {
   let controller: BannersController;
@@ -19,7 +19,7 @@ describe('BannersController - 单元测试', () => {
 
   beforeEach(() => {
     controller = new BannersController();
-    mockReq = { params: {}, query: {}, body: {}, user: { id: 1 } };
+    mockReq = { params: {}, query: {}, body: {}, user: { id: '1', role: 'admin' } }; // 艹，必须包含id和role！
     mockRes = { json: jest.fn().mockReturnThis(), status: jest.fn().mockReturnThis() };
     mockNext = jest.fn();
     jest.clearAllMocks();
@@ -34,7 +34,7 @@ describe('BannersController - 单元测试', () => {
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
-        data: expect.objectContaining({ items: mockBanners }),
+        data: expect.objectContaining({ items: mockBanners })
       });
     });
   });
@@ -111,7 +111,7 @@ describe('BannersController - 单元测试', () => {
     test('应该成功批量更新排序', async () => {
       const sortOrders = [
         { id: 1, sort_order: 0 },
-        { id: 2, sort_order: 1 },
+        { id: 2, sort_order: 1 }
       ];
       (bannerRepo.updateBannersSortOrder as jest.Mock).mockResolvedValue(undefined);
 
@@ -169,7 +169,7 @@ describe('BannersController - 单元测试', () => {
         uploadUrl: 'https://test-bucket.cos.ap-guangzhou.myqcloud.com/banners/20251031/test.jpg',
         bucket: 'test-bucket',
         region: 'ap-guangzhou',
-        key: 'banners/20251031/test.jpg',
+        key: 'banners/20251031/test.jpg'
       });
 
       mockReq.body = { filename: 'test.jpg' };
@@ -178,7 +178,7 @@ describe('BannersController - 单元测试', () => {
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
-        data: expect.objectContaining({ uploadUrl: expect.any(String) }),
+        data: expect.objectContaining({ uploadUrl: expect.any(String) })
       });
     });
 
@@ -214,14 +214,14 @@ describe('BannersController - 单元测试', () => {
       (mockReq as any).file = {
         originalname: 'test.jpg',
         buffer: Buffer.from('test'),
-        mimetype: 'image/jpeg',
+        mimetype: 'image/jpeg'
       };
 
       await controller.uploadImage(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
-        data: expect.objectContaining({ url: expect.any(String) }),
+        data: expect.objectContaining({ url: expect.any(String) })
       });
     });
 

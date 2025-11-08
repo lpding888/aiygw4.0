@@ -3,12 +3,9 @@
  * 艹，测试覆盖参数校验/占位实现/错误处理！
  */
 
-import { RunningHubProvider } from '../../../src/providers/handlers/runninghub.handler';
-import {
-  ExecContext,
-  ProviderErrorCode,
-} from '../../../src/providers/types';
-import { ILogger } from '../../../src/providers/base/base-provider';
+import { RunningHubProvider } from '../../../src/providers/handlers/runninghub.handler.js';
+import { ExecContext, ProviderErrorCode } from '../../../src/providers/types.js';
+import { ILogger } from '../../../src/providers/base/base-provider.js';
 
 // Mock Logger
 class MockLogger implements ILogger {
@@ -58,7 +55,7 @@ describe('RunningHub Provider - 单元测试', () => {
     test('应该拒绝缺少workflowId', () => {
       const input = {
         apiKey: 'test-key',
-        params: {},
+        params: {}
       };
       expect(provider.validate(input)).toContain('缺少或无效的workflowId字段');
     });
@@ -67,7 +64,7 @@ describe('RunningHub Provider - 单元测试', () => {
       const input = {
         workflowId: 123, // 应该是string
         apiKey: 'test-key',
-        params: {},
+        params: {}
       };
       expect(provider.validate(input)).toContain('缺少或无效的workflowId字段');
     });
@@ -75,7 +72,7 @@ describe('RunningHub Provider - 单元测试', () => {
     test('应该拒绝缺少apiKey', () => {
       const input = {
         workflowId: 'workflow-123',
-        params: {},
+        params: {}
       };
       expect(provider.validate(input)).toContain('缺少或无效的apiKey字段');
     });
@@ -84,7 +81,7 @@ describe('RunningHub Provider - 单元测试', () => {
       const input = {
         workflowId: 'workflow-123',
         apiKey: 123, // 应该是string
-        params: {},
+        params: {}
       };
       expect(provider.validate(input)).toContain('缺少或无效的apiKey字段');
     });
@@ -92,7 +89,7 @@ describe('RunningHub Provider - 单元测试', () => {
     test('应该拒绝缺少params', () => {
       const input = {
         workflowId: 'workflow-123',
-        apiKey: 'test-key',
+        apiKey: 'test-key'
       };
       expect(provider.validate(input)).toContain('缺少或无效的params字段');
     });
@@ -101,7 +98,7 @@ describe('RunningHub Provider - 单元测试', () => {
       const input = {
         workflowId: 'workflow-123',
         apiKey: 'test-key',
-        params: 'invalid', // 应该是object
+        params: 'invalid' // 应该是object
       };
       expect(provider.validate(input)).toContain('缺少或无效的params字段');
     });
@@ -111,7 +108,7 @@ describe('RunningHub Provider - 单元测试', () => {
         workflowId: 'workflow-123',
         apiKey: 'test-key',
         params: {},
-        pollInterval: 500, // 小于1000ms
+        pollInterval: 500 // 小于1000ms
       };
       expect(provider.validate(input)).toContain('pollInterval必须是数字且不小于1000ms');
     });
@@ -121,7 +118,7 @@ describe('RunningHub Provider - 单元测试', () => {
         workflowId: 'workflow-123',
         apiKey: 'test-key',
         params: {},
-        pollInterval: 'invalid', // 应该是number
+        pollInterval: 'invalid' // 应该是number
       };
       expect(provider.validate(input)).toContain('pollInterval必须是数字且不小于1000ms');
     });
@@ -131,7 +128,7 @@ describe('RunningHub Provider - 单元测试', () => {
         workflowId: 'workflow-123',
         apiKey: 'test-key',
         params: {},
-        maxPollTime: 5000, // 小于10000ms
+        maxPollTime: 5000 // 小于10000ms
       };
       expect(provider.validate(input)).toContain('maxPollTime必须是数字且不小于10000ms');
     });
@@ -141,7 +138,7 @@ describe('RunningHub Provider - 单元测试', () => {
         workflowId: 'workflow-123',
         apiKey: 'test-key',
         params: {},
-        maxPollTime: 'invalid', // 应该是number
+        maxPollTime: 'invalid' // 应该是number
       };
       expect(provider.validate(input)).toContain('maxPollTime必须是数字且不小于10000ms');
     });
@@ -151,8 +148,8 @@ describe('RunningHub Provider - 单元测试', () => {
         workflowId: 'workflow-123',
         apiKey: 'test-api-key',
         params: {
-          input1: 'value1',
-        },
+          input1: 'value1'
+        }
       };
       expect(provider.validate(input)).toBeNull();
     });
@@ -163,11 +160,11 @@ describe('RunningHub Provider - 单元测试', () => {
         apiKey: 'test-api-key',
         params: {
           input1: 'value1',
-          input2: 'value2',
+          input2: 'value2'
         },
         pollInterval: 3000,
         maxPollTime: 60000,
-        baseUrl: 'https://api.runninghub.com',
+        baseUrl: 'https://api.runninghub.com'
       };
       expect(provider.validate(input)).toBeNull();
     });
@@ -177,7 +174,7 @@ describe('RunningHub Provider - 单元测试', () => {
         workflowId: 'workflow-123',
         apiKey: 'test-key',
         params: {},
-        pollInterval: 1000,
+        pollInterval: 1000
       };
       expect(provider.validate(input)).toBeNull();
     });
@@ -187,7 +184,7 @@ describe('RunningHub Provider - 单元测试', () => {
         workflowId: 'workflow-123',
         apiKey: 'test-key',
         params: {},
-        maxPollTime: 10000,
+        maxPollTime: 10000
       };
       expect(provider.validate(input)).toBeNull();
     });
@@ -200,13 +197,13 @@ describe('RunningHub Provider - 单元测试', () => {
         apiKey: 'test-api-key',
         params: {
           imageUrl: 'https://example.com/image.jpg',
-          operation: 'resize',
-        },
+          operation: 'resize'
+        }
       };
 
       const context: ExecContext = {
         taskId: 'task-rh-001',
-        input,
+        input
       };
 
       const result = await provider.execute(context);
@@ -226,15 +223,15 @@ describe('RunningHub Provider - 单元测试', () => {
         workflowId: 'workflow-456',
         apiKey: 'test-api-key',
         params: {
-          data: 'test',
+          data: 'test'
         },
         pollInterval: 2000,
-        maxPollTime: 60000,
+        maxPollTime: 60000
       };
 
       const context: ExecContext = {
         taskId: 'task-rh-002',
-        input,
+        input
       };
 
       const result = await provider.execute(context);
@@ -249,12 +246,12 @@ describe('RunningHub Provider - 单元测试', () => {
         workflowId: 'workflow-789',
         apiKey: 'test-api-key',
         params: {},
-        baseUrl: 'https://custom.runninghub.com',
+        baseUrl: 'https://custom.runninghub.com'
       };
 
       const context: ExecContext = {
         taskId: 'task-rh-003',
-        input,
+        input
       };
 
       const result = await provider.execute(context);
@@ -267,12 +264,12 @@ describe('RunningHub Provider - 单元测试', () => {
       const input = {
         workflowId: 'workflow-test',
         apiKey: 'test-key',
-        params: {},
+        params: {}
       };
 
       const context: ExecContext = {
         taskId: 'task-rh-004',
-        input,
+        input
       };
 
       await provider.execute(context);
@@ -287,12 +284,12 @@ describe('RunningHub Provider - 单元测试', () => {
       const input = {
         workflowId: 'workflow-log-test',
         apiKey: 'test-key',
-        params: {},
+        params: {}
       };
 
       const context: ExecContext = {
         taskId: 'task-rh-005',
-        input,
+        input
       };
 
       await provider.execute(context);
@@ -317,12 +314,12 @@ describe('RunningHub Provider - 单元测试', () => {
     test('应该处理参数校验失败', async () => {
       const input = {
         // 缺少必填字段
-        workflowId: 'workflow-123',
+        workflowId: 'workflow-123'
       };
 
       const context: ExecContext = {
         taskId: 'task-rh-error-001',
-        input,
+        input
       };
 
       const result = await provider.execute(context);
@@ -339,12 +336,12 @@ describe('RunningHub Provider - 单元测试', () => {
       const input = {
         workflowId: 'workflow-empty-params',
         apiKey: 'test-key',
-        params: {},
+        params: {}
       };
 
       const context: ExecContext = {
         taskId: 'task-rh-006',
-        input,
+        input
       };
 
       const result = await provider.execute(context);
@@ -360,19 +357,19 @@ describe('RunningHub Provider - 单元测试', () => {
         params: {
           nested: {
             level1: {
-              level2: 'value',
-            },
+              level2: 'value'
+            }
           },
           array: [1, 2, 3],
           boolean: true,
           number: 123,
-          null: null,
-        },
+          null: null
+        }
       };
 
       const context: ExecContext = {
         taskId: 'task-rh-007',
-        input,
+        input
       };
 
       const result = await provider.execute(context);
@@ -386,12 +383,12 @@ describe('RunningHub Provider - 单元测试', () => {
       const input = {
         workflowId: longWorkflowId,
         apiKey: 'test-key',
-        params: {},
+        params: {}
       };
 
       const context: ExecContext = {
         taskId: 'task-rh-008',
-        input,
+        input
       };
 
       const result = await provider.execute(context);

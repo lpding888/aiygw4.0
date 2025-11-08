@@ -2,7 +2,7 @@
  * 创建RBAC权限管理相关表
  * 包含：permissions, roles, role_permissions, user_roles
  */
-exports.up = function(knex) {
+exports.up = function (knex) {
   return Promise.all([
     // 创建权限表
     knex.schema.createTable('permissions', (table) => {
@@ -14,7 +14,9 @@ exports.up = function(knex) {
       table.enum('status', ['active', 'inactive']).defaultTo('active').comment('状态');
       table.json('metadata').nullable().comment('扩展元数据');
       table.datetime('created_at').defaultTo(knex.raw('CURRENT_TIMESTAMP'));
-      table.datetime('updated_at').defaultTo(knex.raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'));
+      table
+        .datetime('updated_at')
+        .defaultTo(knex.raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'));
 
       // 索引
       table.index('code', 'idx_permissions_code');
@@ -32,7 +34,9 @@ exports.up = function(knex) {
       table.integer('level').defaultTo(0).comment('角色级别');
       table.json('metadata').nullable().comment('扩展元数据');
       table.datetime('created_at').defaultTo(knex.raw('CURRENT_TIMESTAMP'));
-      table.datetime('updated_at').defaultTo(knex.raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'));
+      table
+        .datetime('updated_at')
+        .defaultTo(knex.raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'));
 
       // 索引
       table.index('code', 'idx_roles_code');
@@ -49,7 +53,9 @@ exports.up = function(knex) {
       table.enum('status', ['active', 'inactive']).defaultTo('active').comment('状态');
       table.text('notes').nullable().comment('备注');
       table.datetime('created_at').defaultTo(knex.raw('CURRENT_TIMESTAMP'));
-      table.datetime('updated_at').defaultTo(knex.raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'));
+      table
+        .datetime('updated_at')
+        .defaultTo(knex.raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'));
 
       // 外键约束
       table.foreign('role_id').references('id').inTable('roles').onDelete('CASCADE');
@@ -77,7 +83,9 @@ exports.up = function(knex) {
       table.text('reason').nullable().comment('分配/撤销原因');
       table.json('metadata').nullable().comment('扩展元数据');
       table.datetime('created_at').defaultTo(knex.raw('CURRENT_TIMESTAMP'));
-      table.datetime('updated_at').defaultTo(knex.raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'));
+      table
+        .datetime('updated_at')
+        .defaultTo(knex.raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'));
 
       // 唯一约束（同一用户的同一角色只能有一个活跃记录）
       table.unique(['user_id', 'role', 'status'], 'uk_user_roles_active');
@@ -96,85 +104,466 @@ exports.up = function(knex) {
     // 插入默认权限
     await knex('permissions').insert([
       // 用户权限
-      { id: knex.raw('(UUID())'), code: 'profile:read', name: '查看个人资料', group: 'profile', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'profile:update', name: '更新个人资料', group: 'profile', status: 'active', created_at: now, updated_at: now },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'profile:read',
+        name: '查看个人资料',
+        group: 'profile',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'profile:update',
+        name: '更新个人资料',
+        group: 'profile',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
 
       // 任务权限
-      { id: knex.raw('(UUID())'), code: 'task:create', name: '创建任务', group: 'tasks', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'task:read', name: '查看任务', group: 'tasks', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'task:update', name: '更新任务', group: 'tasks', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'task:delete', name: '删除任务', group: 'tasks', status: 'active', created_at: now, updated_at: now },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'task:create',
+        name: '创建任务',
+        group: 'tasks',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'task:read',
+        name: '查看任务',
+        group: 'tasks',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'task:update',
+        name: '更新任务',
+        group: 'tasks',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'task:delete',
+        name: '删除任务',
+        group: 'tasks',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
 
       // 资产权限
-      { id: knex.raw('(UUID())'), code: 'asset:create', name: '创建资产', group: 'assets', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'asset:read', name: '查看资产', group: 'assets', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'asset:update', name: '更新资产', group: 'assets', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'asset:delete', name: '删除资产', group: 'assets', status: 'active', created_at: now, updated_at: now },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'asset:create',
+        name: '创建资产',
+        group: 'assets',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'asset:read',
+        name: '查看资产',
+        group: 'assets',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'asset:update',
+        name: '更新资产',
+        group: 'assets',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'asset:delete',
+        name: '删除资产',
+        group: 'assets',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
 
       // 通知权限
-      { id: knex.raw('(UUID())'), code: 'notification:read', name: '查看通知', group: 'notifications', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'notification:update', name: '更新通知', group: 'notifications', status: 'active', created_at: now, updated_at: now },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'notification:read',
+        name: '查看通知',
+        group: 'notifications',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'notification:update',
+        name: '更新通知',
+        group: 'notifications',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
 
       // 会员权限
-      { id: knex.raw('(UUID())'), code: 'membership:read', name: '查看会员信息', group: 'membership', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'membership:update', name: '更新会员信息', group: 'membership', status: 'active', created_at: now, updated_at: now },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'membership:read',
+        name: '查看会员信息',
+        group: 'membership',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'membership:update',
+        name: '更新会员信息',
+        group: 'membership',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
 
       // 配额权限
-      { id: knex.raw('(UUID())'), code: 'quota:read', name: '查看配额', group: 'quota', status: 'active', created_at: now, updated_at: now },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'quota:read',
+        name: '查看配额',
+        group: 'quota',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
 
       // 管理员权限
-      { id: knex.raw('(UUID())'), code: 'user:read', name: '查看用户', group: 'users', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'user:create', name: '创建用户', group: 'users', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'user:update', name: '更新用户', group: 'users', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'user:delete', name: '删除用户', group: 'users', status: 'active', created_at: now, updated_at: now },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'user:read',
+        name: '查看用户',
+        group: 'users',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'user:create',
+        name: '创建用户',
+        group: 'users',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'user:update',
+        name: '更新用户',
+        group: 'users',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'user:delete',
+        name: '删除用户',
+        group: 'users',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
 
-      { id: knex.raw('(UUID())'), code: 'task:read_all', name: '查看所有任务', group: 'tasks_admin', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'task:update_all', name: '更新所有任务', group: 'tasks_admin', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'task:delete_all', name: '删除所有任务', group: 'tasks_admin', status: 'active', created_at: now, updated_at: now },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'task:read_all',
+        name: '查看所有任务',
+        group: 'tasks_admin',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'task:update_all',
+        name: '更新所有任务',
+        group: 'tasks_admin',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'task:delete_all',
+        name: '删除所有任务',
+        group: 'tasks_admin',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
 
-      { id: knex.raw('(UUID())'), code: 'system:read', name: '查看系统信息', group: 'system_ops', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'system:update', name: '更新系统信息', group: 'system_ops', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'system:config', name: '系统配置', group: 'system_ops', status: 'active', created_at: now, updated_at: now },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'system:read',
+        name: '查看系统信息',
+        group: 'system_ops',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'system:update',
+        name: '更新系统信息',
+        group: 'system_ops',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'system:config',
+        name: '系统配置',
+        group: 'system_ops',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
 
-      { id: knex.raw('(UUID())'), code: 'analytics:read', name: '查看分析数据', group: 'analytics', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'analytics:export', name: '导出分析数据', group: 'analytics', status: 'active', created_at: now, updated_at: now },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'analytics:read',
+        name: '查看分析数据',
+        group: 'analytics',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'analytics:export',
+        name: '导出分析数据',
+        group: 'analytics',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
 
-      { id: knex.raw('(UUID())'), code: 'role:read', name: '查看角色', group: 'security', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'role:create', name: '创建角色', group: 'security', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'role:update', name: '更新角色', group: 'security', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'role:delete', name: '删除角色', group: 'security', status: 'active', created_at: now, updated_at: now },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'role:read',
+        name: '查看角色',
+        group: 'security',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'role:create',
+        name: '创建角色',
+        group: 'security',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'role:update',
+        name: '更新角色',
+        group: 'security',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'role:delete',
+        name: '删除角色',
+        group: 'security',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
 
-      { id: knex.raw('(UUID())'), code: 'permission:read', name: '查看权限', group: 'permissions', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'permission:assign', name: '分配权限', group: 'permissions', status: 'active', created_at: now, updated_at: now },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'permission:read',
+        name: '查看权限',
+        group: 'permissions',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'permission:assign',
+        name: '分配权限',
+        group: 'permissions',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
 
-      { id: knex.raw('(UUID())'), code: 'audit:read', name: '查看审计日志', group: 'audit', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'audit:export', name: '导出审计日志', group: 'audit', status: 'active', created_at: now, updated_at: now },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'audit:read',
+        name: '查看审计日志',
+        group: 'audit',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'audit:export',
+        name: '导出审计日志',
+        group: 'audit',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
 
-      { id: knex.raw('(UUID())'), code: 'maintenance:execute', name: '执行维护操作', group: 'maintenance', status: 'active', created_at: now, updated_at: now },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'maintenance:execute',
+        name: '执行维护操作',
+        group: 'maintenance',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
 
       // 监控权限
-      { id: knex.raw('(UUID())'), code: 'circuit_breaker:read', name: '查看熔断器状态', group: 'monitoring', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'circuit_breaker:control', name: '控制熔断器', group: 'monitoring', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'storage:read', name: '查看存储信息', group: 'monitoring', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'storage:cleanup', name: '清理存储', group: 'monitoring', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'cache:read', name: '查看缓存', group: 'monitoring', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'cache:manage', name: '管理缓存', group: 'monitoring', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'queue:read', name: '查看队列', group: 'monitoring', status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'queue:manage', name: '管理队列', group: 'monitoring', status: 'active', created_at: now, updated_at: now }
+      {
+        id: knex.raw('(UUID())'),
+        code: 'circuit_breaker:read',
+        name: '查看熔断器状态',
+        group: 'monitoring',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'circuit_breaker:control',
+        name: '控制熔断器',
+        group: 'monitoring',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'storage:read',
+        name: '查看存储信息',
+        group: 'monitoring',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'storage:cleanup',
+        name: '清理存储',
+        group: 'monitoring',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'cache:read',
+        name: '查看缓存',
+        group: 'monitoring',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'cache:manage',
+        name: '管理缓存',
+        group: 'monitoring',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'queue:read',
+        name: '查看队列',
+        group: 'monitoring',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      },
+      {
+        id: knex.raw('(UUID())'),
+        code: 'queue:manage',
+        name: '管理队列',
+        group: 'monitoring',
+        status: 'active',
+        created_at: now,
+        updated_at: now
+      }
     ]);
 
     // 插入默认角色
-    const [userRole, adminRole, systemRole] = await knex('roles').insert([
-      { id: knex.raw('(UUID())'), code: 'user', name: '普通用户', description: '系统普通用户', level: 1, status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'admin', name: '管理员', description: '系统管理员', level: 10, status: 'active', created_at: now, updated_at: now },
-      { id: knex.raw('(UUID())'), code: 'system', name: '系统', description: '系统服务账户', level: 0, status: 'active', created_at: now, updated_at: now }
-    ]).returning(['id', 'code']);
+    const [userRole, adminRole, systemRole] = await knex('roles')
+      .insert([
+        {
+          id: knex.raw('(UUID())'),
+          code: 'user',
+          name: '普通用户',
+          description: '系统普通用户',
+          level: 1,
+          status: 'active',
+          created_at: now,
+          updated_at: now
+        },
+        {
+          id: knex.raw('(UUID())'),
+          code: 'admin',
+          name: '管理员',
+          description: '系统管理员',
+          level: 10,
+          status: 'active',
+          created_at: now,
+          updated_at: now
+        },
+        {
+          id: knex.raw('(UUID())'),
+          code: 'system',
+          name: '系统',
+          description: '系统服务账户',
+          level: 0,
+          status: 'active',
+          created_at: now,
+          updated_at: now
+        }
+      ])
+      .returning(['id', 'code']);
 
     // 分配权限给角色
     const permissions = await knex('permissions').select('id', 'code');
 
     // 用户权限
-    const userPermissions = permissions.filter(p =>
+    const userPermissions = permissions.filter((p) =>
       ['profile', 'tasks', 'assets', 'notifications', 'membership', 'quota'].includes(p.group)
     );
 
@@ -182,7 +571,7 @@ exports.up = function(knex) {
     const adminPermissions = permissions;
 
     // 系统权限
-    const systemPermissions = permissions.filter(p =>
+    const systemPermissions = permissions.filter((p) =>
       ['system_ops', 'tasks', 'users', 'monitoring'].includes(p.group)
     );
 
@@ -232,7 +621,7 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
+exports.down = function (knex) {
   return Promise.all([
     knex.schema.dropTableIfExists('user_roles'),
     knex.schema.dropTableIfExists('role_permissions'),

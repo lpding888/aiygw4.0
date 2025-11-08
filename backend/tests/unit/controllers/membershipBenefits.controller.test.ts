@@ -4,10 +4,10 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { MembershipBenefitsController } from '../../../src/controllers/membershipBenefits.controller';
-import * as benefitRepo from '../../../src/repositories/membershipBenefits.repo';
+import { MembershipBenefitsController } from '../../../src/controllers/membershipBenefits.controller.js';
+import * as benefitRepo from '../../../src/repositories/membershipBenefits.repo.js';
 
-jest.mock('../../../src/repositories/membershipBenefits.repo');
+jest.mock('../../../src/repositories/membershipBenefits.repo.js');
 
 describe('MembershipBenefitsController - 单元测试', () => {
   let controller: MembershipBenefitsController;
@@ -32,7 +32,7 @@ describe('MembershipBenefitsController - 单元测试', () => {
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
-        data: expect.objectContaining({ items: mockBenefits }),
+        data: expect.objectContaining({ items: mockBenefits })
       });
     });
   });

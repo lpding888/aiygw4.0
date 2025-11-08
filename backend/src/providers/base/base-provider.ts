@@ -12,8 +12,8 @@ import {
   ProviderError,
   ProviderErrorCode,
   DEFAULT_RETRY_POLICY,
-  DEFAULT_TIMEOUT,
-} from '../types';
+  DEFAULT_TIMEOUT
+} from '../types.js';
 
 /**
  * 日志接口
@@ -99,15 +99,15 @@ export abstract class BaseProvider implements IProvider {
     if (validationError) {
       this.logger.error(`[${this.key}] 参数校验失败`, {
         taskId: context.taskId,
-        error: validationError,
+        error: validationError
       });
       return {
         success: false,
         error: {
           code: ProviderErrorCode.ERR_PROVIDER_VALIDATION_FAILED,
-          message: validationError,
+          message: validationError
         },
-        duration: Date.now() - startTime,
+        duration: Date.now() - startTime
       };
     }
 
@@ -129,13 +129,13 @@ export abstract class BaseProvider implements IProvider {
       // 3. 带重试的执行
       const result = await this.executeWithRetry({
         ...context,
-        signal: abortController.signal,
+        signal: abortController.signal
       });
 
       clearTimeout(timeoutId);
       return {
         ...result,
-        duration: Date.now() - startTime,
+        duration: Date.now() - startTime
       };
     } catch (error: any) {
       clearTimeout(timeoutId);
@@ -144,16 +144,16 @@ export abstract class BaseProvider implements IProvider {
       if (error.name === 'AbortError' || abortController.signal.aborted) {
         this.logger.error(`[${this.key}] 执行超时`, {
           taskId: context.taskId,
-          timeout,
+          timeout
         });
         return {
           success: false,
           error: {
             code: ProviderErrorCode.ERR_PROVIDER_TIMEOUT,
             message: `执行超时（${timeout}ms）`,
-            details: { timeout },
+            details: { timeout }
           },
-          duration: Date.now() - startTime,
+          duration: Date.now() - startTime
         };
       }
 
@@ -161,7 +161,7 @@ export abstract class BaseProvider implements IProvider {
       this.logger.error(`[${this.key}] 执行失败`, {
         taskId: context.taskId,
         error: error.message,
-        stack: error.stack,
+        stack: error.stack
       });
 
       return {
@@ -172,9 +172,9 @@ export abstract class BaseProvider implements IProvider {
               ? error.code
               : ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED,
           message: error.message || '执行失败',
-          details: error.details || { stack: error.stack },
+          details: error.details || { stack: error.stack }
         },
-        duration: Date.now() - startTime,
+        duration: Date.now() - startTime
       };
     }
   }
@@ -185,9 +185,7 @@ export abstract class BaseProvider implements IProvider {
    * @param context - 执行上下文
    * @returns Promise<ExecResult> - 执行结果
    */
-  protected async executeWithRetry(
-    context: ExecContext
-  ): Promise<ExecResult> {
+  protected async executeWithRetry(context: ExecContext): Promise<ExecResult> {
     let lastError: any = null;
     let attempt = 0;
 
@@ -266,7 +264,7 @@ export abstract class BaseProvider implements IProvider {
       if (attempt <= this.retryPolicy.maxRetries) {
         const delay = this.calculateBackoffDelay(attempt);
         this.logger.debug(`[${this.key}] 等待 ${delay}ms 后重试`, {
-          taskId: context.taskId,
+          taskId: context.taskId
         });
 
         // 等待一段时间后重试，同时检查是否被中止
@@ -285,7 +283,7 @@ export abstract class BaseProvider implements IProvider {
     // 重试次数耗尽
     this.logger.error(`[${this.key}] 重试次数耗尽`, {
       taskId: context.taskId,
-      maxRetries: this.retryPolicy.maxRetries,
+      maxRetries: this.retryPolicy.maxRetries
     });
 
     // 艹，重试次数耗尽了，返回MAX_RETRIES_EXCEEDED错误结果
@@ -294,8 +292,8 @@ export abstract class BaseProvider implements IProvider {
       error: {
         code: ProviderErrorCode.ERR_PROVIDER_MAX_RETRIES_EXCEEDED,
         message: `重试次数耗尽（${this.retryPolicy.maxRetries}次）`,
-        details: { lastError },
-      },
+        details: { lastError }
+      }
     };
   }
 
@@ -324,14 +322,11 @@ export abstract class BaseProvider implements IProvider {
    */
   protected isRetryableError(errorCode: string): boolean {
     // 如果retryableErrors为空，则所有错误都可重试
-    if (
-      !this.retryPolicy.retryableErrors ||
-      this.retryPolicy.retryableErrors.length === 0
-    ) {
+    if (!this.retryPolicy.retryableErrors || this.retryPolicy.retryableErrors.length === 0) {
       // 但超时和参数校验错误不应该重试
       const nonRetryableErrors = [
         ProviderErrorCode.ERR_PROVIDER_TIMEOUT,
-        ProviderErrorCode.ERR_PROVIDER_VALIDATION_FAILED,
+        ProviderErrorCode.ERR_PROVIDER_VALIDATION_FAILED
       ];
       return !nonRetryableErrors.includes(errorCode as ProviderErrorCode);
     }
@@ -347,8 +342,7 @@ export abstract class BaseProvider implements IProvider {
    */
   protected calculateBackoffDelay(attempt: number): number {
     const delay =
-      this.retryPolicy.initialDelay *
-      Math.pow(this.retryPolicy.backoffMultiplier, attempt - 1);
+      this.retryPolicy.initialDelay * Math.pow(this.retryPolicy.backoffMultiplier, attempt - 1);
     return Math.min(delay, this.retryPolicy.maxDelay);
   }
 

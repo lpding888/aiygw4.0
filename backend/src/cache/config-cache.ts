@@ -1,9 +1,12 @@
-const LRU = require('lru-cache');
-const crypto = require('crypto');
-const logger = require('../utils/logger');
-const redis = require('../utils/redis');
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { LRUCache } from 'lru-cache';
 
-interface CacheOptions {
+import logger from '../utils/logger.js';
+import redisManager from '../utils/redis.js';
+
+export interface CacheOptions {
   scope: string;
   key: string;
   version?: string;
@@ -12,7 +15,7 @@ interface CacheOptions {
   useSnapshot?: boolean;
 }
 
-interface CacheEntry<T = any> {
+interface CacheEntry<T> {
   data: T;
   version: string;
   timestamp: number;
@@ -27,359 +30,115 @@ interface InvalidationPayload {
   timestamp: number;
 }
 
-/**
- * 配置缓存服务 - 多层缓存架构
- *
- * 架构：LRU(内存) → Redis(分布式) → 快照(本地文件) → DB(最终源)
- *
- * 特性：
- * - L1: 内存LRU缓存，30秒TTL，快速响应
- * - L2: Redis分布式缓存，300±60秒随机TTL，防止雪崩
- * - L3: 本地快照文件，DB不可用时的降级保障
- * - Pub/Sub失效广播，200ms内全局一致性
- * - 版本化key，支持回滚
- * - Stale-While-Revalidate策略
- */
+interface SnapshotRecord<T = unknown> {
+  version: string;
+  timestamp: number;
+  expiry?: number;
+  checksum: string;
+  data: T;
+}
+
+type SnapshotStore = Record<string, SnapshotRecord>;
+
+const SNAPSHOT_FILENAME = process.env.CONFIG_SNAPSHOT_PATH ?? './data/config-snapshots.json';
+
 class ConfigCacheService {
-  private lruCache: LRU<string, CacheEntry>;
-  private snapshotPath: string;
-  private invalidationChannel = 'cfg:invalidate';
+  private readonly lruCache = new LRUCache<string, CacheEntry<unknown>>({
+    max: 1000,
+    ttl: 30 * 1000,
+    updateAgeOnGet: true,
+    allowStale: true
+  });
+
+  private readonly invalidationChannel = 'cfg:invalidate';
   private isInitialized = false;
-  private unsubscribe?: () => void;
+  private unsubscribe: (() => Promise<void>) | null = null;
 
-  constructor() {
-    // L1: 内存LRU缓存 - 最多1000条，30秒TTL
-    this.lruCache = new LRU({
-      max: 1000,
-      ttl: 30 * 1000, // 30秒
-      updateAgeOnGet: true,
-      allowStale: true // 允许返回过期值，配合SWR策略
+  constructor(private readonly snapshotPath: string = SNAPSHOT_FILENAME) {
+    this.initialize().catch((error) => {
+      logger.error('Config cache initialize failed', { error });
     });
-
-    // 快照文件路径
-    this.snapshotPath = process.env.CONFIG_SNAPSHOT_PATH || './data/config-snapshots.json';
-
-    // 初始化
-    this.initialize();
   }
 
-  /**
-   * 初始化缓存服务
-   */
   private async initialize(): Promise<void> {
     try {
-      // 确保快照目录存在
-      const fs = require('fs');
-      const path = require('path');
       const snapshotDir = path.dirname(this.snapshotPath);
-
       if (!fs.existsSync(snapshotDir)) {
         fs.mkdirSync(snapshotDir, { recursive: true });
       }
 
+      if (!fs.existsSync(this.snapshotPath)) {
+        fs.writeFileSync(this.snapshotPath, JSON.stringify({}));
+      }
+
       if (!this.unsubscribe) {
-        this.unsubscribe = await redis.subscribe(this.invalidationChannel, (message) => {
-          if (!message) {
-            return;
+        this.unsubscribe = await redisManager.subscribe(
+          this.invalidationChannel,
+          async (message) => {
+            if (!message) return;
+            await this.handleInvalidation(message);
           }
-          this.handleInvalidation(message);
-        });
+        );
       }
 
       this.isInitialized = true;
-      logger.info('Config cache service initialized successfully');
+      logger.info('[ConfigCache] initialized');
     } catch (error) {
-      logger.error('Failed to initialize config cache service:', error);
-      // 即使初始化失败，也要保证服务可用（降级模式）
+      logger.error('[ConfigCache] 初始化失败，进入降级模式', { error });
       this.isInitialized = false;
     }
   }
 
-  /**
-   * 获取或设置缓存 - 核心方法
-   * 实现多层缓存回源逻辑
-   */
-  async getOrSet<T = any>(
-    options: CacheOptions,
-    fetcher: () => Promise<T>
-  ): Promise<T> {
-    const { scope, key, version = '1.0.0', lruTtl = 30, redisTtl = 300, useSnapshot = true } = options;
+  async getOrSet<T>(options: CacheOptions, fetcher: () => Promise<T>): Promise<T> {
+    const {
+      scope,
+      key,
+      version = '1.0.0',
+      lruTtl = 30,
+      redisTtl = 300,
+      useSnapshot = true
+    } = options;
     const cacheKey = this.buildCacheKey(scope, key, version);
 
     try {
-      // L1: 检查内存LRU缓存
-      const lruEntry = this.lruCache.get(cacheKey);
+      const lruEntry = this.lruCache.get(cacheKey) as CacheEntry<T> | undefined;
       if (lruEntry && !this.isExpired(lruEntry.lruExpiry)) {
-        logger.debug(`Cache hit (LRU): ${scope}:${key}`);
+        logger.debug(`[ConfigCache] LRU hit ${scope}:${key}`);
         return lruEntry.data;
       }
 
-      // L2: 检查Redis缓存
-      const redisData = await this.getFromRedis<T>(cacheKey);
+      const redisData = await this.getFromRedis<T>(cacheKey, version);
       if (redisData) {
-        // 回填LRU缓存
-        this.setLRU(cacheKey, redisData, lruTtl);
-        logger.debug(`Cache hit (Redis): ${scope}:${key}`);
+        this.setLRU(cacheKey, redisData, lruTtl, redisTtl, version);
+        logger.debug(`[ConfigCache] Redis hit ${scope}:${key}`);
         return redisData;
       }
 
-      // L3: 检查本地快照（降级保障）
       if (useSnapshot) {
-        const snapshotData = await this.getFromSnapshot<T>(scope, key, version);
-        if (snapshotData) {
-          // 回填上层缓存
-          await this.setRedis(cacheKey, snapshotData, redisTtl);
-          this.setLRU(cacheKey, snapshotData, lruTtl);
-          logger.debug(`Cache hit (Snapshot): ${scope}:${key}`);
-          return snapshotData;
+        const snapshot = await this.readSnapshot<T>(cacheKey, version);
+        if (snapshot) {
+          logger.warn(`[ConfigCache] snapshot fallback ${scope}:${key}`);
+          this.setLRU(cacheKey, snapshot, lruTtl, redisTtl, version);
+          return snapshot;
         }
       }
 
-      // L4: 从DB获取数据
-      logger.debug(`Cache miss, fetching from DB: ${scope}:${key}`);
-      const data = await fetcher();
-
-      // 写入所有缓存层
-      await this.setAllLayers(cacheKey, data, lruTtl, redisTtl, useSnapshot, { scope, key, version });
-
-      return data;
-    } catch (error) {
-      logger.error(`Cache getOrSet error for ${scope}:${key}:`, error);
-
-      // 异常时尝试从快照恢复
-      if (useSnapshot) {
-        try {
-          const snapshotData = await this.getFromSnapshot<T>(scope, key, version);
-          if (snapshotData) {
-            logger.warn(`Fallback to snapshot for ${scope}:${key}`);
-            return snapshotData;
-          }
-        } catch (snapshotError) {
-          logger.error(`Snapshot fallback failed for ${scope}:${key}:`, snapshotError);
-        }
-      }
-
-      throw error;
-    }
-  }
-
-  /**
-   * 设置所有缓存层
-   */
-  private async setAllLayers<T>(
-    cacheKey: string,
-    data: T,
-    lruTtl: number,
-    redisTtl: number,
-    useSnapshot: boolean,
-    meta: { scope: string; key: string; version: string }
-  ): Promise<void> {
-    const now = Date.now();
-
-    // 并行写入所有缓存层
-    const promises = [
-      // L1: 写入LRU
-      Promise.resolve().then(() => this.setLRU(cacheKey, data, lruTtl)),
-
-      // L2: 写入Redis（带随机TTL防止雪崩）
-      this.setRedis(cacheKey, data, redisTtl)
-    ];
-
-    // L3: 写入快照（异步，不阻塞主流程）
-    if (useSnapshot) {
-      promises.push(
-        this.saveSnapshot(meta.scope, meta.key, meta.version, data).catch(error => {
-          logger.warn(`Failed to save snapshot for ${meta.scope}:${meta.key}:`, error);
-        })
-      );
-    }
-
-    await Promise.allSettled(promises);
-  }
-
-  /**
-   * L1: 设置LRU缓存
-   */
-  private setLRU<T>(key: string, data: T, ttlSeconds: number): void {
-    const now = Date.now();
-    const entry: CacheEntry<T> = {
-      data,
-      version: '1.0.0',
-      timestamp: now,
-      lruExpiry: now + (ttlSeconds * 1000),
-      redisExpiry: now + (300 * 1000) // 默认Redis过期时间
-    };
-
-    this.lruCache.set(key, entry);
-  }
-
-  /**
-   * L2: 从Redis获取
-   */
-  private async getFromRedis<T>(key: string): Promise<T | null> {
-    try {
-      const cached = await redis.get(key);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        return parsed.data;
-      }
-      return null;
-    } catch (error) {
-      logger.warn(`Redis get error for key ${key}:`, error);
-      return null;
-    }
-  }
-
-  /**
-   * L2: 设置Redis缓存
-   */
-  private async setRedis<T>(key: string, data: T, ttlSeconds: number): Promise<void> {
-    try {
-      // 随机TTL：基础时间 ± 20%，防止缓存雪崩
-      const randomFactor = 0.8 + Math.random() * 0.4; // 0.8 ~ 1.2
-      const actualTtl = Math.floor(ttlSeconds * randomFactor);
-
-      const cacheData = {
-        data,
-        version: '1.0.0',
-        timestamp: Date.now()
-      };
-
-      await redis.setex(key, actualTtl, JSON.stringify(cacheData));
-    } catch (error) {
-      logger.warn(`Redis set error for key ${key}:`, error);
-      // Redis写入失败不影响主流程
-    }
-  }
-
-  /**
-   * L3: 从快照文件获取
-   */
-  private async getFromSnapshot<T>(scope: string, key: string, version: string): Promise<T | null> {
-    try {
-      const fs = require('fs').promises;
-      const data = await fs.readFile(this.snapshotPath, 'utf8');
-      const snapshots = JSON.parse(data);
-
-      const snapshotKey = `${scope}:${key}:${version}`;
-      const snapshot = snapshots[snapshotKey];
-
-      if (snapshot && !this.isExpired(snapshot.expiry)) {
-        return snapshot.data;
-      }
-
-      return null;
-    } catch (error) {
-      logger.debug(`Snapshot get error for ${scope}:${key}:`, error);
-      return null;
-    }
-  }
-
-  /**
-   * L3: 保存快照文件
-   */
-  private async saveSnapshot<T>(scope: string, key: string, version: string, data: T): Promise<void> {
-    try {
-      const fs = require('fs').promises;
-      let snapshots = {};
-
-      try {
-        const existingData = await fs.readFile(this.snapshotPath, 'utf8');
-        snapshots = JSON.parse(existingData);
-      } catch (error) {
-        // 文件不存在或格式错误，使用空对象
-      }
-
-      const snapshotKey = `${scope}:${key}:${version}`;
-      const now = Date.now();
-
-      // 保存快照（24小时有效期）
-      snapshots[snapshotKey] = {
-        data,
+      const freshData = await fetcher();
+      await this.setAllLayers(cacheKey, freshData, {
+        scope,
+        key,
         version,
-        timestamp: now,
-        expiry: now + (24 * 60 * 60 * 1000) // 24小时
-      };
-
-      // 清理过期快照
-      this.cleanupExpiredSnapshots(snapshots);
-
-      await fs.writeFile(this.snapshotPath, JSON.stringify(snapshots, null, 2));
+        lruTtl,
+        redisTtl
+      });
+      logger.debug(`[ConfigCache] fetch success ${scope}:${key}`);
+      return freshData;
     } catch (error) {
-      logger.error(`Snapshot save error for ${scope}:${key}:`, error);
+      logger.error('[ConfigCache] getOrSet failed', { scope, key, error });
       throw error;
     }
   }
 
-  /**
-   * 清理过期快照
-   */
-  private cleanupExpiredSnapshots(snapshots: any): void {
-    const now = Date.now();
-    Object.keys(snapshots).forEach(key => {
-      if (snapshots[key].expiry && snapshots[key].expiry < now) {
-        delete snapshots[key];
-      }
-    });
-  }
-
-  /**
-   * 构建缓存键
-   */
-  private buildCacheKey(scope: string, key: string, version: string): string {
-    return `config:${scope}:${key}:${version}`;
-  }
-
-  /**
-   * 检查是否过期
-   */
-  private isExpired(expiry: number): boolean {
-    return Date.now() > expiry;
-  }
-
-  /**
-   * 处理失效广播
-   */
-  private async handleInvalidation(message: string): Promise<void> {
-    try {
-      const payload: InvalidationPayload = JSON.parse(message);
-      const { scope, key, version } = payload;
-
-      logger.debug(`Received invalidation: ${scope}:${key}:${version}`);
-
-      // 失效LRU缓存
-      if (key) {
-        // 失效特定key
-        const cacheKey = this.buildCacheKey(scope, key, version);
-        this.lruCache.delete(cacheKey);
-      } else {
-        // 失效整个scope
-        this.lruCache.keys().forEach(cacheKey => {
-          if (cacheKey.startsWith(`config:${scope}:`)) {
-            this.lruCache.delete(cacheKey);
-          }
-        });
-      }
-
-      // 失效Redis缓存（通过缓存服务）
-      if (key) {
-        await redis.del(this.buildCacheKey(scope, key, version));
-      } else {
-        // 批量删除（需要Redis支持模式匹配）
-        const pattern = `config:${scope}:*`;
-        // 这里需要在缓存服务中实现模式匹配删除
-        logger.debug(`Would delete Redis keys matching pattern: ${pattern}`);
-      }
-
-      logger.info(`Invalidation processed for ${scope}:${key || '*'}:${version}`);
-    } catch (error) {
-      logger.error('Invalidation handling error:', error);
-    }
-  }
-
-  /**
-   * 手动失效缓存
-   */
   async invalidate(scope: string, key?: string, version = '1.0.0'): Promise<void> {
     const payload: InvalidationPayload = {
       scope,
@@ -388,42 +147,195 @@ class ConfigCacheService {
       timestamp: Date.now()
     };
 
-    // 发布失效广播
     try {
-      await redis.publish(this.invalidationChannel, JSON.stringify(payload));
-      logger.info(`Invalidation broadcast sent: ${scope}:${key || '*'}:${version}`);
+      await redisManager.publish(this.invalidationChannel, JSON.stringify(payload));
+      logger.info(`[ConfigCache] broadcast invalidation ${scope}:${key ?? '*'}`);
     } catch (error) {
-      logger.error('Failed to send invalidation broadcast:', error);
-      // 即使广播失败，也要失效本地缓存
+      logger.error('[ConfigCache] broadcast invalidation failed, fallback local', { error });
       await this.handleInvalidation(JSON.stringify(payload));
     }
   }
 
-  /**
-   * 获取缓存统计信息
-   */
-  getStats() {
+  async clear(): Promise<void> {
+    this.lruCache.clear();
+    const keys = await redisManager.keys('config:*');
+    if (keys.length > 0) {
+      await redisManager.del(...keys);
+    }
+    logger.info('[ConfigCache] 全部缓存清理完成');
+  }
+
+  getStats(): Record<string, unknown> {
     return {
       lru: {
         size: this.lruCache.size,
-        maxSize: this.lruCache.max,
-        calculated: this.lruCache.calculatedSize
+        maxSize: this.lruCache.max
       },
       snapshotPath: this.snapshotPath,
       isInitialized: this.isInitialized
     };
   }
 
-  /**
-   * 清空所有缓存
-   */
-  async clear(): Promise<void> {
-    this.lruCache.clear();
-    logger.info('All config caches cleared');
+  // ===== 内部实现 =====
+  private setLRU<T>(
+    cacheKey: string,
+    data: T,
+    lruTtlSeconds: number,
+    redisTtlSeconds: number,
+    version: string
+  ): void {
+    const now = Date.now();
+    const entry: CacheEntry<T> = {
+      data,
+      version,
+      timestamp: now,
+      lruExpiry: now + lruTtlSeconds * 1000,
+      redisExpiry: now + redisTtlSeconds * 1000
+    };
+    this.lruCache.set(cacheKey, entry, { ttl: lruTtlSeconds * 1000 });
+  }
+
+  private async setAllLayers<T>(
+    cacheKey: string,
+    data: T,
+    options: Required<Pick<CacheOptions, 'scope' | 'key' | 'version' | 'lruTtl' | 'redisTtl'>>
+  ): Promise<void> {
+    const { scope, key, version, lruTtl, redisTtl } = options;
+    this.setLRU(cacheKey, data, lruTtl, redisTtl, version);
+    await this.setRedis(cacheKey, data, redisTtl, version);
+    await this.saveSnapshot(cacheKey, data, version, redisTtl);
+    logger.info(`[ConfigCache] 数据写入多层缓存 ${scope}:${key}`);
+  }
+
+  private async getFromRedis<T>(cacheKey: string, version: string): Promise<T | null> {
+    const payload = await redisManager.get(cacheKey);
+    if (!payload) return null;
+
+    try {
+      const parsed = JSON.parse(payload) as CacheEntry<T>;
+      if (parsed.version !== version) {
+        logger.debug(`[ConfigCache] Redis版本不匹配 ${cacheKey}`);
+        return null;
+      }
+      if (this.isExpired(parsed.redisExpiry)) {
+        return null;
+      }
+      return parsed.data;
+    } catch (error) {
+      logger.error('[ConfigCache] Redis数据解析失败', { cacheKey, error });
+      return null;
+    }
+  }
+
+  private async setRedis<T>(
+    cacheKey: string,
+    data: T,
+    ttlSeconds: number,
+    version: string
+  ): Promise<void> {
+    const entry: CacheEntry<T> = {
+      data,
+      version,
+      timestamp: Date.now(),
+      lruExpiry: Date.now() + ttlSeconds * 1000,
+      redisExpiry: Date.now() + ttlSeconds * 1000
+    };
+    await redisManager.setex(cacheKey, ttlSeconds, JSON.stringify(entry));
+  }
+
+  private async readSnapshot<T>(cacheKey: string, version: string): Promise<T | null> {
+    try {
+      const content = fs.readFileSync(this.snapshotPath, 'utf8');
+      if (!content) return null;
+      const snapshots = JSON.parse(content) as SnapshotStore;
+      const record = snapshots[cacheKey] as SnapshotRecord<T> | undefined;
+      if (!record) return null;
+      if (record.version !== version) return null;
+      if (record.expiry && this.isExpired(record.expiry)) return null;
+      return record.data;
+    } catch (error) {
+      logger.error('[ConfigCache] 读取快照失败', { error });
+      return null;
+    }
+  }
+
+  private async saveSnapshot<T>(
+    cacheKey: string,
+    data: T,
+    version: string,
+    ttlSeconds: number
+  ): Promise<void> {
+    try {
+      const content = fs.existsSync(this.snapshotPath)
+        ? fs.readFileSync(this.snapshotPath, 'utf8')
+        : '{}';
+      const snapshots = JSON.parse(content) as SnapshotStore;
+
+      const serialized = JSON.stringify(data);
+      const record: SnapshotRecord<T> = {
+        version,
+        timestamp: Date.now(),
+        expiry: Date.now() + ttlSeconds * 1000,
+        checksum: crypto.createHash('md5').update(serialized).digest('hex'),
+        data
+      };
+
+      snapshots[cacheKey] = record as SnapshotRecord;
+      this.cleanupExpiredSnapshots(snapshots);
+
+      fs.writeFileSync(this.snapshotPath, JSON.stringify(snapshots, null, 2));
+    } catch (error) {
+      logger.error('[ConfigCache] 保存快照失败', { error });
+    }
+  }
+
+  private cleanupExpiredSnapshots(store: SnapshotStore): void {
+    const now = Date.now();
+    Object.keys(store).forEach((cacheKey: string) => {
+      const record = store[cacheKey];
+      if (record?.expiry && record.expiry < now) {
+        delete store[cacheKey];
+      }
+    });
+  }
+
+  private buildCacheKey(scope: string, key: string, version: string): string {
+    return `config:${scope}:${key}:${version}`;
+  }
+
+  private isExpired(expiry: number | undefined): boolean {
+    if (!expiry) return false;
+    return Date.now() > expiry;
+  }
+
+  private async handleInvalidation(message: string): Promise<void> {
+    try {
+      const payload = JSON.parse(message) as InvalidationPayload;
+      const { scope, key, version } = payload;
+      logger.debug(`[ConfigCache] 接收失效消息 ${scope}:${key ?? '*'}`);
+
+      if (key) {
+        const cacheKey = this.buildCacheKey(scope, key, version);
+        this.lruCache.delete(cacheKey);
+        await redisManager.del(cacheKey);
+      } else {
+        const pattern = `config:${scope}:*`;
+        for (const cacheKey of this.lruCache.keys()) {
+          if (cacheKey.startsWith(`config:${scope}:`)) {
+            this.lruCache.delete(cacheKey);
+          }
+        }
+        const keys = await redisManager.keys(pattern);
+        if (keys.length > 0) {
+          await redisManager.del(...keys);
+        }
+      }
+    } catch (error) {
+      logger.error('[ConfigCache] 处理失效消息失败', { error });
+    }
   }
 }
 
-// 单例实例
 const configCacheService = new ConfigCacheService();
 
-module.exports = configCacheService;
+export default configCacheService;

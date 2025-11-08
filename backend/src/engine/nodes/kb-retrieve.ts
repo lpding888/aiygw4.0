@@ -4,16 +4,16 @@
  */
 
 import axios from 'axios';
-import db from '../../db';
-import logger from '../../utils/logger';
+import db from '../../db/index.js';
+import logger from '../../utils/logger.js';
 import {
   NodeExecutor,
   NodeExecutionContext,
   NodeExecutionResult,
   NodeConfig,
   NodeError,
-  NodeErrorType,
-} from '../types';
+  NodeErrorType
+} from '../types.js';
 
 /**
  * KB检索配置
@@ -51,15 +51,11 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
       const config = this.parseConfig(context.node);
 
       logger.info(
-        `[KBRetrieve] 开始检索: flowId=${context.flowContext.flowId} ` +
-        `nodeId=${context.node.id}`
+        `[KBRetrieve] 开始检索: flowId=${context.flowContext.flowId} ` + `nodeId=${context.node.id}`
       );
 
       // 解析查询变量
-      const resolvedQuery = this.resolveValue(
-        config.query,
-        context.flowContext.state
-      );
+      const resolvedQuery = this.resolveValue(config.query, context.flowContext.state);
 
       // 执行检索
       const results = await this.retrieve(
@@ -71,37 +67,33 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
 
       // 合并结果到流程状态
       const outputKey = config.outputKey || 'contexts';
-      context.flowContext.state[outputKey] = results.map(r => r.text);
+      context.flowContext.state[outputKey] = results.map((r) => r.text);
       context.flowContext.state[`${outputKey}_metadata`] = results;
 
       const duration = Date.now() - startTime;
 
       logger.info(
         `[KBRetrieve] 检索成功: nodeId=${context.node.id} ` +
-        `results=${results.length} duration=${duration}ms`
+          `results=${results.length} duration=${duration}ms`
       );
 
       return {
         success: true,
         outputs: {
-          [outputKey]: results.map(r => r.text),
-          [`${outputKey}_metadata`]: results,
+          [outputKey]: results.map((r) => r.text),
+          [`${outputKey}_metadata`]: results
         },
-        duration,
+        duration
       };
-
     } catch (error: any) {
       const duration = Date.now() - startTime;
 
-      logger.error(
-        `[KBRetrieve] 检索失败: nodeId=${context.node.id}`,
-        error
-      );
+      logger.error(`[KBRetrieve] 检索失败: nodeId=${context.node.id}`, error);
 
       return {
         success: false,
         error: this.handleError(error),
-        duration,
+        duration
       };
     }
   }
@@ -119,7 +111,6 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
       }
 
       return true;
-
     } catch (error) {
       logger.error('[KBRetrieve] 配置验证失败:', error);
       return false;
@@ -172,9 +163,8 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
         text: r.text,
         metadata: JSON.parse(r.metadata || '{}'),
         title: r.title,
-        kbId: r.kb_id,
+        kbId: r.kb_id
       }));
-
     } catch (error) {
       logger.error('[KBRetrieve] 数据库查询失败:', error);
       throw error;
@@ -222,7 +212,7 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
     return {
       code: 'KB_RETRIEVE_ERROR',
       message: error.message || 'KB retrieve failed',
-      type: NodeErrorType.KB_RETRIEVE_ERROR,
+      type: NodeErrorType.KB_RETRIEVE_ERROR
     };
   }
 }

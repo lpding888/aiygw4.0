@@ -4,10 +4,11 @@
  * 提供限流、数据脱敏、健康检查等安全防护功能
  */
 
-const crypto = require('crypto');
-const redis = require('../utils/redis');
-const logger = require('../utils/logger');
-const { knex } = require('../db/connection');
+// 艹！全部改用ESM import，避免CommonJS/ESM混用导致Mock失效！
+import crypto from 'crypto';
+import redis from '../utils/redis.js';
+import logger from '../utils/logger.js';
+import { db as knex } from '../db/index.js';
 
 interface RateLimitConfig {
   windowMs: number;
@@ -126,7 +127,8 @@ class SecurityService {
       return data;
     }
 
-    const maskedData = Array.isArray(data) ? [...data] : { ...data };
+    // 艹！修复bug：使用深拷贝，避免修改原始对象
+    const maskedData = JSON.parse(JSON.stringify(data));
 
     for (const rule of rules) {
       this.maskField(maskedData, rule);
@@ -146,6 +148,7 @@ class SecurityService {
     for (const key in obj) {
       const currentPath = path ? `${path}.${key}` : key;
 
+      // 艹！修复bug：字段匹配时，如果是字符串则脱敏，如果是对象则继续递归
       if (
         currentPath === rule.field ||
         key === rule.field ||
@@ -153,8 +156,12 @@ class SecurityService {
       ) {
         if (typeof obj[key] === 'string') {
           obj[key] = this.maskValue(obj[key], rule);
+        } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+          // 即使匹配到了，如果是对象也要继续递归（处理嵌套路径 user.email）
+          this.maskField(obj[key], rule, currentPath);
         }
       } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+        // 没匹配到但是对象，继续递归查找
         this.maskField(obj[key], rule, currentPath);
       }
     }
@@ -203,10 +210,15 @@ class SecurityService {
     let maskedUsername: string;
     if (username.length <= 3) {
       maskedUsername = username[0] + this.DEFAULT_MASK_CHAR.repeat(username.length - 1);
+    } else if (username.length === 4) {
+      // 艹！修复bug：长度为4时，保留首尾各1个字符，中间2个星号
+      maskedUsername = username[0] + this.DEFAULT_MASK_CHAR.repeat(2) + username[3];
     } else {
-      maskedUsername = username.substring(0, 2) +
-                     this.DEFAULT_MASK_CHAR.repeat(username.length - 4) +
-                     username.substring(username.length - 2);
+      // 长度>4时，保留前2后2，中间全是星号
+      maskedUsername =
+        username.substring(0, 2) +
+        this.DEFAULT_MASK_CHAR.repeat(username.length - 4) +
+        username.substring(username.length - 2);
     }
 
     return maskedUsername + domain;
@@ -224,15 +236,15 @@ class SecurityService {
 
     if (cleaned.length === 11) {
       // 中国手机号格式
-      return cleaned.substring(0, 3) +
-             this.DEFAULT_MASK_CHAR.repeat(4) +
-             cleaned.substring(7);
+      return cleaned.substring(0, 3) + this.DEFAULT_MASK_CHAR.repeat(4) + cleaned.substring(7);
     }
 
     // 通用格式
-    return cleaned.substring(0, Math.min(3, cleaned.length - 3)) +
-           this.DEFAULT_MASK_CHAR.repeat(Math.max(3, cleaned.length - 6)) +
-           cleaned.substring(Math.max(3, cleaned.length - 3));
+    return (
+      cleaned.substring(0, Math.min(3, cleaned.length - 3)) +
+      this.DEFAULT_MASK_CHAR.repeat(Math.max(3, cleaned.length - 6)) +
+      cleaned.substring(Math.max(3, cleaned.length - 3))
+    );
   }
 
   /**
@@ -245,9 +257,11 @@ class SecurityService {
       return this.maskGeneric(cleaned);
     }
 
-    return cleaned.substring(0, 4) +
-           this.DEFAULT_MASK_CHAR.repeat(cleaned.length - 8) +
-           cleaned.substring(cleaned.length - 4);
+    return (
+      cleaned.substring(0, 4) +
+      this.DEFAULT_MASK_CHAR.repeat(cleaned.length - 8) +
+      cleaned.substring(cleaned.length - 4)
+    );
   }
 
   /**
@@ -260,9 +274,11 @@ class SecurityService {
       return this.maskGeneric(cleaned);
     }
 
-    return cleaned.substring(0, 4) +
-           this.DEFAULT_MASK_CHAR.repeat(cleaned.length - 8) +
-           cleaned.substring(cleaned.length - 4);
+    return (
+      cleaned.substring(0, 4) +
+      this.DEFAULT_MASK_CHAR.repeat(cleaned.length - 8) +
+      cleaned.substring(cleaned.length - 4)
+    );
   }
 
   /**
@@ -280,9 +296,11 @@ class SecurityService {
       return this.DEFAULT_MASK_CHAR.repeat(token.length);
     }
 
-    return token.substring(0, 4) +
-           this.DEFAULT_MASK_CHAR.repeat(Math.min(token.length - 8, 20)) +
-           token.substring(token.length - 4);
+    return (
+      token.substring(0, 4) +
+      this.DEFAULT_MASK_CHAR.repeat(Math.min(token.length - 8, 20)) +
+      token.substring(token.length - 4)
+    );
   }
 
   /**
@@ -311,15 +329,20 @@ class SecurityService {
     }
 
     const visibleChars = Math.min(2, Math.floor(value.length / 3));
-    return value.substring(0, visibleChars) +
-           this.DEFAULT_MASK_CHAR.repeat(value.length - visibleChars * 2) +
-           value.substring(value.length - visibleChars);
+    return (
+      value.substring(0, visibleChars) +
+      this.DEFAULT_MASK_CHAR.repeat(value.length - visibleChars * 2) +
+      value.substring(value.length - visibleChars)
+    );
   }
 
   /**
    * 健康检查
    */
-  async performHealthChecks(): Promise<{ overall: 'healthy' | 'unhealthy' | 'warning'; checks: HealthCheck[] }> {
+  async performHealthChecks(): Promise<{
+    overall: 'healthy' | 'unhealthy' | 'warning';
+    checks: HealthCheck[];
+  }> {
     const checks: HealthCheck[] = [];
 
     try {
@@ -339,29 +362,31 @@ class SecurityService {
       checks.push(await this.checkExternalServicesHealth());
 
       // 计算整体状态
-      const statuses = checks.map(check => check.status);
+      const statuses = checks.map((check) => check.status);
       let overall: 'healthy' | 'unhealthy' | 'warning';
 
-      if (statuses.some(status => status === 'unhealthy')) {
+      if (statuses.some((status) => status === 'unhealthy')) {
         overall = 'unhealthy';
-      } else if (statuses.some(status => status === 'warning')) {
+      } else if (statuses.some((status) => status === 'warning')) {
         overall = 'warning';
       } else {
         overall = 'healthy';
       }
 
       return { overall, checks };
-    } catch (error) {
+    } catch (error: any) {
       logger.error('健康检查失败:', error);
       return {
         overall: 'unhealthy',
-        checks: [{
-          name: 'system',
-          status: 'unhealthy',
-          responseTime: 0,
-          lastCheck: new Date(),
-          error: error.message
-        }]
+        checks: [
+          {
+            name: 'system',
+            status: 'unhealthy',
+            responseTime: 0,
+            lastCheck: new Date(),
+            error: error.message
+          }
+        ]
       };
     }
   }
@@ -383,7 +408,7 @@ class SecurityService {
         lastCheck: new Date(),
         details: { responseTime }
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         name: 'database',
         status: 'unhealthy',
@@ -411,7 +436,7 @@ class SecurityService {
         lastCheck: new Date(),
         details: { responseTime }
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         name: 'redis',
         status: 'unhealthy',
@@ -456,7 +481,7 @@ class SecurityService {
           totalMemory: (totalMemory / 1024 / 1024).toFixed(2) + 'MB'
         }
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         name: 'memory',
         status: 'unhealthy',
@@ -492,7 +517,7 @@ class SecurityService {
         lastCheck: new Date(),
         details: { status: 'accessible' }
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         name: 'disk',
         status: 'unhealthy',
@@ -520,7 +545,7 @@ class SecurityService {
         lastCheck: new Date(),
         details: { all_services: 'operational' }
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         name: 'external_services',
         status: 'warning',
@@ -577,26 +602,19 @@ class SecurityService {
   /**
    * 获取安全审计日志
    */
-  async getAuditLogs(filters: {
-    type?: string;
-    severity?: string;
-    userId?: string;
-    ip?: string;
-    startDate?: Date;
-    endDate?: Date;
-    page?: number;
-    limit?: number;
-  } = {}): Promise<{ logs: SecurityAuditLog[]; total: number }> {
-    const {
-      type,
-      severity,
-      userId,
-      ip,
-      startDate,
-      endDate,
-      page = 1,
-      limit = 50
-    } = filters;
+  async getAuditLogs(
+    filters: {
+      type?: string;
+      severity?: string;
+      userId?: string;
+      ip?: string;
+      startDate?: Date;
+      endDate?: Date;
+      page?: number;
+      limit?: number;
+    } = {}
+  ): Promise<{ logs: SecurityAuditLog[]; total: number }> {
+    const { type, severity, userId, ip, startDate, endDate, page = 1, limit = 50 } = filters;
 
     try {
       let query = knex('security_audit_logs').select('*');
@@ -611,16 +629,13 @@ class SecurityService {
       // 获取总数
       const totalQuery = query.clone().clearSelect().count('* as count');
       const [{ count }] = await totalQuery;
-      const total = parseInt(count);
+      const total = parseInt(String(count));
 
       // 分页查询
       const offset = (page - 1) * limit;
-      const logs = await query
-        .orderBy('timestamp', 'desc')
-        .limit(limit)
-        .offset(offset);
+      const logs = await query.orderBy('timestamp', 'desc').limit(limit).offset(offset);
 
-      const mappedLogs = logs.map(log => ({
+      const mappedLogs = logs.map((log) => ({
         id: log.id,
         type: log.type,
         severity: log.severity,
@@ -643,7 +658,10 @@ class SecurityService {
   /**
    * 检测可疑活动
    */
-  async detectSuspiciousActivity(ip: string, timeWindowMs: number = 300000): Promise<{
+  async detectSuspiciousActivity(
+    ip: string,
+    timeWindowMs: number = 300000
+  ): Promise<{
     suspicious: boolean;
     reasons: string[];
     riskScore: number;
@@ -669,7 +687,7 @@ class SecurityService {
       }
 
       // 检查失败率
-      const failures = activities.filter(activity => activity.includes('failure')).length;
+      const failures = activities.filter((activity: any) => activity.includes('failure')).length;
       const failureRate = activities.length > 0 ? failures / activities.length : 0;
 
       if (failureRate > 0.5) {
@@ -773,14 +791,8 @@ class SecurityService {
   private async getAuditStats(): Promise<any> {
     try {
       const [typeStats, severityStats, recentCount] = await Promise.all([
-        knex('security_audit_logs')
-          .select('type')
-          .count('* as count')
-          .groupBy('type'),
-        knex('security_audit_logs')
-          .select('severity')
-          .count('* as count')
-          .groupBy('severity'),
+        knex('security_audit_logs').select('type').count('* as count').groupBy('type'),
+        knex('security_audit_logs').select('severity').count('* as count').groupBy('severity'),
         knex('security_audit_logs')
           .where('timestamp', '>=', new Date(Date.now() - 24 * 60 * 60 * 1000))
           .count('* as count')
@@ -789,14 +801,14 @@ class SecurityService {
 
       return {
         byType: typeStats.reduce((acc, row) => {
-          acc[row.type] = parseInt(row.count);
+          acc[row.type] = parseInt(String(row.count));
           return acc;
-        }, {}),
+        }, {} as any),
         bySeverity: severityStats.reduce((acc, row) => {
-          acc[row.severity] = parseInt(row.count);
+          acc[row.severity] = parseInt(String(row.count));
           return acc;
-        }, {}),
-        last24h: recentCount.count || 0
+        }, {} as any),
+        last24h: recentCount?.count || 0
       };
     } catch (error) {
       return { byType: {}, bySeverity: {}, last24h: 0 };
@@ -829,10 +841,13 @@ class SecurityService {
 
       const stats = {
         overall: healthResult.overall,
-        checks: healthResult.checks.reduce((acc, check) => {
-          acc[check.name] = check.status;
-          return acc;
-        }, {} as Record<string, string>)
+        checks: healthResult.checks.reduce(
+          (acc, check) => {
+            acc[check.name] = check.status;
+            return acc;
+          },
+          {} as Record<string, string>
+        )
       };
 
       return stats;
@@ -843,4 +858,16 @@ class SecurityService {
 }
 
 const securityService = new SecurityService();
-module.exports = securityService;
+
+// 导出类实例的所有方法
+export const getSecurityStats = securityService.getSecurityStats.bind(securityService);
+export const performHealthChecks = securityService.performHealthChecks.bind(securityService);
+export const getAuditLogs = securityService.getAuditLogs.bind(securityService);
+export const checkRateLimit = securityService.checkRateLimit.bind(securityService);
+export const resetRateLimit = securityService.resetRateLimit.bind(securityService);
+export const maskData = securityService.maskData.bind(securityService);
+export const detectSuspiciousActivity =
+  securityService.detectSuspiciousActivity.bind(securityService);
+export const logSecurityEvent = securityService.logSecurityEvent.bind(securityService);
+
+export default securityService;

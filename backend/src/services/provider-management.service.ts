@@ -6,7 +6,7 @@
 
 const crypto = require('crypto');
 const axios = require('axios');
-const { knex } = require('../db/connection');
+import { db as knex } from '../db/index.js';
 const logger = require('../utils/logger');
 const kmsService = require('./kms.service');
 
@@ -37,17 +37,27 @@ class ProviderManagementService {
   /**
    * 创建供应商配置
    */
-  async createProvider(providerData: Partial<ProviderConfig>, secrets: {
-    apiKey: string;
-    handlerKey: string;
-  }, createdBy: string): Promise<ProviderConfig> {
+  async createProvider(
+    providerData: Partial<ProviderConfig>,
+    secrets: {
+      apiKey: string;
+      handlerKey: string;
+    },
+    createdBy: string
+  ): Promise<ProviderConfig> {
     const providerId = this.generateId();
 
     try {
       await knex.transaction(async (trx) => {
         // 加密密钥
-        const encryptedApiKey = await kmsService.encrypt(secrets.apiKey, `provider_${providerId}_api_key`);
-        const encryptedHandlerKey = await kmsService.encrypt(secrets.handlerKey, `provider_${providerId}_handler_key`);
+        const encryptedApiKey = await kmsService.encrypt(
+          secrets.apiKey,
+          `provider_${providerId}_api_key`
+        );
+        const encryptedHandlerKey = await kmsService.encrypt(
+          secrets.handlerKey,
+          `provider_${providerId}_handler_key`
+        );
 
         // 创建供应商配置
         const provider: ProviderConfig = {
@@ -92,7 +102,11 @@ class ProviderManagementService {
       });
 
       logger.info('供应商配置已创建', { providerId, name: providerData.name, createdBy });
-      return await this.getProvider(providerId);
+      const result = await this.getProvider(providerId);
+      if (!result) {
+        throw new Error('创建供应商配置后无法读取');
+      }
+      return result;
     } catch (error) {
       logger.error('创建供应商配置失败:', error);
       throw error;
@@ -125,7 +139,7 @@ class ProviderManagementService {
       const response = await axios.get(`${provider.baseUrl}/health`, {
         timeout: provider.timeoutMs,
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         }
       });
@@ -134,13 +148,13 @@ class ProviderManagementService {
 
       if (response.status === 200) {
         // 更新健康状态
-        await this.updateHealthStatus(providerId, true, null);
+        await this.updateHealthStatus(providerId, true, undefined);
 
         return { success: true, latency };
       } else {
         throw new Error(`健康检查失败: ${response.status}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       const latency = Date.now() - startTime;
       const errorMessage = error.message || '连接失败';
 
@@ -155,7 +169,11 @@ class ProviderManagementService {
   /**
    * 更新供应商配置
    */
-  async updateProvider(providerId: string, updateData: Partial<ProviderConfig>, updatedBy: string): Promise<ProviderConfig> {
+  async updateProvider(
+    providerId: string,
+    updateData: Partial<ProviderConfig>,
+    updatedBy: string
+  ): Promise<ProviderConfig> {
     const existingProvider = await this.getProvider(providerId);
     if (!existingProvider) {
       throw new Error('供应商配置不存在');
@@ -169,15 +187,23 @@ class ProviderManagementService {
           type: updateData.type || existingProvider.type,
           base_url: updateData.baseUrl || existingProvider.baseUrl,
           weight: updateData.weight !== undefined ? updateData.weight : existingProvider.weight,
-          timeout_ms: updateData.timeoutMs !== undefined ? updateData.timeoutMs : existingProvider.timeoutMs,
-          max_retries: updateData.maxRetries !== undefined ? updateData.maxRetries : existingProvider.maxRetries,
+          timeout_ms:
+            updateData.timeoutMs !== undefined ? updateData.timeoutMs : existingProvider.timeoutMs,
+          max_retries:
+            updateData.maxRetries !== undefined
+              ? updateData.maxRetries
+              : existingProvider.maxRetries,
           description: updateData.description || existingProvider.description,
           updated_by: updatedBy,
           updated_at: new Date()
         });
 
       logger.info('供应商配置已更新', { providerId, updatedBy });
-      return await this.getProvider(providerId);
+      const result = await this.getProvider(providerId);
+      if (!result) {
+        throw new Error('更新供应商配置后无法读取');
+      }
+      return result;
     } catch (error) {
       logger.error('更新供应商配置失败:', error);
       throw error;
@@ -199,13 +225,11 @@ class ProviderManagementService {
       }
 
       // 软删除供应商配置
-      await knex('provider_endpoints')
-        .where('id', providerId)
-        .update({
-          enabled: false,
-          updated_by: deletedBy,
-          updated_at: new Date()
-        });
+      await knex('provider_endpoints').where('id', providerId).update({
+        enabled: false,
+        updated_by: deletedBy,
+        updated_at: new Date()
+      });
 
       logger.info('供应商配置已删除', { providerId, deletedBy });
       return true;
@@ -220,9 +244,7 @@ class ProviderManagementService {
    */
   async getProvider(providerId: string): Promise<ProviderConfig | null> {
     try {
-      const provider = await knex('provider_endpoints')
-        .where('id', providerId)
-        .first();
+      const provider = await knex('provider_endpoints').where('id', providerId).first();
 
       if (provider) {
         return {
@@ -257,20 +279,16 @@ class ProviderManagementService {
   /**
    * 获取供应商列表
    */
-  async getProviders(filters: {
-    type?: string;
-    enabled?: boolean;
-    healthy?: boolean;
-    page?: number;
-    limit?: number;
-  } = {}): Promise<{ providers: ProviderConfig[]; total: number }> {
-    const {
-      type,
-      enabled,
-      healthy,
-      page = 1,
-      limit = 20
-    } = filters;
+  async getProviders(
+    filters: {
+      type?: string;
+      enabled?: boolean;
+      healthy?: boolean;
+      page?: number;
+      limit?: number;
+    } = {}
+  ): Promise<{ providers: ProviderConfig[]; total: number }> {
+    const { type, enabled, healthy, page = 1, limit = 20 } = filters;
 
     try {
       let query = knex('provider_endpoints').select('*');
@@ -289,16 +307,13 @@ class ProviderManagementService {
       // 获取总数
       const totalQuery = query.clone().clearSelect().count('* as count');
       const [{ count }] = await totalQuery;
-      const total = parseInt(count);
+      const total = parseInt(String(count));
 
       // 分页查询
       const offset = (page - 1) * limit;
-      const providers = await query
-        .orderBy('created_at', 'desc')
-        .limit(limit)
-        .offset(offset);
+      const providers = await query.orderBy('created_at', 'desc').limit(limit).offset(offset);
 
-      const mappedProviders = providers.map(provider => ({
+      const mappedProviders = providers.map((provider) => ({
         id: provider.id,
         name: provider.name,
         type: provider.type,
@@ -329,16 +344,18 @@ class ProviderManagementService {
   /**
    * 更新健康状态
    */
-  private async updateHealthStatus(providerId: string, healthy: boolean, error?: string): Promise<void> {
+  private async updateHealthStatus(
+    providerId: string,
+    healthy: boolean,
+    error?: string
+  ): Promise<void> {
     try {
-      await knex('provider_endpoints')
-        .where('id', providerId)
-        .update({
-          healthy,
-          last_error: error,
-          last_check_at: new Date(),
-          updated_at: new Date()
-        });
+      await knex('provider_endpoints').where('id', providerId).update({
+        healthy,
+        last_error: error,
+        last_check_at: new Date(),
+        updated_at: new Date()
+      });
     } catch (updateError) {
       logger.error('更新供应商健康状态失败:', updateError);
     }
@@ -353,4 +370,4 @@ class ProviderManagementService {
 }
 
 const providerManagementService = new ProviderManagementService();
-module.exports = providerManagementService;
+export default providerManagementService;

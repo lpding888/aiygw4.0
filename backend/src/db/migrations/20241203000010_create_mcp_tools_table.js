@@ -2,8 +2,8 @@
  * 创建MCP工具表
  */
 
-exports.up = function(knex) {
-  return knex.schema.createTable('mcp_tools', function(table) {
+exports.up = function (knex) {
+  return knex.schema.createTable('mcp_tools', function (table) {
     table.string('id').primary().defaultTo(knex.raw('(UUID())'));
     table.string('endpoint_id').notNullable().comment('MCP端点ID');
     table.string('name').notNullable().comment('工具名称');
@@ -27,6 +27,6 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
+exports.down = function (knex) {
   return knex.schema.dropTable('mcp_tools');
 };

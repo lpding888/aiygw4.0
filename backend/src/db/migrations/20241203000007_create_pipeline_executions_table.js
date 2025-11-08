@@ -2,12 +2,16 @@
  * 创建流程执行记录表
  */
 
-exports.up = function(knex) {
-  return knex.schema.createTable('pipeline_executions', function(table) {
+exports.up = function (knex) {
+  return knex.schema.createTable('pipeline_executions', function (table) {
     table.string('id').primary().defaultTo(knex.raw('(UUID())'));
     table.string('schema_id').notNullable().comment('流程模板ID');
     table.string('execution_mode').notNullable().comment('执行模式: mock/real');
-    table.string('status').notNullable().defaultTo('pending').comment('状态: pending/running/completed/failed/cancelled');
+    table
+      .string('status')
+      .notNullable()
+      .defaultTo('pending')
+      .comment('状态: pending/running/completed/failed/cancelled');
     table.json('input_data').comment('输入数据');
     table.json('output_data').comment('输出数据');
     table.json('execution_context').comment('执行上下文');
@@ -28,6 +32,6 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
+exports.down = function (knex) {
   return knex.schema.dropTable('pipeline_executions');
 };

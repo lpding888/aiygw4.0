@@ -3,7 +3,8 @@
  * 艹，多语言文案配置CRUD！
  */
 
-import db from '../db';
+import { db } from '../config/database.js';
+import type { Knex } from 'knex';
 
 export interface ContentText {
   id: number;
@@ -36,12 +37,14 @@ export interface CreateTextInput {
  * 创建文案
  */
 export async function createText(input: CreateTextInput): Promise<ContentText> {
-  const [id] = await db('content_texts').insert({
+  const inserted = (await db<ContentText>('content_texts').insert({
     ...input,
     language: input.language || 'zh-CN',
     created_at: db.fn.now(),
-    updated_at: db.fn.now(),
-  });
+    updated_at: db.fn.now()
+  })) as number[];
+
+  const [id] = inserted;
 
   const created = await getTextById(id);
   if (!created) throw new Error('创建文案后读取失败');
@@ -54,7 +57,8 @@ export async function createText(input: CreateTextInput): Promise<ContentText> {
  * 根据ID获取文案
  */
 export async function getTextById(id: number): Promise<ContentText | null> {
-  return await db('content_texts').where({ id }).first();
+  const result = await db<ContentText>('content_texts').where({ id }).first();
+  return result ?? null;
 }
 
 /**
@@ -68,13 +72,19 @@ export async function getText(params: {
 }): Promise<ContentText | null> {
   const { page, section, key, language = 'zh-CN' } = params;
 
-  let query = db('content_texts').where({ page, key, language, status: 'active' });
+  let query = db<ContentText>('content_texts').where({
+    page,
+    key,
+    language,
+    status: 'active'
+  });
 
   if (section !== undefined) {
-    query = section === null ? query.whereNull('section') : query.where({ section });
+    query = section === null ? query.whereNull('section') : query.where('section', section);
   }
 
-  return await query.first();
+  const result = await query.first();
+  return result ?? null;
 }
 
 /**
@@ -87,7 +97,7 @@ export async function getPageTexts(params: {
 }): Promise<Record<string, any>> {
   const { page, language = 'zh-CN' } = params;
 
-  const texts = await db('content_texts')
+  const texts = await db<ContentText>('content_texts')
     .where({ page, language, status: 'active' })
     .select('section', 'key', 'value');
 
@@ -119,7 +129,7 @@ export async function listTexts(options: {
 }): Promise<ContentText[]> {
   const { page, section, language, status, limit = 50, offset = 0 } = options;
 
-  let query = db('content_texts')
+  let query = db<ContentText>('content_texts')
     .select('*')
     .orderBy('page', 'asc')
     .orderBy('section', 'asc')
@@ -128,12 +138,12 @@ export async function listTexts(options: {
     .limit(limit)
     .offset(offset);
 
-  if (page) query = query.where({ page });
+  if (page) query = query.where('page', page);
   if (section !== undefined) {
-    query = section === '' ? query.whereNull('section') : query.where({ section });
+    query = section === '' ? query.whereNull('section') : query.where('section', section);
   }
-  if (language) query = query.where({ language });
-  if (status) query = query.where({ status });
+  if (language) query = query.where('language', language);
+  if (status) query = query.where('status', status);
 
   return await query;
 }
@@ -145,13 +155,13 @@ export async function updateText(
   id: number,
   updates: Partial<CreateTextInput> & { updated_by?: number }
 ): Promise<ContentText> {
-  const affected = await db('content_texts')
+  const affected = await db<ContentText>('content_texts')
     .where({ id })
     .update({
       ...updates,
       // 每次更新version+1
       version: db.raw('version + 1'),
-      updated_at: db.fn.now(),
+      updated_at: db.fn.now()
     });
 
   if (affected === 0) throw new Error(`文案不存在: ${id}`);
@@ -167,7 +177,7 @@ export async function updateText(
  * 删除文案
  */
 export async function deleteText(id: number): Promise<boolean> {
-  const affected = await db('content_texts').where({ id }).delete();
+  const affected = await db<ContentText>('content_texts').where({ id }).delete();
 
   if (affected > 0) {
     console.log(`[TEXT] 文案删除成功: ${id}`);
@@ -192,18 +202,18 @@ export async function batchUpsertTexts(
   try {
     for (const text of texts) {
       // 检查是否存在
-      const existing = await trx('content_texts')
+      const existing = await trx<ContentText>('content_texts')
         .where({
           page: text.page,
           section: text.section || null,
           key: text.key,
-          language: text.language || 'zh-CN',
+          language: text.language || 'zh-CN'
         })
         .first();
 
       if (existing) {
         // 更新
-        await trx('content_texts')
+        await trx<ContentText>('content_texts')
           .where({ id: existing.id })
           .update({
             value: text.value,
@@ -211,17 +221,17 @@ export async function batchUpsertTexts(
             status: text.status || 'active',
             updated_by,
             version: db.raw('version + 1'),
-            updated_at: db.fn.now(),
+            updated_at: db.fn.now()
           });
         updated++;
       } else {
         // 插入
-        await trx('content_texts').insert({
+        await trx<ContentText>('content_texts').insert({
           ...text,
           language: text.language || 'zh-CN',
           created_by: updated_by,
           created_at: db.fn.now(),
-          updated_at: db.fn.now(),
+          updated_at: db.fn.now()
         });
         created++;
       }

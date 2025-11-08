@@ -4,7 +4,7 @@
  */
 
 import { Router } from 'express';
-import auditLogsController from '../controllers/auditLogs.controller';
+import auditLogsController from '../controllers/auditLogs.controller.js';
 
 const router = Router();
 

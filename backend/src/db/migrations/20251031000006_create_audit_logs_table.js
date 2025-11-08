@@ -10,7 +10,8 @@ exports.up = function (knex) {
     // 操作信息
     table.string('entity_type', 50).notNullable().comment('实体类型（announcement/banner/plan等）');
     table.integer('entity_id').unsigned().nullable().comment('实体ID');
-    table.enum('action', ['create', 'update', 'delete', 'publish', 'unpublish', 'approve', 'reject'])
+    table
+      .enum('action', ['create', 'update', 'delete', 'publish', 'unpublish', 'approve', 'reject'])
       .notNullable()
       .comment('操作类型');
 

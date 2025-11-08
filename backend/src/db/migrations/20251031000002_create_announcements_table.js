@@ -35,10 +35,7 @@ exports.up = function (knex) {
       .comment('状态：draft=草稿, published=已发布, expired=已过期');
 
     // 定时上线
-    table
-      .timestamp('publish_at')
-      .nullable()
-      .comment('定时发布时间（null表示立即发布）');
+    table.timestamp('publish_at').nullable().comment('定时发布时间（null表示立即发布）');
 
     // 定时下线
     table.timestamp('expire_at').nullable().comment('过期时间（null表示永久）');
@@ -51,11 +48,7 @@ exports.up = function (knex) {
       .comment('目标受众');
 
     // 可关闭性
-    table
-      .boolean('closable')
-      .notNullable()
-      .defaultTo(true)
-      .comment('用户是否可关闭');
+    table.boolean('closable').notNullable().defaultTo(true).comment('用户是否可关闭');
 
     // 创建和更新
     table.integer('created_by').unsigned().nullable().comment('创建人');

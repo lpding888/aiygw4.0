@@ -11,16 +11,16 @@
  */
 
 import axios, { AxiosInstance } from 'axios';
-import db from '../../db';
-import logger from '../../utils/logger';
+import db from '../../db/index.js';
+import logger from '../../utils/logger.js';
 import {
   NodeExecutor,
   NodeExecutionContext,
   NodeExecutionResult,
   NodeConfig,
   NodeError,
-  NodeErrorType,
-} from '../types';
+  NodeErrorType
+} from '../types.js';
 
 /**
  * MCP工具调用配置
@@ -69,8 +69,8 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
     this.axiosClient = axios.create({
       timeout: 30000,
       headers: {
-        'Content-Type': 'application/json',
-      },
+        'Content-Type': 'application/json'
+      }
     });
   }
 
@@ -86,7 +86,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
 
       logger.info(
         `[MCPToolCall] 开始执行: flowId=${context.flowContext.flowId} ` +
-        `nodeId=${context.node.id} tool=${config.toolName}`
+          `nodeId=${context.node.id} tool=${config.toolName}`
       );
 
       // 2. 获取MCP端点配置
@@ -101,10 +101,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
       }
 
       // 3. 渲染参数（解析变量模板）
-      const resolvedParams = this.resolveParameters(
-        config.parameters,
-        context.flowContext.state
-      );
+      const resolvedParams = this.resolveParameters(config.parameters, context.flowContext.state);
 
       // 4. 验证参数Schema（可选）
       if (config.validateSchema) {
@@ -112,12 +109,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
       }
 
       // 5. 调用MCP工具
-      const result = await this.callMCPTool(
-        endpoint,
-        config.toolName,
-        resolvedParams,
-        context
-      );
+      const result = await this.callMCPTool(endpoint, config.toolName, resolvedParams, context);
 
       // 6. 合并结果到流程状态
       const outputKey = config.outputKey || config.toolName;
@@ -127,33 +119,29 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
 
       logger.info(
         `[MCPToolCall] 执行成功: nodeId=${context.node.id} ` +
-        `tool=${config.toolName} duration=${duration}ms`
+          `tool=${config.toolName} duration=${duration}ms`
       );
 
       return {
         success: true,
         outputs: {
-          [outputKey]: result,
+          [outputKey]: result
         },
         duration,
         metadata: {
           toolName: config.toolName,
-          endpoint: endpoint.name,
-        },
+          endpoint: endpoint.name
+        }
       };
-
     } catch (error: any) {
       const duration = Date.now() - startTime;
 
-      logger.error(
-        `[MCPToolCall] 执行失败: nodeId=${context.node.id}`,
-        error
-      );
+      logger.error(`[MCPToolCall] 执行失败: nodeId=${context.node.id}`, error);
 
       return {
         success: false,
         error: this.handleError(error),
-        duration,
+        duration
       };
     }
   }
@@ -181,7 +169,6 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
       }
 
       return true;
-
     } catch (error) {
       logger.error('[MCPToolCall] 配置验证失败:', error);
       return false;
@@ -200,7 +187,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
       toolName: config.toolName,
       parameters: config.parameters || {},
       outputKey: config.outputKey,
-      validateSchema: config.validateSchema !== false, // 默认true
+      validateSchema: config.validateSchema !== false // 默认true
     };
   }
 
@@ -216,7 +203,6 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
         .first();
 
       return endpoint || null;
-
     } catch (error) {
       logger.error('[MCPToolCall] 获取MCP端点失败:', error);
       throw error;
@@ -318,7 +304,6 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
       }
 
       // 这里可以添加更复杂的Schema验证（使用Zod或Joi）
-
     } catch (error) {
       logger.error('[MCPToolCall] 参数验证失败:', error);
       throw error;
@@ -340,7 +325,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
         {},
         {
           headers: this.getAuthHeaders(endpoint),
-          timeout: endpoint.timeout_ms,
+          timeout: endpoint.timeout_ms
         }
       );
 
@@ -348,7 +333,6 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
       const tool = tools.find((t: any) => t.name === toolName);
 
       return tool || null;
-
     } catch (error) {
       logger.error('[MCPToolCall] 获取工具Schema失败:', error);
       return null;
@@ -374,8 +358,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
       try {
         if (attempt > 0) {
           logger.info(
-            `[MCPToolCall] 重试调用: attempt=${attempt}/${maxRetries} ` +
-            `tool=${toolName}`
+            `[MCPToolCall] 重试调用: attempt=${attempt}/${maxRetries} ` + `tool=${toolName}`
           );
           await this.sleep(retryDelay * attempt);
         }
@@ -384,16 +367,15 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
           `${endpoint.endpoint_url}/execute`,
           {
             tool: toolName,
-            parameters: params,
+            parameters: params
           },
           {
             headers: this.getAuthHeaders(endpoint),
-            timeout: context.node.timeout || endpoint.timeout_ms,
+            timeout: context.node.timeout || endpoint.timeout_ms
           }
         );
 
         return response.data.result;
-
       } catch (error: any) {
         lastError = error;
 
@@ -458,7 +440,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
       code,
       message,
       type,
-      details,
+      details
     };
   }
 
@@ -472,11 +454,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
     }
 
     if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
-      return this.createError(
-        'MCP_TIMEOUT',
-        'MCP tool call timeout',
-        NodeErrorType.TIMEOUT
-      );
+      return this.createError('MCP_TIMEOUT', 'MCP tool call timeout', NodeErrorType.TIMEOUT);
     }
 
     if (error.response) {
@@ -486,7 +464,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
         NodeErrorType.MCP_TOOL_ERROR,
         {
           status: error.response.status,
-          data: error.response.data,
+          data: error.response.data
         }
       );
     }

@@ -2,7 +2,7 @@
  * 创建CMS功能配置表
  */
 
-exports.up = function(knex) {
+exports.up = function (knex) {
   return knex.schema.createTable('cms_features', (table) => {
     table.string('id').primary().defaultTo(knex.raw('(UUID())'));
     table.string('key').notNullable().unique().comment('功能键');
@@ -29,6 +29,6 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
+exports.down = function (knex) {
   return knex.schema.dropTable('cms_features');
 };

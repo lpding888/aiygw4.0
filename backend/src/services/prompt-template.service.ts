@@ -4,7 +4,7 @@
  * 管理提示词模板，支持预览、变量校验、版本控制和分类管理
  */
 
-const { knex } = require('../db/connection');
+import { db as knex } from '../db/index.js';
 const logger = require('../utils/logger');
 const configCacheService = require('../cache/config-cache');
 const { v4: uuidv4 } = require('uuid');
@@ -117,13 +117,19 @@ class PromptTemplateService {
   /**
    * 创建Prompt模板
    */
-  async createTemplate(templateData: Partial<PromptTemplate>, createdBy: string): Promise<PromptTemplate> {
+  async createTemplate(
+    templateData: Partial<PromptTemplate>,
+    createdBy: string
+  ): Promise<PromptTemplate> {
     const templateId = this.generateId();
 
     // 验证模板
-    const validation = await this.validateTemplate(templateData.template || '', templateData.variables || []);
+    const validation = await this.validateTemplate(
+      templateData.template || '',
+      templateData.variables || []
+    );
     if (!validation.valid) {
-      throw new Error(`模板验证失败: ${validation.errors.map(e => e.message).join(', ')}`);
+      throw new Error(`模板验证失败: ${validation.errors.map((e) => e.message).join(', ')}`);
     }
 
     const template: PromptTemplate = {
@@ -204,7 +210,11 @@ class PromptTemplateService {
   /**
    * 更新Prompt模板
    */
-  async updateTemplate(templateId: string, updateData: Partial<PromptTemplate>, updatedBy: string): Promise<PromptTemplate> {
+  async updateTemplate(
+    templateId: string,
+    updateData: Partial<PromptTemplate>,
+    updatedBy: string
+  ): Promise<PromptTemplate> {
     const existingTemplate = await this.getTemplate(templateId);
     if (!existingTemplate) {
       throw new Error('Prompt模板不存在');
@@ -215,7 +225,7 @@ class PromptTemplateService {
       const variables = updateData.variables || existingTemplate.variables;
       const validation = await this.validateTemplate(updateData.template, variables);
       if (!validation.valid) {
-        throw new Error(`模板验证失败: ${validation.errors.map(e => e.message).join(', ')}`);
+        throw new Error(`模板验证失败: ${validation.errors.map((e) => e.message).join(', ')}`);
       }
     }
 
@@ -253,22 +263,60 @@ class PromptTemplateService {
         applyUpdate('description', 'description');
         applyUpdate('category', 'category');
         applyUpdate('template', 'template');
-        applyUpdate('tags', 'tags', (value) => JSON.stringify(value || []), (value) => value || []);
-        applyUpdate('variables', 'variables', (value) => JSON.stringify(value || []), (value) => value || []);
-        applyUpdate('metadata', 'metadata', (value) => JSON.stringify(value || {}), (value) => value || {});
-        applyUpdate('examples', 'examples', (value) => JSON.stringify(value || []), (value) => value || []);
-        applyUpdate('config', 'config', (value) => JSON.stringify(value || {}), (value) => value || {});
-        applyUpdate('usageStats', 'usage_stats', (value) => JSON.stringify(value || {
-          usedCount: 0,
-          avgRating: 0,
-          ratingCount: 0
-        }), (value) => value || existingTemplate.usageStats);
-        applyUpdate('status', 'status', (value) => {
-          if (value === 'published' || value === 'archived') {
-            return value;
-          }
-          return 'draft';
-        }, (value) => (value === 'published' || value === 'archived') ? value : 'draft');
+        applyUpdate(
+          'tags',
+          'tags',
+          (value) => JSON.stringify(value || []),
+          (value) => value || []
+        );
+        applyUpdate(
+          'variables',
+          'variables',
+          (value) => JSON.stringify(value || []),
+          (value) => value || []
+        );
+        applyUpdate(
+          'metadata',
+          'metadata',
+          (value) => JSON.stringify(value || {}),
+          (value) => value || {}
+        );
+        applyUpdate(
+          'examples',
+          'examples',
+          (value) => JSON.stringify(value || []),
+          (value) => value || []
+        );
+        applyUpdate(
+          'config',
+          'config',
+          (value) => JSON.stringify(value || {}),
+          (value) => value || {}
+        );
+        applyUpdate(
+          'usageStats',
+          'usage_stats',
+          (value) =>
+            JSON.stringify(
+              value || {
+                usedCount: 0,
+                avgRating: 0,
+                ratingCount: 0
+              }
+            ),
+          (value) => value || existingTemplate.usageStats
+        );
+        applyUpdate(
+          'status',
+          'status',
+          (value) => {
+            if (value === 'published' || value === 'archived') {
+              return value;
+            }
+            return 'draft';
+          },
+          (value) => (value === 'published' || value === 'archived' ? value : 'draft')
+        );
 
         // 状态默认回到草稿（除非显式传入允许的状态）
         if (!Object.prototype.hasOwnProperty.call(updateData, 'status')) {
@@ -276,9 +324,7 @@ class PromptTemplateService {
           (updatedTemplate as any).status = 'draft';
         }
 
-        await trx('prompt_templates')
-          .where('id', templateId)
-          .update(updateFields);
+        await trx('prompt_templates').where('id', templateId).update(updateFields);
 
         updatedTemplate.version = newVersion;
         updatedTemplate.updatedBy = updatedBy;
@@ -291,7 +337,11 @@ class PromptTemplateService {
       await this.invalidateCache();
 
       logger.info('Prompt模板已更新', { templateId, updatedBy });
-      return await this.getTemplate(templateId);
+      const updatedResult = await this.getTemplate(templateId);
+      if (!updatedResult) {
+        throw new Error('更新Prompt模板后无法读取');
+      }
+      return updatedResult;
     } catch (error) {
       logger.error('更新Prompt模板失败:', error);
       throw error;
@@ -315,23 +365,28 @@ class PromptTemplateService {
     // 最终验证
     const validation = await this.validateTemplate(template.template, template.variables);
     if (!validation.valid) {
-      throw new Error(`模板验证失败，无法发布: ${validation.errors.map(e => e.message).join(', ')}`);
+      throw new Error(
+        `模板验证失败，无法发布: ${validation.errors.map((e) => e.message).join(', ')}`
+      );
     }
 
     try {
       await knex.transaction(async (trx) => {
         // 更新为发布状态
-        await trx('prompt_templates')
-          .where('id', templateId)
-          .update({
-            status: 'published',
-            published_at: new Date(),
-            updated_by: publishedBy,
-            updated_at: new Date()
-          });
+        await trx('prompt_templates').where('id', templateId).update({
+          status: 'published',
+          published_at: new Date(),
+          updated_by: publishedBy,
+          updated_at: new Date()
+        });
 
         // 创建发布快照
-        const publishedTemplate = { ...template, status: 'published', publishedBy, publishedAt: new Date() };
+        const publishedTemplate: any = {
+          ...template,
+          status: 'published',
+          publishedBy,
+          publishedAt: new Date()
+        };
         await this.createSnapshot(trx, publishedTemplate, 'publish', '发布Prompt模板', publishedBy);
       });
 
@@ -349,7 +404,12 @@ class PromptTemplateService {
   /**
    * 回滚Prompt模板
    */
-  async rollbackTemplate(templateId: string, targetVersion: string, rolledBy: string, reason?: string): Promise<boolean> {
+  async rollbackTemplate(
+    templateId: string,
+    targetVersion: string,
+    rolledBy: string,
+    reason?: string
+  ): Promise<boolean> {
     const template = await this.getTemplate(templateId);
     if (!template) {
       throw new Error('Prompt模板不存在');
@@ -391,8 +451,18 @@ class PromptTemplateService {
           });
 
         // 创建回滚快照
-        const rolledBackTemplate = { ...rollbackTemplate, id: templateId, version: this.incrementVersion(targetVersion) };
-        await this.createSnapshot(trx, rolledBackTemplate, 'rollback', `回滚到版本 ${targetVersion}: ${reason || ''}`, rolledBy);
+        const rolledBackTemplate = {
+          ...rollbackTemplate,
+          id: templateId,
+          version: this.incrementVersion(targetVersion)
+        };
+        await this.createSnapshot(
+          trx,
+          rolledBackTemplate,
+          'rollback',
+          `回滚到版本 ${targetVersion}: ${reason || ''}`,
+          rolledBy
+        );
       });
 
       // 失效缓存
@@ -425,13 +495,11 @@ class PromptTemplateService {
         await this.createSnapshot(trx, template, 'delete', '删除Prompt模板', deletedBy);
 
         // 软删除模板
-        await trx('prompt_templates')
-          .where('id', templateId)
-          .update({
-            status: 'archived',
-            updated_by: deletedBy,
-            updated_at: new Date()
-          });
+        await trx('prompt_templates').where('id', templateId).update({
+          status: 'archived',
+          updated_by: deletedBy,
+          updated_at: new Date()
+        });
       });
 
       // 失效缓存
@@ -459,9 +527,7 @@ class PromptTemplateService {
           version: this.DEFAULT_VERSION
         },
         async () => {
-          const template = await knex('prompt_templates')
-            .where('id', templateId)
-            .first();
+          const template = await knex('prompt_templates').where('id', templateId).first();
 
           if (template) {
             return this.mapDbRowToTemplate(template);
@@ -496,17 +562,19 @@ class PromptTemplateService {
   /**
    * 获取Prompt模板列表
    */
-  async getTemplates(filters: {
-    status?: string;
-    category?: string;
-    tags?: string[];
-    author?: string;
-    complexity?: string;
-    page?: number;
-    limit?: number;
-    sortBy?: 'created_at' | 'updated_at' | 'used_count' | 'avg_rating';
-    sortOrder?: 'asc' | 'desc';
-  } = {}): Promise<{ templates: PromptTemplate[]; total: number }> {
+  async getTemplates(
+    filters: {
+      status?: string;
+      category?: string;
+      tags?: string[];
+      author?: string;
+      complexity?: string;
+      page?: number;
+      limit?: number;
+      sortBy?: 'created_at' | 'updated_at' | 'used_count' | 'avg_rating';
+      sortOrder?: 'asc' | 'desc';
+    } = {}
+  ): Promise<{ templates: PromptTemplate[]; total: number }> {
     const {
       status,
       category,
@@ -537,19 +605,19 @@ class PromptTemplateService {
       }
       if (tags && tags.length > 0) {
         for (const tag of tags) {
-          query = query.whereRaw("JSON_CONTAINS(tags, ?)", [JSON.stringify(tag)]);
+          query = query.whereRaw('JSON_CONTAINS(tags, ?)', [JSON.stringify(tag)]);
         }
       }
 
       // 获取总数
       const totalQuery = query.clone().clearSelect().count('* as count');
       const [{ count }] = await totalQuery;
-      const total = parseInt(count);
+      const total = parseInt(String(count));
 
       // 排序和分页
       const offset = (page - 1) * limit;
 
-      let orderColumn;
+      let orderColumn: any;
       switch (sortBy) {
         case 'used_count':
           orderColumn = knex.raw("JSON_EXTRACT(usage_stats, '$.usedCount')");
@@ -561,12 +629,9 @@ class PromptTemplateService {
           orderColumn = sortBy;
       }
 
-      const templates = await query
-        .orderBy(orderColumn, sortOrder)
-        .limit(limit)
-        .offset(offset);
+      const templates = await query.orderBy(orderColumn, sortOrder).limit(limit).offset(offset);
 
-      const mappedTemplates = templates.map(template => this.mapDbRowToTemplate(template));
+      const mappedTemplates = templates.map((template) => this.mapDbRowToTemplate(template));
 
       return { templates: mappedTemplates, total };
     } catch (error) {
@@ -578,20 +643,23 @@ class PromptTemplateService {
   /**
    * 搜索Prompt模板
    */
-  async searchTemplates(query: string, filters: {
-    category?: string;
-    tags?: string[];
-    limit?: number;
-  } = {}): Promise<PromptTemplate[]> {
+  async searchTemplates(
+    query: string,
+    filters: {
+      category?: string;
+      tags?: string[];
+      limit?: number;
+    } = {}
+  ): Promise<PromptTemplate[]> {
     const { category, tags, limit = 10 } = filters;
 
     try {
       let dbQuery = knex('prompt_templates')
         .where('status', 'published')
-        .where(function() {
+        .where(function () {
           this.where('name', 'like', `%${query}%`)
-              .orWhere('description', 'like', `%${query}%`)
-              .orWhere('template', 'like', `%${query}%`);
+            .orWhere('description', 'like', `%${query}%`)
+            .orWhere('template', 'like', `%${query}%`);
         });
 
       if (category) {
@@ -599,7 +667,7 @@ class PromptTemplateService {
       }
       if (tags && tags.length > 0) {
         for (const tag of tags) {
-          dbQuery = dbQuery.whereRaw("JSON_CONTAINS(tags, ?)", [JSON.stringify(tag)]);
+          dbQuery = dbQuery.whereRaw('JSON_CONTAINS(tags, ?)', [JSON.stringify(tag)]);
         }
       }
 
@@ -607,7 +675,7 @@ class PromptTemplateService {
         .orderByRaw("JSON_EXTRACT(usage_stats, '$.usedCount') DESC")
         .limit(limit);
 
-      return templates.map(template => this.mapDbRowToTemplate(template));
+      return templates.map((template) => this.mapDbRowToTemplate(template));
     } catch (error) {
       logger.error('搜索Prompt模板失败:', error);
       return [];
@@ -617,7 +685,10 @@ class PromptTemplateService {
   /**
    * 验证Prompt模板
    */
-  async validateTemplate(template: string, variables: TemplateVariable[] = []): Promise<TemplateValidation> {
+  async validateTemplate(
+    template: string,
+    variables: TemplateVariable[] = []
+  ): Promise<TemplateValidation> {
     const errors: TemplateValidation['errors'] = [];
     const warnings: TemplateValidation['warnings'] = [];
 
@@ -634,7 +705,7 @@ class PromptTemplateService {
       }
 
       // 变量检查
-      const definedVariables = new Set(variables.map(v => v.name));
+      const definedVariables = new Set(variables.map((v) => v.name));
 
       // 检查未定义的变量
       for (const variable of extractedVariables) {
@@ -707,10 +778,12 @@ class PromptTemplateService {
       logger.error('验证Prompt模板失败:', error);
       return {
         valid: false,
-        errors: [{
-          type: 'syntax',
-          message: '模板验证过程中发生错误'
-        }],
+        errors: [
+          {
+            type: 'syntax',
+            message: '模板验证过程中发生错误'
+          }
+        ],
         warnings: [],
         extractedVariables: [],
         estimatedTokens: 0,
@@ -722,7 +795,10 @@ class PromptTemplateService {
   /**
    * 预览Prompt模板
    */
-  async previewTemplate(templateId: string, variables: Record<string, any>): Promise<TemplatePreview> {
+  async previewTemplate(
+    templateId: string,
+    variables: Record<string, any>
+  ): Promise<TemplatePreview> {
     const template = await this.getTemplate(templateId);
     if (!template) {
       throw new Error('Prompt模板不存在');
@@ -741,7 +817,10 @@ class PromptTemplateService {
       // 应用默认值
       const mergedVariables = { ...variables };
       for (const templateVar of template.variables) {
-        if (!mergedVariables.hasOwnProperty(templateVar.name) && templateVar.defaultValue !== undefined) {
+        if (
+          !mergedVariables.hasOwnProperty(templateVar.name) &&
+          templateVar.defaultValue !== undefined
+        ) {
           mergedVariables[templateVar.name] = templateVar.defaultValue;
         }
       }
@@ -783,12 +862,10 @@ class PromptTemplateService {
       await knex.transaction(async (trx) => {
         if (existingRating) {
           // 更新评价
-          await trx('prompt_template_ratings')
-            .where('id', existingRating.id)
-            .update({
-              rating,
-              updated_at: new Date()
-            });
+          await trx('prompt_template_ratings').where('id', existingRating.id).update({
+            rating,
+            updated_at: new Date()
+          });
         } else {
           // 新增评价
           await trx('prompt_template_ratings').insert({
@@ -824,7 +901,7 @@ class PromptTemplateService {
         .where('template_id', templateId)
         .orderBy('created_at', 'desc');
 
-      return snapshots.map(snapshot => ({
+      return snapshots.map((snapshot) => ({
         id: snapshot.id,
         templateId: snapshot.template_id,
         version: snapshot.version,
@@ -845,9 +922,7 @@ class PromptTemplateService {
    */
   async getPopularTags(limit: number = 20): Promise<Array<{ tag: string; count: number }>> {
     try {
-      const templates = await knex('prompt_templates')
-        .where('status', 'published')
-        .select('tags');
+      const templates = await knex('prompt_templates').where('status', 'published').select('tags');
 
       const tagCounts = new Map<string, number>();
 
@@ -874,14 +949,8 @@ class PromptTemplateService {
   async getStats(): Promise<any> {
     try {
       const [statusStats, categoryStats, complexityStats, totalTemplates] = await Promise.all([
-        knex('prompt_templates')
-          .select('status')
-          .count('* as count')
-          .groupBy('status'),
-        knex('prompt_templates')
-          .select('category')
-          .count('* as count')
-          .groupBy('category'),
+        knex('prompt_templates').select('status').count('* as count').groupBy('status'),
+        knex('prompt_templates').select('category').count('* as count').groupBy('category'),
         knex('prompt_templates')
           .select(knex.raw("JSON_EXTRACT(metadata, '$.complexity') as complexity"))
           .count('* as count')
@@ -890,18 +959,18 @@ class PromptTemplateService {
       ]);
 
       return {
-        total: totalTemplates.total || 0,
-        byStatus: statusStats.reduce((acc, row) => {
-          acc[row.status] = parseInt(row.count);
+        total: totalTemplates?.total || 0,
+        byStatus: statusStats.reduce((acc: any, row: any) => {
+          acc[row.status] = parseInt(String(row.count));
           return acc;
         }, {}),
-        byCategory: categoryStats.reduce((acc, row) => {
-          acc[row.category] = parseInt(row.count);
+        byCategory: categoryStats.reduce((acc: any, row: any) => {
+          acc[row.category] = parseInt(String(row.count));
           return acc;
         }, {}),
-        byComplexity: complexityStats.reduce((acc, row) => {
+        byComplexity: complexityStats.reduce((acc: any, row: any) => {
           if (row.complexity) {
-            acc[row.complexity] = parseInt(row.count);
+            acc[row.complexity] = parseInt(String(row.count));
           }
           return acc;
         }, {})
@@ -920,7 +989,13 @@ class PromptTemplateService {
   /**
    * 创建快照
    */
-  private async createSnapshot(trx: any, template: PromptTemplate, action: string, description: string, createdBy: string): Promise<void> {
+  private async createSnapshot(
+    trx: any,
+    template: PromptTemplate,
+    action: string,
+    description: string,
+    createdBy: string
+  ): Promise<void> {
     await trx('prompt_template_snapshots').insert({
       id: this.generateId(),
       template_id: template.id,
@@ -1004,7 +1079,8 @@ class PromptTemplateService {
       await knex('prompt_templates')
         .where('id', templateId)
         .update({
-          usage_stats: knex.raw(`JSON_SET(
+          usage_stats: knex.raw(
+            `JSON_SET(
             JSON_SET(
               JSON_SET(usage_stats, '$.usedCount', JSON_EXTRACT(usage_stats, '$.usedCount') + 1),
               '$.lastUsedAt',
@@ -1012,7 +1088,9 @@ class PromptTemplateService {
             ),
             '$.updated_at',
             ?
-          )`, [new Date().toISOString(), new Date().toISOString()]),
+          )`,
+            [new Date().toISOString(), new Date().toISOString()]
+          ),
           updated_at: new Date()
         });
     } catch (error) {
@@ -1036,11 +1114,14 @@ class PromptTemplateService {
     await trx('prompt_templates')
       .where('id', templateId)
       .update({
-        usage_stats: knex.raw(`JSON_SET(
+        usage_stats: knex.raw(
+          `JSON_SET(
           JSON_SET(usage_stats, '$.avgRating', ?),
           '$.ratingCount',
           ?
-        )`, [avgRating, ratingCount])
+        )`,
+          [avgRating, ratingCount]
+        )
       });
   }
 
@@ -1062,7 +1143,9 @@ class PromptTemplateService {
       metadata: row.metadata ? JSON.parse(row.metadata) : {},
       examples: row.examples ? JSON.parse(row.examples) : [],
       config: row.config ? JSON.parse(row.config) : {},
-      usageStats: row.usage_stats ? JSON.parse(row.usage_stats) : { usedCount: 0, avgRating: 0, ratingCount: 0 },
+      usageStats: row.usage_stats
+        ? JSON.parse(row.usage_stats)
+        : { usedCount: 0, avgRating: 0, ratingCount: 0 },
       createdBy: row.created_by,
       updatedBy: row.updated_by,
       createdAt: row.created_at,
@@ -1095,4 +1178,22 @@ class PromptTemplateService {
 }
 
 const promptTemplateService = new PromptTemplateService();
-module.exports = promptTemplateService;
+
+// 导出类实例的所有方法
+export const getTemplates = promptTemplateService.getTemplates.bind(promptTemplateService);
+export const searchTemplates = promptTemplateService.searchTemplates.bind(promptTemplateService);
+export const getPopularTags = promptTemplateService.getPopularTags.bind(promptTemplateService);
+export const getTemplate = promptTemplateService.getTemplate.bind(promptTemplateService);
+export const getTemplateHistory =
+  promptTemplateService.getTemplateHistory.bind(promptTemplateService);
+export const validateTemplate = promptTemplateService.validateTemplate.bind(promptTemplateService);
+export const getStats = promptTemplateService.getStats.bind(promptTemplateService);
+export const createTemplate = promptTemplateService.createTemplate.bind(promptTemplateService);
+export const updateTemplate = promptTemplateService.updateTemplate.bind(promptTemplateService);
+export const publishTemplate = promptTemplateService.publishTemplate.bind(promptTemplateService);
+export const rollbackTemplate = promptTemplateService.rollbackTemplate.bind(promptTemplateService);
+export const previewTemplate = promptTemplateService.previewTemplate.bind(promptTemplateService);
+export const rateTemplate = promptTemplateService.rateTemplate.bind(promptTemplateService);
+export const deleteTemplate = promptTemplateService.deleteTemplate.bind(promptTemplateService);
+
+export default promptTemplateService;

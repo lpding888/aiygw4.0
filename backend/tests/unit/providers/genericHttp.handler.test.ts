@@ -5,13 +5,9 @@
 
 import axios from 'axios';
 import MockAdapter from 'axios-mock-adapter';
-import { GenericHttpProvider } from '../../../src/providers/handlers/genericHttp.handler';
-import {
-  ExecContext,
-  RetryPolicy,
-  ProviderErrorCode,
-} from '../../../src/providers/types';
-import { ILogger } from '../../../src/providers/base/base-provider';
+import { GenericHttpProvider } from '../../../src/providers/handlers/genericHttp.handler.js';
+import { ExecContext, RetryPolicy, ProviderErrorCode } from '../../../src/providers/types.js';
+import { ILogger } from '../../../src/providers/base/base-provider.js';
 
 // Mock Logger
 class MockLogger implements ILogger {
@@ -38,6 +34,7 @@ class MockLogger implements ILogger {
   }
 }
 
+// 🟢 尝试修复：移除skip看实际错误
 describe('GenericHTTP Provider - 单元测试', () => {
   let provider: GenericHttpProvider;
   let mockLogger: MockLogger;
@@ -82,8 +79,8 @@ describe('GenericHTTP Provider - 单元测试', () => {
       const input = {
         req_template: {
           method: 'INVALID',
-          url: 'http://example.com',
-        },
+          url: 'http://example.com'
+        }
       };
       expect(provider.validate(input)).toContain('不支持的HTTP方法');
     });
@@ -92,8 +89,8 @@ describe('GenericHTTP Provider - 单元测试', () => {
       const input = {
         req_template: {
           method: 'GET',
-          url: 'http://example.com',
-        },
+          url: 'http://example.com'
+        }
       };
       expect(provider.validate(input)).toBeNull();
     });
@@ -103,7 +100,7 @@ describe('GenericHTTP Provider - 单元测试', () => {
     test('应该发送简单的GET请求', async () => {
       mockAxios.onGet('http://example.com/api').reply(200, {
         success: true,
-        data: 'test-data',
+        data: 'test-data'
       });
 
       const context: ExecContext = {
@@ -111,9 +108,9 @@ describe('GenericHTTP Provider - 单元测试', () => {
         input: {
           req_template: {
             method: 'GET',
-            url: 'http://example.com/api',
-          },
-        },
+            url: 'http://example.com/api'
+          }
+        }
       };
 
       const result = await provider.execute(context);
@@ -126,7 +123,7 @@ describe('GenericHTTP Provider - 单元测试', () => {
     test('应该替换URL中的变量', async () => {
       mockAxios.onGet('http://example.com/users/123').reply(200, {
         id: 123,
-        name: '老王',
+        name: '老王'
       });
 
       const context: ExecContext = {
@@ -134,12 +131,12 @@ describe('GenericHTTP Provider - 单元测试', () => {
         input: {
           req_template: {
             method: 'GET',
-            url: 'http://example.com/users/{{userId}}',
+            url: 'http://example.com/users/{{userId}}'
           },
           variables: {
-            userId: '123',
-          },
-        },
+            userId: '123'
+          }
+        }
       };
 
       const result = await provider.execute(context);
@@ -164,14 +161,14 @@ describe('GenericHTTP Provider - 单元测试', () => {
             url: 'http://example.com/api',
             headers: {
               Authorization: 'Bearer {{token}}',
-              'X-User-Id': '{{userId}}',
-            },
+              'X-User-Id': '{{userId}}'
+            }
           },
           variables: {
             token: 'secret-token-123',
-            userId: 'user-456',
-          },
-        },
+            userId: 'user-456'
+          }
+        }
       };
 
       const result = await provider.execute(context);
@@ -195,14 +192,14 @@ describe('GenericHTTP Provider - 单元测试', () => {
             url: 'http://example.com/api',
             params: {
               page: '{{page}}',
-              limit: '{{limit}}',
-            },
+              limit: '{{limit}}'
+            }
           },
           variables: {
             page: '1',
-            limit: '20',
-          },
-        },
+            limit: '20'
+          }
+        }
       };
 
       const result = await provider.execute(context);
@@ -227,10 +224,10 @@ describe('GenericHTTP Provider - 单元测试', () => {
             url: 'http://example.com/api',
             body: {
               name: '老王',
-              age: 35,
-            },
-          },
-        },
+              age: 35
+            }
+          }
+        }
       };
 
       const result = await provider.execute(context);
@@ -256,16 +253,16 @@ describe('GenericHTTP Provider - 单元测试', () => {
             url: 'http://example.com/users',
             body: {
               name: '{{user.name}}',
-              age: '{{user.age}}',
-            },
+              age: '{{user.age}}'
+            }
           },
           variables: {
             user: {
               name: '老王',
-              age: '35',
-            },
-          },
-        },
+              age: '35'
+            }
+          }
+        }
       };
 
       const result = await provider.execute(context);
@@ -283,9 +280,9 @@ describe('GenericHTTP Provider - 单元测试', () => {
         result: {
           user: {
             id: 123,
-            name: '老王',
-          },
-        },
+            name: '老王'
+          }
+        }
       });
 
       const context: ExecContext = {
@@ -294,9 +291,9 @@ describe('GenericHTTP Provider - 单元测试', () => {
           req_template: {
             method: 'GET',
             url: 'http://example.com/api',
-            extractPath: 'result.user',
-          },
-        },
+            extractPath: 'result.user'
+          }
+        }
       };
 
       const result = await provider.execute(context);
@@ -309,7 +306,7 @@ describe('GenericHTTP Provider - 单元测试', () => {
 
     test('extractPath不存在时应该返回undefined', async () => {
       mockAxios.onGet('http://example.com/api').reply(200, {
-        success: true,
+        success: true
       });
 
       const context: ExecContext = {
@@ -318,9 +315,9 @@ describe('GenericHTTP Provider - 单元测试', () => {
           req_template: {
             method: 'GET',
             url: 'http://example.com/api',
-            extractPath: 'notexist.path',
-          },
-        },
+            extractPath: 'notexist.path'
+          }
+        }
       };
 
       const result = await provider.execute(context);
@@ -332,8 +329,12 @@ describe('GenericHTTP Provider - 单元测试', () => {
 
   describe('HTTP错误处理', () => {
     test('应该处理4xx客户端错误', async () => {
+      // 艹，禁用重试避免测试超时！
+      const noRetryPolicy = { maxRetries: 0, initialDelay: 0, maxDelay: 0, backoffMultiplier: 1 };
+      const testProvider = new GenericHttpProvider(noRetryPolicy, mockLogger);
+
       mockAxios.onGet('http://example.com/api').reply(404, {
-        error: 'Not Found',
+        error: 'Not Found'
       });
 
       const context: ExecContext = {
@@ -341,24 +342,26 @@ describe('GenericHTTP Provider - 单元测试', () => {
         input: {
           req_template: {
             method: 'GET',
-            url: 'http://example.com/api',
-          },
-        },
+            url: 'http://example.com/api'
+          }
+        }
       };
 
-      const result = await provider.execute(context);
+      const result = await testProvider.execute(context);
 
       expect(result.success).toBe(false);
-      expect(result.error?.code).toBe(
-        ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED
-      );
+      expect(result.error?.code).toBe(ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED);
       expect(result.error?.message).toContain('404');
       expect(result.error?.details?.statusCode).toBe(404);
     });
 
     test('应该处理5xx服务器错误', async () => {
+      // 艹，禁用重试避免测试超时！
+      const noRetryPolicy = { maxRetries: 0, initialDelay: 0, maxDelay: 0, backoffMultiplier: 1 };
+      const testProvider = new GenericHttpProvider(noRetryPolicy, mockLogger);
+
       mockAxios.onGet('http://example.com/api').reply(500, {
-        error: 'Internal Server Error',
+        error: 'Internal Server Error'
       });
 
       const context: ExecContext = {
@@ -366,21 +369,23 @@ describe('GenericHTTP Provider - 单元测试', () => {
         input: {
           req_template: {
             method: 'GET',
-            url: 'http://example.com/api',
-          },
-        },
+            url: 'http://example.com/api'
+          }
+        }
       };
 
-      const result = await provider.execute(context);
+      const result = await testProvider.execute(context);
 
       expect(result.success).toBe(false);
-      expect(result.error?.code).toBe(
-        ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED
-      );
+      expect(result.error?.code).toBe(ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED);
       expect(result.error?.message).toContain('500');
     });
 
     test('应该处理网络错误', async () => {
+      // 艹，禁用重试避免测试超时！
+      const noRetryPolicy = { maxRetries: 0, initialDelay: 0, maxDelay: 0, backoffMultiplier: 1 };
+      const testProvider = new GenericHttpProvider(noRetryPolicy, mockLogger);
+
       mockAxios.onGet('http://example.com/api').networkError();
 
       const context: ExecContext = {
@@ -388,17 +393,15 @@ describe('GenericHTTP Provider - 单元测试', () => {
         input: {
           req_template: {
             method: 'GET',
-            url: 'http://example.com/api',
-          },
-        },
+            url: 'http://example.com/api'
+          }
+        }
       };
 
-      const result = await provider.execute(context);
+      const result = await testProvider.execute(context);
 
       expect(result.success).toBe(false);
-      expect(result.error?.code).toBe(
-        ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED
-      );
+      expect(result.error?.code).toBe(ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED);
       expect(result.error?.message).toContain('网络错误');
     });
   });
@@ -415,9 +418,9 @@ describe('GenericHTTP Provider - 单元测试', () => {
           req_template: {
             method: 'GET',
             url: 'http://example.com/api',
-            timeout: 50, // 50ms超时
-          },
-        },
+            timeout: 50 // 50ms超时
+          }
+        }
       };
 
       const result = await provider.execute(context);
@@ -441,7 +444,7 @@ describe('GenericHTTP Provider - 单元测试', () => {
         maxRetries: 3,
         initialDelay: 10,
         maxDelay: 100,
-        backoffMultiplier: 2,
+        backoffMultiplier: 2
       };
 
       provider = new GenericHttpProvider(retryPolicy, mockLogger);
@@ -451,9 +454,9 @@ describe('GenericHTTP Provider - 单元测试', () => {
         input: {
           req_template: {
             method: 'GET',
-            url: 'http://example.com/api',
-          },
-        },
+            url: 'http://example.com/api'
+          }
+        }
       };
 
       const result = await provider.execute(context);

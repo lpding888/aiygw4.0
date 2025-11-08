@@ -4,7 +4,7 @@
  */
 
 import { Router } from 'express';
-import bannersController from '../controllers/banners.controller';
+import bannersController from '../controllers/banners.controller.js';
 
 const router = Router();
 
@@ -19,7 +19,10 @@ router.delete('/admin/banners/:id', bannersController.deleteBanner.bind(bannersC
 router.put('/admin/banners-sort-order', bannersController.updateSortOrder.bind(bannersController));
 
 // 艹，COS上传相关
-router.post('/admin/banners/upload-credentials', bannersController.getUploadCredentials.bind(bannersController));
+router.post(
+  '/admin/banners/upload-credentials',
+  bannersController.getUploadCredentials.bind(bannersController)
+);
 router.post('/admin/banners/upload', bannersController.uploadImage.bind(bannersController));
 
 // 前台路由（公开访问）

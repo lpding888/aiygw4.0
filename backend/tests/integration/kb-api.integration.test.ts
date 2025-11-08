@@ -10,16 +10,21 @@
  */
 
 import request from 'supertest';
-import app from '../../src/app';
-import db from '../../src/db/connection';
-import Bull from 'bull';
+import type { Express } from 'express';
+import { createApp } from '../../src/app.js';
+import { db } from '../../src/config/database.js';
+import { addIngestJob, getQueueStats } from '../../src/rag/ingest/worker.js';
 
-// Mock Bull队列
-jest.mock('bull');
-const MockedBull = Bull as jest.MockedClass<typeof Bull>;
+jest.mock('../../src/rag/ingest/worker.ts');
+const mockedAddIngestJob = addIngestJob as jest.MockedFunction<typeof addIngestJob>;
+const mockedGetQueueStats = getQueueStats as jest.MockedFunction<typeof getQueueStats>;
 
 describe('Knowledge Base API Integration Tests', () => {
-  let mockQueue: any;
+  let app: Express;
+
+  beforeAll(async () => {
+    app = await createApp();
+  });
   let testKbId: string;
   let testDocumentId: string;
 
@@ -30,22 +35,17 @@ describe('Knowledge Base API Integration Tests', () => {
 
     testKbId = 'test-kb-integration';
 
-    // Mock Bull队列
-    mockQueue = {
-      add: jest.fn().mockResolvedValue({ id: 'job-123', opts: {} }),
-      getJobCounts: jest.fn().mockResolvedValue({
+    mockedAddIngestJob.mockResolvedValue();
+    mockedGetQueueStats.mockResolvedValue({
+      queue: 'kb-ingest',
+      counts: {
         waiting: 0,
         active: 0,
         completed: 10,
-        failed: 0,
-        delayed: 0,
-      }),
-      getJobs: jest.fn().mockResolvedValue([]),
-      process: jest.fn(),
-      on: jest.fn(),
-    };
-
-    MockedBull.mockImplementation(() => mockQueue as any);
+        failed: 0
+      },
+      timestamp: new Date().toISOString()
+    });
   });
 
   afterAll(async () => {
@@ -69,8 +69,8 @@ describe('Knowledge Base API Integration Tests', () => {
         format: 'text',
         metadata: {
           author: '测试用户',
-          category: 'AI',
-        },
+          category: 'AI'
+        }
       };
 
       // Act
@@ -84,28 +84,27 @@ describe('Knowledge Base API Integration Tests', () => {
       expect(response.body).toMatchObject({
         documentId: expect.any(String),
         jobId: expect.any(String),
-        status: 'queued',
+        status: 'queued'
       });
 
       testDocumentId = response.body.documentId;
 
       // 验证文档已插入数据库
-      const document = await db('kb_documents')
-        .where('id', testDocumentId)
-        .first();
+      const document = await db('kb_documents').where('id', testDocumentId).first();
 
       expect(document).toMatchObject({
         kb_id: testKbId,
         title: '测试文档-AI技术简介',
         format: 'text',
-        status: 'pending',
+        status: 'pending'
       });
 
       // 验证ingestion任务已加入队列
-      expect(mockQueue.add).toHaveBeenCalledWith(
+      expect(mockedAddIngestJob).toHaveBeenCalledWith(
         expect.objectContaining({
           documentId: testDocumentId,
           kbId: testKbId,
+          userId: expect.any(String)
         })
       );
     });
@@ -116,7 +115,7 @@ describe('Knowledge Base API Integration Tests', () => {
         kbId: testKbId,
         title: 'Markdown测试文档',
         content: `# 标题1\n\n## 标题2\n\n这是一段**加粗**的文本。`,
-        format: 'markdown',
+        format: 'markdown'
       };
 
       // Act
@@ -130,7 +129,7 @@ describe('Knowledge Base API Integration Tests', () => {
       expect(response.body).toMatchObject({
         documentId: expect.any(String),
         jobId: expect.any(String),
-        status: 'queued',
+        status: 'queued'
       });
     });
 
@@ -139,7 +138,7 @@ describe('Knowledge Base API Integration Tests', () => {
       const invalidData = {
         kbId: testKbId,
         title: '无效文档',
-        format: 'text',
+        format: 'text'
         // content 缺失
       };
 
@@ -152,7 +151,7 @@ describe('Knowledge Base API Integration Tests', () => {
 
       // Assert
       expect(response.body).toMatchObject({
-        error: expect.stringContaining('content'),
+        error: expect.stringContaining('content')
       });
     });
 
@@ -164,13 +163,13 @@ describe('Knowledge Base API Integration Tests', () => {
           kbId: testKbId,
           title: 'Test',
           content: 'Test content',
-          format: 'text',
+          format: 'text'
         })
         .expect(401);
 
       // Assert
       expect(response.body).toMatchObject({
-        error: expect.stringContaining('Unauthorized'),
+        error: expect.stringContaining('Unauthorized')
       });
     });
 
@@ -182,14 +181,14 @@ describe('Knowledge Base API Integration Tests', () => {
           kbId: testKbId,
           title: 'Test',
           content: 'Test content',
-          format: 'text',
+          format: 'text'
         })
         .set('Authorization', 'Bearer test-user-token') // 非管理员token
         .expect(403);
 
       // Assert
       expect(response.body).toMatchObject({
-        error: expect.stringContaining('Forbidden'),
+        error: expect.stringContaining('Forbidden')
       });
     });
   });
@@ -206,7 +205,7 @@ describe('Knowledge Base API Integration Tests', () => {
           format: 'text',
           status: 'completed',
           created_at: new Date(),
-          updated_at: new Date(),
+          updated_at: new Date()
         },
         {
           id: 'doc-list-2',
@@ -216,7 +215,7 @@ describe('Knowledge Base API Integration Tests', () => {
           format: 'markdown',
           status: 'completed',
           created_at: new Date(),
-          updated_at: new Date(),
+          updated_at: new Date()
         },
         {
           id: 'doc-list-3',
@@ -226,15 +225,13 @@ describe('Knowledge Base API Integration Tests', () => {
           format: 'text',
           status: 'pending',
           created_at: new Date(),
-          updated_at: new Date(),
-        },
+          updated_at: new Date()
+        }
       ]);
     });
 
     afterAll(async () => {
-      await db('kb_documents')
-        .whereIn('id', ['doc-list-1', 'doc-list-2', 'doc-list-3'])
-        .del();
+      await db('kb_documents').whereIn('id', ['doc-list-1', 'doc-list-2', 'doc-list-3']).del();
     });
 
     it('应该返回指定知识库的所有文档', async () => {
@@ -250,20 +247,20 @@ describe('Knowledge Base API Integration Tests', () => {
           expect.objectContaining({
             id: 'doc-list-1',
             title: '文档1',
-            status: 'completed',
+            status: 'completed'
           }),
           expect.objectContaining({
             id: 'doc-list-2',
             title: '文档2',
-            status: 'completed',
+            status: 'completed'
           }),
           expect.objectContaining({
             id: 'doc-list-3',
             title: '文档3',
-            status: 'pending',
-          }),
+            status: 'pending'
+          })
         ]),
-        total: 3,
+        total: 3
       });
     });
 
@@ -307,7 +304,7 @@ describe('Knowledge Base API Integration Tests', () => {
         format: 'text',
         status: 'completed',
         created_at: new Date(),
-        updated_at: new Date(),
+        updated_at: new Date()
       });
 
       await db('kb_chunks').insert([
@@ -318,7 +315,7 @@ describe('Knowledge Base API Integration Tests', () => {
           chunk_index: 0,
           text: '人工智能技术包括机器学习、深度学习',
           embedding: Buffer.from(new Array(1536).fill(0.1)), // Mock embedding
-          created_at: new Date(),
+          created_at: new Date()
         },
         {
           id: 'chunk-2',
@@ -327,8 +324,8 @@ describe('Knowledge Base API Integration Tests', () => {
           chunk_index: 1,
           text: '自然语言处理是AI的重要分支',
           embedding: Buffer.from(new Array(1536).fill(0.2)),
-          created_at: new Date(),
-        },
+          created_at: new Date()
+        }
       ]);
     });
 
@@ -344,7 +341,7 @@ describe('Knowledge Base API Integration Tests', () => {
         .send({
           kbId: testKbId,
           query: '什么是机器学习？',
-          topK: 5,
+          topK: 5
         })
         .set('Authorization', 'Bearer test-admin-token')
         .expect(200);
@@ -355,10 +352,10 @@ describe('Knowledge Base API Integration Tests', () => {
           expect.objectContaining({
             documentId: 'doc-query-1',
             text: expect.any(String),
-            score: expect.any(Number),
-          }),
+            score: expect.any(Number)
+          })
         ]),
-        total: expect.any(Number),
+        total: expect.any(Number)
       });
 
       expect(response.body.results[0].score).toBeGreaterThan(0);
@@ -371,7 +368,7 @@ describe('Knowledge Base API Integration Tests', () => {
         .send({
           kbId: testKbId,
           query: 'AI技术',
-          topK: 1,
+          topK: 1
         })
         .set('Authorization', 'Bearer test-admin-token')
         .expect(200);
@@ -387,14 +384,14 @@ describe('Knowledge Base API Integration Tests', () => {
         .send({
           kbId: testKbId,
           // query 缺失
-          topK: 5,
+          topK: 5
         })
         .set('Authorization', 'Bearer test-admin-token')
         .expect(400);
 
       // Assert
       expect(response.body).toMatchObject({
-        error: expect.stringContaining('query'),
+        error: expect.stringContaining('query')
       });
     });
   });
@@ -409,27 +406,28 @@ describe('Knowledge Base API Integration Tests', () => {
 
       // Assert
       expect(response.body).toMatchObject({
-        queue: 'kb-ingestion',
-        counts: {
-          waiting: expect.any(Number),
-          active: expect.any(Number),
-          completed: expect.any(Number),
-          failed: expect.any(Number),
-        },
+        success: true,
+        data: {
+          queue: 'kb-ingest',
+          counts: {
+            waiting: expect.any(Number),
+            active: expect.any(Number),
+            completed: expect.any(Number),
+            failed: expect.any(Number)
+          }
+        }
       });
 
-      expect(mockQueue.getJobCounts).toHaveBeenCalled();
+      expect(mockedGetQueueStats).toHaveBeenCalled();
     });
 
     it('应该在未认证时返回401', async () => {
       // Act
-      const response = await request(app)
-        .get('/api/admin/kb/queue-stats')
-        .expect(401);
+      const response = await request(app).get('/api/admin/kb/queue-stats').expect(401);
 
       // Assert
       expect(response.body).toMatchObject({
-        error: expect.stringContaining('Unauthorized'),
+        error: expect.stringContaining('Unauthorized')
       });
     });
   });
@@ -443,7 +441,7 @@ describe('Knowledge Base API Integration Tests', () => {
           kbId: testKbId,
           title: '完整流程测试文档',
           content: '这是一个用于测试完整流程的文档，包含了丰富的内容。',
-          format: 'text',
+          format: 'text'
         })
         .set('Authorization', 'Bearer test-admin-token')
         .expect(201);
@@ -451,9 +449,7 @@ describe('Knowledge Base API Integration Tests', () => {
       const { documentId } = uploadResponse.body;
 
       // Step 2: 模拟文档处理完成，更新状态
-      await db('kb_documents')
-        .where('id', documentId)
-        .update({ status: 'completed' });
+      await db('kb_documents').where('id', documentId).update({ status: 'completed' });
 
       // Step 3: 获取文档列表，验证文档存在
       const listResponse = await request(app)
@@ -461,9 +457,7 @@ describe('Knowledge Base API Integration Tests', () => {
         .set('Authorization', 'Bearer test-admin-token')
         .expect(200);
 
-      expect(
-        listResponse.body.documents.some((doc: any) => doc.id === documentId)
-      ).toBe(true);
+      expect(listResponse.body.documents.some((doc: any) => doc.id === documentId)).toBe(true);
 
       // Step 4: 清理
       await db('kb_documents').where('id', documentId).del();

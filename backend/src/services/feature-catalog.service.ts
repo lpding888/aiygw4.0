@@ -1,636 +1,825 @@
-const configCacheService = require('../cache/config-cache');
-const { knex } = require('../db/connection');
-const logger = require('../utils/logger');
-const { hasPermission } = require('../utils/rbac');
-const crypto = require('crypto');
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import logger from '../utils/logger.js';
+import { db } from '../config/database.js';
+import cacheService from './cache.service.js';
+import AppError from '../utils/AppError.js';
+import { ERROR_CODES } from '../config/error-codes.js';
+import type { Knex } from 'knex';
 
 /**
- * Feature Catalog服务
+ * 功能目录服务类
  *
- * 功能目录管理，支持版本控制、发布、回滚和审计
+ * 管理应用中的所有功能特性：
+ * - 功能定义和元数据管理
+ * - 功能配置和参数管理
+ * - 功能权限控制
+ * - 功能版本管理
+ * - 功能使用统计
  */
+type FeatureQueryOptions = {
+  category?: string;
+  type?: string;
+  isPublic?: boolean;
+  is_active?: boolean;
+  tags?: string[];
+  limit?: number;
+  offset?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+};
 
-interface FeatureConfig {
-  id: string;
-  key: string;
-  name: string;
-  description: string;
-  category: string;
-  config: Record<string, any>;
-  enabled: boolean;
-  menuPath: string;
-  icon?: string;
-  color?: string;
-  quotaCost: number;
-  accessScope: 'all' | 'plan' | 'whitelist';
-  allowedAccounts?: string[];
-  outputType: string;
-  saveToAssetLibrary: boolean;
-  version: string;
-  status: 'draft' | 'published' | 'archived';
-  publishedAt?: Date;
-  createdBy: string;
-  updatedBy: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+type UsageFilterOptions = {
+  userId?: string;
+  startDate?: string | Date;
+  endDate?: string | Date;
+  limit?: number;
+  offset?: number;
+};
 
-interface FeatureSnapshot {
-  id: string;
-  featureId: string;
-  version: string;
-  config: FeatureConfig;
-  action: 'create' | 'update' | 'delete' | 'publish' | 'rollback';
-  description: string;
-  createdBy: string;
-  createdAt: Date;
-}
+type UsageRecord = {
+  userId?: string;
+  usageCount?: number;
+  usageDate?: string | Date;
+  cost?: number;
+  metrics?: Record<string, unknown>;
+  status?: 'success' | 'failed';
+  errorDetails?: unknown;
+};
+
+type AccessContext = {
+  userId?: string;
+  role?: string;
+  roles?: string[];
+  permissions?: Record<string, boolean>;
+  membershipTier?: string;
+  membership?: string;
+  organizationId?: string;
+  [key: string]: unknown;
+};
+
+type UsageStatsOptions = {
+  featureKey?: string;
+  userId?: string;
+  startDate?: string | Date;
+  endDate?: string | Date;
+  groupBy?: 'feature' | 'user' | 'day';
+};
+
+type FeatureDefinitionRecord = Record<string, any>;
+type FeatureDefinitionCacheEntry = FeatureDefinitionRecord & {
+  configurations: Map<string, any>;
+  permissions: Map<string, any>;
+};
 
 class FeatureCatalogService {
-  private readonly CACHE_SCOPE = 'features';
-  private readonly DEFAULT_VERSION = '1.0.0';
+  private initialized: boolean;
+  private readonly cachePrefix: string;
+  private readonly cacheTTL: number;
+  private readonly featureDefinitions: Map<string, FeatureDefinitionCacheEntry>;
+  private lastCacheUpdate: number;
+  private readonly cacheUpdateInterval: number;
+  private cacheRefreshTimer?: ReturnType<typeof setInterval>;
+
+  constructor() {
+    this.initialized = false;
+    this.cachePrefix = 'feature_catalog:';
+    this.cacheTTL = 3600; // 1小时缓存
+    this.featureDefinitions = new Map(); // 内存缓存
+    this.lastCacheUpdate = 0;
+    this.cacheUpdateInterval = 300000; // 5分钟更新一次
+    this.cacheRefreshTimer = undefined;
+  }
 
   /**
-   * 创建功能配置
+   * 初始化功能目录服务
    */
-  async createFeature(featureData: Partial<FeatureConfig>, createdBy: string): Promise<FeatureConfig> {
-    const feature: FeatureConfig = {
-      id: this.generateId(),
-      key: featureData.key!,
-      name: featureData.name!,
-      description: featureData.description || '',
-      category: featureData.category || 'image',
-      config: featureData.config || {},
-      enabled: featureData.enabled !== false,
-      menuPath: featureData.menuPath || `/admin/${featureData.key}`,
-      icon: featureData.icon,
-      color: featureData.color,
-      quotaCost: featureData.quotaCost || 1,
-      accessScope: featureData.accessScope || 'all',
-      allowedAccounts: featureData.allowedAccounts,
-      outputType: featureData.outputType || 'singleImage',
-      saveToAssetLibrary: featureData.saveToAssetLibrary !== false,
-      version: '1.0.0',
-      status: 'draft',
-      createdBy,
-      updatedBy: createdBy,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+  async initialize(): Promise<void> {
+    if (this.initialized) {
+      return;
+    }
 
     try {
-      await knex.transaction(async (trx) => {
-        // 插入功能配置
-        await trx('features').insert({
-          id: feature.id,
-          key: feature.key,
-          name: feature.name,
-          description: feature.description,
-          category: feature.category,
-          config: JSON.stringify(feature.config),
-          enabled: feature.enabled,
-          menu_path: feature.menuPath,
-          icon: feature.icon,
-          color: feature.color,
-          quota_cost: feature.quotaCost,
-          access_scope: feature.accessScope,
-          allowed_accounts: JSON.stringify(feature.allowedAccounts),
-          output_type: feature.outputType,
-          save_to_asset_library: feature.saveToAssetLibrary,
-          version: feature.version,
-          status: feature.status,
-          created_by: feature.createdBy,
-          updated_by: feature.updatedBy,
-          created_at: feature.createdAt,
-          updated_at: feature.updatedAt
+      logger.info('[FeatureCatalogService] Initializing feature catalog service...');
+
+      // 加载所有功能定义到内存
+      await this.loadFeatureDefinitions();
+
+      // 设置定时缓存更新
+      this.setupCacheRefresh();
+
+      this.initialized = true;
+      logger.info('[FeatureCatalogService] Feature catalog service initialized successfully');
+    } catch (error) {
+      logger.error('[FeatureCatalogService] Failed to initialize feature catalog service:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 加载所有功能定义
+   */
+  async loadFeatureDefinitions(): Promise<void> {
+    try {
+      const features = await db('feature_definitions')
+        .where('is_active', true)
+        .orderBy('category', 'asc')
+        .orderBy('name', 'asc');
+
+      this.featureDefinitions.clear();
+      for (const feature of features) {
+        this.featureDefinitions.set(feature.feature_key, {
+          ...feature,
+          configurations: new Map(),
+          permissions: new Map()
         });
+      }
 
-        // 创建快照
-        await this.createSnapshot(trx, feature, 'create', '创建功能配置', createdBy);
-      });
+      this.lastCacheUpdate = Date.now();
+      logger.info(`[FeatureCatalogService] Loaded ${features.length} feature definitions`);
+    } catch (error) {
+      logger.error('[FeatureCatalogService] Failed to load feature definitions:', error);
+      throw error;
+    }
+  }
 
-      // 失效缓存
-      await this.invalidateCache();
+  /**
+   * 设置定时缓存刷新
+   */
+  setupCacheRefresh(): void {
+    if (this.cacheRefreshTimer) {
+      clearInterval(this.cacheRefreshTimer);
+    }
 
-      logger.info('功能配置已创建', { featureId: feature.id, key: feature.key, createdBy });
+    this.cacheRefreshTimer = setInterval(async () => {
+      try {
+        await this.loadFeatureDefinitions();
+        logger.debug('[FeatureCatalogService] Feature definitions cache refreshed');
+      } catch (error) {
+        logger.error('[FeatureCatalogService] Failed to refresh feature definitions cache:', error);
+      }
+    }, this.cacheUpdateInterval);
+  }
+
+  /**
+   * 获取功能列表
+   * @param {Object} options - 查询选项
+   * @returns {Array} 功能列表
+   */
+  async getFeatures(options: FeatureQueryOptions = {}): Promise<any[]> {
+    const {
+      category,
+      type,
+      isPublic,
+      is_active = true,
+      tags,
+      limit = 50,
+      offset = 0,
+      sortBy = 'name',
+      sortOrder = 'asc'
+    } = options;
+
+    try {
+      let query = db('feature_definitions');
+
+      // 应用过滤条件
+      if (category) {
+        query = query.where('category', category);
+      }
+      if (type) {
+        query = query.where('type', type);
+      }
+      if (typeof isPublic === 'boolean') {
+        query = query.where('is_public', isPublic);
+      }
+      if (typeof is_active === 'boolean') {
+        query = query.where('is_active', is_active);
+      }
+      if (tags && tags.length > 0) {
+        query = query.whereRaw('JSON_CONTAINS(tags, ?)', [JSON.stringify(tags)]);
+      }
+
+      // 应用排序
+      const validSortFields = ['name', 'category', 'type', 'released_at', 'created_at'];
+      const sortField = validSortFields.includes(sortBy) ? sortBy : 'name';
+      query = query.orderBy(sortField, sortOrder === 'desc' ? 'desc' : 'asc');
+
+      // 应用分页
+      query = query.limit(limit).offset(offset);
+
+      const features = await query;
+
+      // 为每个功能添加配置和权限信息
+      const featuresWithDetails = await Promise.all(
+        features.map(async (feature) => {
+          const [configurations, permissions] = await Promise.all([
+            this.getFeatureConfigurations(feature.id),
+            this.getFeaturePermissions(feature.id)
+          ]);
+
+          return {
+            ...feature,
+            configurations,
+            permissions
+          };
+        })
+      );
+
+      return featuresWithDetails;
+    } catch (error) {
+      logger.error('[FeatureCatalogService] Failed to get features:', error);
+      throw AppError.fromError(error, ERROR_CODES.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /**
+   * 根据key获取功能定义
+   * @param {string} featureKey - 功能key
+   * @returns {Object|null} 功能定义
+   */
+  async getFeatureByKey(featureKey: string): Promise<any> {
+    try {
+      // 先从内存缓存查找
+      if (this.featureDefinitions.has(featureKey)) {
+        return this.featureDefinitions.get(featureKey);
+      }
+
+      // 从数据库查找
+      const feature = await db('feature_definitions').where('feature_key', featureKey).first();
+
+      if (!feature) {
+        return null;
+      }
+
+      // 添加到内存缓存
+      this.featureDefinitions.set(featureKey, feature);
+
       return feature;
     } catch (error) {
-      logger.error('创建功能配置失败:', error);
-      throw error;
+      logger.error('[FeatureCatalogService] Failed to get feature by key:', error);
+      throw AppError.fromError(error, ERROR_CODES.INTERNAL_SERVER_ERROR);
     }
   }
 
   /**
-   * 更新功能配置
+   * 创建功能定义
+   * @param {Object} featureData - 功能数据
+   * @returns {Object} 创建的功能
    */
-  async updateFeature(featureId: string, updateData: Partial<FeatureConfig>, updatedBy: string): Promise<FeatureConfig> {
-    const existingFeature = await this.getFeature(featureId);
-    if (!existingFeature) {
-      throw new Error('功能配置不存在');
-    }
-
+  async createFeature(featureData: Record<string, any>): Promise<any> {
     try {
-      await knex.transaction(async (trx) => {
-        // 更新版本号
-        const newVersion = this.incrementVersion(existingFeature.version);
-        const now = new Date();
-        const updateFields: any = {
-          version: newVersion,
-          updated_by: updatedBy,
-          updated_at: now,
-          status: 'draft'
-        };
+      const {
+        feature_key,
+        name,
+        description,
+        category,
+        type = 'basic',
+        is_active = true,
+        is_public = true,
+        tags,
+        metadata,
+        icon,
+        version = '1.0.0',
+        requirements,
+        limits,
+        pricing
+      } = featureData;
 
-        const assignIfPresent = (property: keyof FeatureConfig, column: string, transform?: (value: any) => any) => {
-          if (Object.prototype.hasOwnProperty.call(updateData, property)) {
-            const rawValue = (updateData as any)[property];
-            updateFields[column] = transform ? transform(rawValue) : rawValue;
-          }
-        };
+      // 检查功能key是否已存在
+      const existingFeature = await this.getFeatureByKey(feature_key);
+      if (existingFeature) {
+        throw AppError.create(ERROR_CODES.USER_ALREADY_EXISTS, {
+          field: 'feature_key',
+          value: feature_key,
+          message: 'Feature key already exists'
+        });
+      }
 
-        assignIfPresent('key', 'key');
-        assignIfPresent('name', 'name');
-        assignIfPresent('description', 'description');
-        assignIfPresent('category', 'category');
-        assignIfPresent('config', 'config', (value) => JSON.stringify(value || {}));
-        assignIfPresent('enabled', 'enabled');
-        assignIfPresent('menuPath', 'menu_path');
-        assignIfPresent('icon', 'icon');
-        assignIfPresent('color', 'color');
-        assignIfPresent('quotaCost', 'quota_cost');
-        assignIfPresent('accessScope', 'access_scope');
-        assignIfPresent('allowedAccounts', 'allowed_accounts', (value) => JSON.stringify(value || []));
-        assignIfPresent('outputType', 'output_type');
-        assignIfPresent('saveToAssetLibrary', 'save_to_asset_library');
+      // 插入功能定义
+      const [feature] = await db('feature_definitions')
+        .insert({
+          feature_key,
+          name,
+          description,
+          category,
+          type,
+          is_active,
+          is_public,
+          tags: tags ? JSON.stringify(tags) : null,
+          metadata: metadata ? JSON.stringify(metadata) : null,
+          icon,
+          version,
+          requirements: requirements ? JSON.stringify(requirements) : null,
+          limits: limits ? JSON.stringify(limits) : null,
+          pricing: pricing ? JSON.stringify(pricing) : null,
+          released_at: new Date()
+        })
+        .returning('*');
 
-        // 更新功能配置
-        await trx('features')
-          .where('id', featureId)
-          .update(updateFields);
+      // 更新内存缓存
+      this.featureDefinitions.set(feature_key, feature);
 
-        // 创建快照
-        const updatedFeature = {
-          ...existingFeature,
-          ...updateData,
-          version: newVersion,
-          status: 'draft',
-          updatedBy,
-          updatedAt: now
-        };
+      logger.info(`[FeatureCatalogService] Created feature: ${feature_key}`);
 
-        await this.createSnapshot(trx, updatedFeature, 'update', '更新功能配置', updatedBy);
-      });
-
-      // 失效缓存
-      await this.invalidateCache();
-
-      logger.info('功能配置已更新', { featureId, updatedBy });
-      return await this.getFeature(featureId);
+      return feature;
     } catch (error) {
-      logger.error('更新功能配置失败:', error);
-      throw error;
+      logger.error('[FeatureCatalogService] Failed to create feature:', error);
+      throw AppError.fromError(error, ERROR_CODES.TASK_CREATION_FAILED);
     }
   }
 
   /**
-   * 发布功能配置
+   * 更新功能定义
+   * @param {string} featureKey - 功能key
+   * @param {Object} updateData - 更新数据
+   * @returns {Object} 更新后的功能
    */
-  async publishFeature(featureId: string, publishedBy: string): Promise<boolean> {
-    const feature = await this.getFeature(featureId);
-    if (!feature) {
-      throw new Error('功能配置不存在');
-    }
-
-    if (feature.status === 'published') {
-      logger.warn('功能配置已经是发布状态', { featureId });
-      return true;
-    }
-
+  async updateFeature(
+    featureKey: string,
+    updateData: Record<string, any>
+  ): Promise<Record<string, any>> {
     try {
-      await knex.transaction(async (trx) => {
-        // 更新为发布状态
-        await trx('features')
-          .where('id', featureId)
-          .update({
-            status: 'published',
-            published_at: new Date(),
-            updated_by: publishedBy,
-            updated_at: new Date()
-          });
+      const feature = await this.getFeatureByKey(featureKey);
+      if (!feature) {
+        throw AppError.create(ERROR_CODES.TASK_NOT_FOUND, {
+          feature_key: featureKey,
+          resource: 'feature'
+        });
+      }
 
-        // 创建发布快照
-        const publishedFeature = { ...feature, status: 'published', publishedBy, publishedAt: new Date() };
-        await this.createSnapshot(trx, publishedFeature, 'publish', '发布功能配置', publishedBy);
-      });
+      // 处理JSON字段
+      const processedData = { ...updateData };
+      const jsonFields = ['tags', 'metadata', 'requirements', 'limits', 'pricing'];
+      for (const field of jsonFields) {
+        if (processedData[field] !== undefined) {
+          processedData[field] = processedData[field] ? JSON.stringify(processedData[field]) : null;
+        }
+      }
 
-      // 失效缓存
-      await this.invalidateCache();
+      // 更新功能定义
+      const [updatedFeature] = await db('feature_definitions')
+        .where('feature_key', featureKey)
+        .update(processedData)
+        .returning('*');
 
-      logger.info('功能配置已发布', { featureId, key: feature.key, publishedBy });
-      return true;
+      // 更新内存缓存
+      this.featureDefinitions.set(featureKey, updatedFeature);
+
+      logger.info(`[FeatureCatalogService] Updated feature: ${featureKey}`);
+
+      return updatedFeature;
     } catch (error) {
-      logger.error('发布功能配置失败:', error);
-      throw error;
+      logger.error('[FeatureCatalogService] Failed to update feature:', error);
+      throw AppError.fromError(error, ERROR_CODES.TASK_PROCESSING_FAILED);
     }
   }
 
   /**
-   * 回滚功能配置
+   * 删除功能定义
+   * @param {string} featureKey - 功能key
+   * @returns {boolean} 是否删除成功
    */
-  async rollbackFeature(featureId: string, targetVersion: string, rolledBy: string, reason?: string): Promise<boolean> {
-    const feature = await this.getFeature(featureId);
-    if (!feature) {
-      throw new Error('功能配置不存在');
-    }
-
-    // 获取目标版本的快照
-    const snapshot = await knex('feature_snapshots')
-      .where('feature_id', featureId)
-      .where('version', targetVersion)
-      .where('action', 'in', ['create', 'update', 'publish'])
-      .orderBy('created_at', 'desc')
-      .first();
-
-    if (!snapshot) {
-      throw new Error(`版本 ${targetVersion} 的快照不存在`);
-    }
-
+  async deleteFeature(featureKey: string): Promise<boolean> {
     try {
-      await knex.transaction(async (trx) => {
-        // 恢复功能配置
-        const rollbackConfig = JSON.parse(snapshot.config);
+      const feature = await this.getFeatureByKey(featureKey);
+      if (!feature) {
+        throw AppError.create(ERROR_CODES.TASK_NOT_FOUND, {
+          feature_key: featureKey,
+          resource: 'feature'
+        });
+      }
 
-        await trx('features')
-          .where('id', featureId)
-          .update({
-            name: rollbackConfig.name,
-            description: rollbackConfig.description,
-            category: rollbackConfig.category,
-            config: rollbackConfig.config,
-            enabled: rollbackConfig.enabled,
-            menu_path: rollbackConfig.menuPath,
-            icon: rollbackConfig.icon,
-            color: rollbackConfig.color,
-            quota_cost: rollbackConfig.quotaCost,
-            access_scope: rollbackConfig.accessScope,
-            allowed_accounts: JSON.stringify(rollbackConfig.allowedAccounts),
-            output_type: rollbackConfig.outputType,
-            save_to_asset_library: rollbackConfig.saveToAssetLibrary,
-            version: this.incrementVersion(targetVersion),
-            status: 'published',
-            updated_by: rolledBy,
-            updated_at: new Date()
-          });
-
-        // 创建回滚快照
-        const rolledBackFeature = { ...rollbackConfig, id: featureId, version: this.incrementVersion(targetVersion) };
-        await this.createSnapshot(trx, rolledBackFeature, 'rollback', `回滚到版本 ${targetVersion}: ${reason || ''}`, rolledBy);
+      // 软删除：设置为不活跃
+      await db('feature_definitions').where('feature_key', featureKey).update({
+        is_active: false,
+        deprecated_at: new Date()
       });
 
-      // 失效缓存
-      await this.invalidateCache();
+      // 从内存缓存中移除
+      this.featureDefinitions.delete(featureKey);
 
-      logger.info('功能配置已回滚', { featureId, targetVersion, rolledBy, reason });
+      logger.info(`[FeatureCatalogService] Deleted feature: ${featureKey}`);
+
       return true;
     } catch (error) {
-      logger.error('回滚功能配置失败:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 删除功能配置
-   */
-  async deleteFeature(featureId: string, deletedBy: string): Promise<boolean> {
-    const feature = await this.getFeature(featureId);
-    if (!feature) {
-      throw new Error('功能配置不存在');
-    }
-
-    if (feature.status === 'published') {
-      throw new Error('已发布的功能配置不能直接删除，请先回滚或归档');
-    }
-
-    try {
-      await knex.transaction(async (trx) => {
-        // 创建删除快照
-        await this.createSnapshot(trx, feature, 'delete', '删除功能配置', deletedBy);
-
-        // 软删除功能配置
-        await trx('features')
-          .where('id', featureId)
-          .update({
-            status: 'archived',
-            updated_by: deletedBy,
-            updated_at: new Date()
-          });
-      });
-
-      // 失效缓存
-      await this.invalidateCache();
-
-      logger.info('功能配置已删除', { featureId, deletedBy });
-      return true;
-    } catch (error) {
-      logger.error('删除功能配置失败:', error);
-      throw error;
+      logger.error('[FeatureCatalogService] Failed to delete feature:', error);
+      throw AppError.fromError(error, ERROR_CODES.TASK_PROCESSING_FAILED);
     }
   }
 
   /**
    * 获取功能配置
+   * @param {string} featureId - 功能ID
+   * @returns {Array} 配置列表
    */
-  async getFeature(featureId: string): Promise<FeatureConfig | null> {
+  async getFeatureConfigurations(featureId: string): Promise<any[]> {
     try {
-      const cacheKey = `feature:${featureId}`;
+      const cacheKey = `${this.cachePrefix}config:${featureId}`;
 
-      return await configCacheService.getOrSet(
-        {
-          scope: this.CACHE_SCOPE,
-          key: cacheKey,
-          version: this.DEFAULT_VERSION
-        },
-        async () => {
-          const feature = await knex('features')
-            .where('id', featureId)
-            .first();
+      // 尝试从缓存获取
+      const cached = await cacheService.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
 
-          if (feature) {
-            return this.mapDbRowToFeature(feature);
-          }
+      const configurations = await db('feature_configurations')
+        .where('feature_id', featureId)
+        .orderBy('sort_order', 'asc')
+        .orderBy('config_key', 'asc');
 
-          return null;
+      // 缓存结果
+      await cacheService.set(cacheKey, configurations, this.cacheTTL);
+
+      return configurations;
+    } catch (error) {
+      logger.error('[FeatureCatalogService] Failed to get feature configurations:', error);
+      throw AppError.fromError(error, ERROR_CODES.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /**
+   * 设置功能配置
+   * @param {string} featureId - 功能ID
+   * @param {Array} configurations - 配置列表
+   * @returns {Array} 设置后的配置
+   */
+  async setFeatureConfigurations(
+    featureId: string,
+    configurations: Array<Record<string, any>>
+  ): Promise<any[]> {
+    try {
+      const trx = await db.transaction();
+
+      try {
+        // 删除现有配置
+        await trx('feature_configurations').where('feature_id', featureId).del();
+
+        // 插入新配置
+        const configData = configurations.map((config: Record<string, any>, index: number) => ({
+          feature_id: featureId,
+          config_key: config.config_key,
+          config_value: config.config_value,
+          data_type: config.data_type || 'string',
+          description: config.description,
+          is_required: config.is_required || false,
+          is_sensitive: config.is_sensitive || false,
+          validation_rules: config.validation_rules
+            ? JSON.stringify(config.validation_rules)
+            : null,
+          default_value: config.default_value,
+          enum_values: config.enum_values ? JSON.stringify(config.enum_values) : null,
+          sort_order: config.sort_order || index
+        }));
+
+        const insertedConfigurations = await trx('feature_configurations')
+          .insert(configData)
+          .returning('*');
+
+        await trx.commit();
+
+        // 清除缓存
+        await cacheService.delete(`${this.cachePrefix}config:${featureId}`);
+
+        logger.info(
+          `[FeatureCatalogService] Set ${insertedConfigurations.length} configurations for feature: ${featureId}`
+        );
+
+        return insertedConfigurations;
+      } catch (error) {
+        await trx.rollback();
+        throw error;
+      }
+    } catch (error) {
+      logger.error('[FeatureCatalogService] Failed to set feature configurations:', error);
+      throw AppError.fromError(error, ERROR_CODES.TASK_PROCESSING_FAILED);
+    }
+  }
+
+  /**
+   * 获取功能权限
+   * @param {string} featureId - 功能ID
+   * @returns {Array} 权限列表
+   */
+  async getFeaturePermissions(featureId: string): Promise<any[]> {
+    try {
+      const cacheKey = `${this.cachePrefix}permissions:${featureId}`;
+
+      // 尝试从缓存获取
+      const cached = await cacheService.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+
+      const permissions = await db('feature_permissions')
+        .where('feature_id', featureId)
+        .where('expires_at', '>', new Date())
+        .orWhere('expires_at', null)
+        .orderBy('permission_type', 'asc')
+        .orderBy('permission_value', 'asc');
+
+      // 缓存结果
+      await cacheService.set(cacheKey, permissions, this.cacheTTL);
+
+      return permissions;
+    } catch (error) {
+      logger.error('[FeatureCatalogService] Failed to get feature permissions:', error);
+      throw AppError.fromError(error, ERROR_CODES.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /**
+   * 检查用户是否有功能访问权限
+   * @param {string} featureKey - 功能key
+   * @param {string} userId - 用户ID
+   * @param {Object} userContext - 用户上下文信息
+   * @returns {boolean} 是否有权限
+   */
+  async checkFeatureAccess(
+    featureKey: string,
+    userId: string,
+    userContext: AccessContext = {}
+  ): Promise<boolean> {
+    try {
+      const feature = await this.getFeatureByKey(featureKey);
+      if (!feature) {
+        return false;
+      }
+
+      // 如果功能不活跃或未公开，拒绝访问
+      if (!feature.is_active || !feature.is_public) {
+        return false;
+      }
+
+      // 获取功能权限设置
+      const permissions = await this.getFeaturePermissions(feature.id);
+      if (permissions.length === 0) {
+        // 没有特定权限设置，默认允许访问公开功能
+        return feature.is_public;
+      }
+
+      // 检查用户权限
+      for (const permission of permissions) {
+        if (!permission.is_granted) {
+          continue;
         }
+
+        const hasPermission = await this.evaluatePermission(permission, userId, userContext);
+        if (hasPermission) {
+          return true;
+        }
+      }
+
+      return false;
+    } catch (error) {
+      logger.error('[FeatureCatalogService] Failed to check feature access:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 评估权限
+   * @param {Object} permission - 权限对象
+   * @param {string} userId - 用户ID
+   * @param {Object} userContext - 用户上下文
+   * @returns {boolean} 是否有权限
+   */
+  async evaluatePermission(
+    permission: Record<string, any>,
+    userId: string,
+    userContext: AccessContext = {}
+  ): Promise<boolean> {
+    try {
+      switch (permission.permission_type) {
+        case 'user':
+          return permission.permission_value === userId;
+
+        case 'role':
+          return Boolean(userContext.roles?.includes(permission.permission_value));
+
+        case 'membership':
+          return userContext.membership === permission.permission_value;
+
+        case 'custom':
+          // 自定义权限条件
+          if (permission.conditions) {
+            return this.evaluateCustomConditions(permission.conditions, userContext);
+          }
+          return false;
+
+        default:
+          return false;
+      }
+    } catch (error) {
+      logger.error('[FeatureCatalogService] Failed to evaluate permission:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 评估自定义条件
+   * @param {Object} conditions - 条件对象
+   * @param {Object} userContext - 用户上下文
+   * @returns {boolean} 是否满足条件
+   */
+  evaluateCustomConditions(
+    conditions: Record<string, any>,
+    userContext: AccessContext = {}
+  ): boolean {
+    try {
+      const conditionsStr = JSON.stringify(conditions);
+
+      // 简单的条件评估（实际项目中可能需要更复杂的表达式解析器）
+      for (const [key, value] of Object.entries(conditions)) {
+        if (userContext[key] !== value) {
+          return false;
+        }
+      }
+
+      return true;
+    } catch (error) {
+      logger.error('[FeatureCatalogService] Failed to evaluate custom conditions:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 记录功能使用统计
+   * @param {string} featureKey - 功能key
+   * @param {string} userId - 用户ID
+   * @param {Object} usageData - 使用数据
+   */
+  async recordFeatureUsage(
+    featureKey: string,
+    userId: string,
+    usageData: UsageRecord = {}
+  ): Promise<void> {
+    try {
+      const feature = await this.getFeatureByKey(featureKey);
+      if (!feature) {
+        return;
+      }
+
+      const {
+        usageCount = 1,
+        metrics = {},
+        cost = 0,
+        status = 'success',
+        errorDetails = null
+      } = usageData;
+
+      const usageDate = new Date().toISOString().split('T')[0];
+
+      // 使用事务确保数据一致性
+      await db.transaction(async (trx) => {
+        // 检查是否已有今天的统计记录
+        const existingStat = await trx('feature_usage_stats')
+          .where({
+            feature_id: feature.id,
+            user_id: userId,
+            usage_date: usageDate
+          })
+          .first();
+
+        if (existingStat) {
+          // 更新现有记录
+          await trx('feature_usage_stats')
+            .where('id', existingStat.id)
+            .update({
+              usage_count: existingStat.usage_count + usageCount,
+              usage_metrics: JSON.stringify({
+                ...JSON.parse(String(existingStat.usage_metrics ?? '{}')),
+                ...metrics
+              }),
+              total_cost: Number(existingStat.total_cost ?? 0) + Number(cost ?? 0),
+              status: status === 'failed' ? 'failed' : existingStat.status,
+              error_details: errorDetails
+                ? JSON.stringify(errorDetails)
+                : existingStat.error_details,
+              updated_at: new Date()
+            });
+        } else {
+          // 创建新记录
+          await trx('feature_usage_stats').insert({
+            feature_id: feature.id,
+            user_id: userId,
+            usage_date: usageDate,
+            usage_count: usageCount,
+            usage_metrics: JSON.stringify(metrics),
+            total_cost: cost,
+            status,
+            error_details: errorDetails ? JSON.stringify(errorDetails) : null
+          });
+        }
+      });
+
+      logger.debug(
+        `[FeatureCatalogService] Recorded usage for feature: ${featureKey}, user: ${userId}`
       );
     } catch (error) {
-      logger.error(`获取功能配置失败: ${featureId}`, error);
-      return null;
+      logger.error('[FeatureCatalogService] Failed to record feature usage:', error);
+      // 记录失败不应该影响主要功能，所以这里只记录日志
     }
   }
 
   /**
-   * 根据key获取功能配置
+   * 获取功能使用统计
+   * @param {Object} options - 查询选项
+   * @returns {Array} 统计数据
    */
-  async getFeatureByKey(key: string): Promise<FeatureConfig | null> {
+  async getUsageStats(options: UsageStatsOptions = {}): Promise<any[]> {
     try {
-      const feature = await knex('features')
-        .where('key', key)
-        .first();
+      const { featureKey, userId, startDate, endDate, groupBy = 'day' } = options;
 
-      return feature ? this.mapDbRowToFeature(feature) : null;
-    } catch (error) {
-      logger.error(`根据key获取功能配置失败: ${key}`, error);
-      return null;
-    }
-  }
-
-  /**
-   * 获取功能列表
-   */
-  async getFeatures(filters: {
-    status?: string;
-    category?: string;
-    enabled?: boolean;
-    page?: number;
-    limit?: number;
-  } = {}): Promise<{ features: FeatureConfig[]; total: number }> {
-    const {
-      status,
-      category,
-      enabled,
-      page = 1,
-      limit = 20
-    } = filters;
-
-    try {
-      let query = knex('features').select('*');
+      let query = db('feature_usage_stats as fus')
+        .select(
+          'fus.feature_id',
+          'fd.feature_key',
+          'fd.name as feature_name',
+          'fd.category',
+          'fus.usage_date',
+          db.raw('SUM(fus.usage_count) as total_usage'),
+          db.raw('SUM(fus.total_cost) as total_cost'),
+          db.raw('COUNT(*) as active_days')
+        )
+        .join('feature_definitions as fd', 'fus.feature_id', '=', 'fd.id')
+        .where('fd.is_active', true);
 
       // 应用过滤条件
-      if (status) {
-        query = query.where('status', status);
+      if (featureKey) {
+        query = query.where('fd.feature_key', featureKey);
       }
-      if (category) {
-        query = query.where('category', category);
+      if (userId) {
+        query = query.where('fus.user_id', userId);
       }
-      if (enabled !== undefined) {
-        query = query.where('enabled', enabled);
+      if (startDate) {
+        query = query.where('fus.usage_date', '>=', startDate);
+      }
+      if (endDate) {
+        query = query.where('fus.usage_date', '<=', endDate);
       }
 
-      // 获取总数
-      const totalQuery = query.clone().clearSelect().count('* as count');
-      const [{ count }] = await totalQuery;
-      const total = parseInt(count);
+      // 应用分组
+      switch (groupBy) {
+        case 'feature':
+          query = query.groupBy('fus.feature_id', 'fd.feature_key', 'fd.name', 'fd.category');
+          break;
+        case 'user':
+          query = query
+            .select('fus.user_id')
+            .groupBy('fus.user_id', 'fus.feature_id', 'fd.feature_key', 'fd.name', 'fd.category');
+          break;
+        case 'day':
+        default:
+          query = query.groupBy(
+            'fus.usage_date',
+            'fus.feature_id',
+            'fd.feature_key',
+            'fd.name',
+            'fd.category'
+          );
+          break;
+      }
 
-      // 分页查询
-      const offset = (page - 1) * limit;
-      const features = await query
-        .orderBy('created_at', 'desc')
-        .limit(limit)
-        .offset(offset);
+      const stats = await query.orderBy('fus.usage_date', 'desc');
 
-      const mappedFeatures = features.map(feature => this.mapDbRowToFeature(feature));
-
-      return { features: mappedFeatures, total };
+      return stats;
     } catch (error) {
-      logger.error('获取功能列表失败:', error);
-      return { features: [], total: 0 };
+      logger.error('[FeatureCatalogService] Failed to get usage stats:', error);
+      throw AppError.fromError(error, ERROR_CODES.INTERNAL_SERVER_ERROR);
     }
   }
 
   /**
-   * 获取用户可见的功能列表
+   * 获取服务统计信息
+   * @returns {Object} 统计信息
    */
-  async getVisibleFeatures(userId: string, userRole: string = 'viewer'): Promise<FeatureConfig[]> {
-    try {
-      const cacheKey = `visible_features:${userRole}`;
-
-      return await configCacheService.getOrSet(
-        {
-          scope: this.CACHE_SCOPE,
-          key: cacheKey,
-          version: this.DEFAULT_VERSION
-        },
-        async () => {
-          let query = knex('features')
-            .where('enabled', true)
-            .where('status', 'published')
-            .orderBy('menu_path', 'asc');
-
-          // 根据用户角色过滤
-          if (userRole === 'viewer') {
-            // viewer只能看到基础功能
-            query = query.where('category', 'in', ['image', 'text']);
-          }
-
-          const features = await query;
-          return features
-            .map(feature => this.mapDbRowToFeature(feature))
-            .filter(feature => this.canAccessFeature(feature, userId, userRole));
-        }
-      );
-    } catch (error) {
-      logger.error('获取可见功能列表失败:', error);
-      return [];
-    }
-  }
-
-  /**
-   * 获取功能快照历史
-   */
-  async getFeatureHistory(featureId: string): Promise<FeatureSnapshot[]> {
-    try {
-      const snapshots = await knex('feature_snapshots')
-        .where('feature_id', featureId)
-        .orderBy('created_at', 'desc');
-
-      return snapshots.map(snapshot => ({
-        id: snapshot.id,
-        featureId: snapshot.feature_id,
-        version: snapshot.version,
-        config: JSON.parse(snapshot.config),
-        action: snapshot.action,
-        description: snapshot.description,
-        createdBy: snapshot.created_by,
-        createdAt: snapshot.created_at
-      }));
-    } catch (error) {
-      logger.error(`获取功能历史失败: ${featureId}`, error);
-      return [];
-    }
-  }
-
-  /**
-   * 获取功能统计信息
-   */
-  async getStats(): Promise<any> {
-    try {
-      const [statusStats, categoryStats, totalFeatures] = await Promise.all([
-        knex('features')
-          .select('status')
-          .count('* as count')
-          .groupBy('status'),
-        knex('features')
-          .select('category')
-          .count('* as count')
-          .groupBy('category'),
-        knex('features').count('* as total').first()
-      ]);
-
-      return {
-        total: totalFeatures.total || 0,
-        byStatus: statusStats.reduce((acc, row) => {
-          acc[row.status] = parseInt(row.count);
-          return acc;
-        }, {}),
-        byCategory: categoryStats.reduce((acc, row) => {
-          acc[row.category] = parseInt(row.count);
-          return acc;
-        }, {})
-      };
-    } catch (error) {
-      logger.error('获取功能统计失败:', error);
-      return {
-        total: 0,
-        byStatus: {},
-        byCategory: {}
-      };
-    }
-  }
-
-  /**
-   * 创建快照
-   */
-  private async createSnapshot(trx: any, feature: FeatureConfig, action: string, description: string, createdBy: string): Promise<void> {
-    await trx('feature_snapshots').insert({
-      id: this.generateId(),
-      feature_id: feature.id,
-      version: feature.version,
-      config: JSON.stringify(feature),
-      action,
-      description,
-      created_by: createdBy,
-      created_at: new Date()
-    });
-  }
-
-  /**
-   * 检查用户是否可以访问功能
-   */
-  private canAccessFeature(feature: FeatureConfig, userId: string, userRole: string): boolean {
-    // 管理员可以访问所有功能
-    if (userRole === 'admin') {
-      return true;
-    }
-
-    // 检查访问范围
-    switch (feature.accessScope) {
-      case 'all':
-        return true;
-      case 'plan':
-        // 检查用户是否有会员资格
-        // 这里需要查询用户表，暂时返回true
-        return true;
-      case 'whitelist':
-        // 检查用户是否在白名单中
-        return feature.allowedAccounts?.includes(userId) || false;
-      default:
-        return false;
-    }
-  }
-
-  /**
-   * 将数据库行映射为FeatureConfig对象
-   */
-  private mapDbRowToFeature(row: any): FeatureConfig {
+  getStats() {
     return {
-      id: row.id,
-      key: row.key,
-      name: row.name,
-      description: row.description,
-      category: row.category,
-      config: JSON.parse(row.config || '{}'),
-      enabled: Boolean(row.enabled),
-      menuPath: row.menu_path,
-      icon: row.icon,
-      color: row.color,
-      quotaCost: row.quota_cost,
-      accessScope: row.access_scope,
-      allowedAccounts: row.allowed_accounts ? JSON.parse(row.allowed_accounts) : undefined,
-      outputType: row.output_type,
-      saveToAssetLibrary: Boolean(row.save_to_asset_library),
-      version: row.version,
-      status: row.status,
-      publishedAt: row.published_at,
-      createdBy: row.created_by,
-      updatedBy: row.updated_by,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
+      initialized: this.initialized,
+      cachedFeatures: this.featureDefinitions.size,
+      lastCacheUpdate: this.lastCacheUpdate,
+      cacheUpdateInterval: this.cacheUpdateInterval,
+      cachePrefix: this.cachePrefix,
+      cacheTTL: this.cacheTTL
     };
   }
 
   /**
-   * 递增版本号
+   * 关闭服务
    */
-  private incrementVersion(version: string): string {
-    const parts = version.split('.');
-    const patch = parseInt(parts[2] || '0') + 1;
-    return `${parts[0]}.${parts[1]}.${patch}`;
-  }
-
-  /**
-   * 生成唯一ID
-   */
-  private generateId(): string {
-    return `feature_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  /**
-   * 失效缓存
-   */
-  private async invalidateCache(): Promise<void> {
-    await configCacheService.invalidate(this.CACHE_SCOPE);
+  async close(): Promise<void> {
+    try {
+      if (this.cacheRefreshTimer) {
+        clearInterval(this.cacheRefreshTimer);
+        this.cacheRefreshTimer = undefined;
+      }
+      this.featureDefinitions.clear();
+      this.initialized = false;
+      logger.info('[FeatureCatalogService] Feature catalog service closed');
+    } catch (error) {
+      logger.error('[FeatureCatalogService] Error closing feature catalog service:', error);
+    }
   }
 }
 
 const featureCatalogService = new FeatureCatalogService();
-module.exports = featureCatalogService;
+export default featureCatalogService;

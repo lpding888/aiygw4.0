@@ -3,7 +3,7 @@
  * 艹，这个憨批负责把长文本切成合适大小的chunk！
  */
 
-import logger from '../../utils/logger';
+import logger from '../../utils/logger.js';
 
 export interface ChunkOptions {
   chunkSize?: number; // 块大小（默认400）
@@ -26,11 +26,7 @@ export class TextChunker {
    * 切块
    */
   chunk(text: string, options: ChunkOptions = {}): Chunk[] {
-    const {
-      chunkSize = 400,
-      overlap = 50,
-      minChunkSize = 100
-    } = options;
+    const { chunkSize = 400, overlap = 50, minChunkSize = 100 } = options;
 
     // 按句子分割（中英文混排）
     const sentences = this.splitSentences(text);
@@ -40,7 +36,10 @@ export class TextChunker {
     let chunkIndex = 0;
 
     for (const sentence of sentences) {
-      if (currentChunk.length + sentence.length > chunkSize && currentChunk.length >= minChunkSize) {
+      if (
+        currentChunk.length + sentence.length > chunkSize &&
+        currentChunk.length >= minChunkSize
+      ) {
         // 保存当前chunk
         chunks.push({
           text: currentChunk.trim(),
@@ -74,7 +73,9 @@ export class TextChunker {
       });
     }
 
-    logger.info(`[Chunker] 切块完成: ${chunks.length} chunks, avg_length=${Math.round(chunks.reduce((sum, c) => sum + c.metadata.length, 0) / chunks.length)}`);
+    logger.info(
+      `[Chunker] 切块完成: ${chunks.length} chunks, avg_length=${Math.round(chunks.reduce((sum, c) => sum + c.metadata.length, 0) / chunks.length)}`
+    );
 
     return chunks;
   }
@@ -90,7 +91,7 @@ export class TextChunker {
     // 混合分割
     const regex = new RegExp(`(${cnPunctuation}|${enPunctuation}\\s+)`, 'g');
 
-    return text.split(regex).filter(s => s.trim().length > 0);
+    return text.split(regex).filter((s) => s.trim().length > 0);
   }
 }
 

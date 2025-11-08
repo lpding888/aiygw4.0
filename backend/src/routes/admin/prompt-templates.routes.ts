@@ -1,11 +1,12 @@
-const express = require('express');
-const rateLimit = require('express-rate-limit');
-const promptTemplateService = require('../../services/prompt-template.service');
-const { authenticateToken, requireAdmin } = require('../../middlewares/auth.middleware');
-const { requirePermission } = require('../../middlewares/require-permission.middleware');
-const { body, param, query } = require('express-validator');
-const validate = require('../../middlewares/validate.middleware');
-const logger = require('../../utils/logger');
+import express, { Request, Response, NextFunction } from 'express';
+import rateLimit from 'express-rate-limit';
+import * as promptTemplateService from '../../services/prompt-template.service.js';
+import { authenticate as authenticateToken } from '../../middlewares/auth.middleware.js';
+import { requireAdmin } from '../../middlewares/adminAuth.middleware.js';
+import { requirePermission } from '../../middlewares/require-permission.middleware.js';
+import { body, param, query } from 'express-validator';
+import { validate, validatePromptTemplate } from '../../middlewares/validate.middleware.js';
+import logger from '../../utils/logger.js';
 
 const router = express.Router();
 
@@ -29,10 +30,7 @@ const createTemplateValidation = [
     .withMessage('模板名称不能为空')
     .isLength({ max: 100 })
     .withMessage('模板名称最多100个字符'),
-  body('description')
-    .optional()
-    .isLength({ max: 500 })
-    .withMessage('描述最多500个字符'),
+  body('description').optional().isLength({ max: 500 }).withMessage('描述最多500个字符'),
   body('category')
     .optional()
     .isIn(['general', 'creative', 'technical', 'business', 'educational', 'marketing'])
@@ -42,14 +40,8 @@ const createTemplateValidation = [
     .withMessage('模板内容不能为空')
     .isLength({ max: 10000 })
     .withMessage('模板内容最多10000个字符'),
-  body('variables')
-    .optional()
-    .isArray()
-    .withMessage('变量列表必须是数组'),
-  body('tags')
-    .optional()
-    .isArray()
-    .withMessage('标签列表必须是数组'),
+  body('variables').optional().isArray().withMessage('变量列表必须是数组'),
+  body('tags').optional().isArray().withMessage('标签列表必须是数组'),
   body('config.allowCustomVariables')
     .optional()
     .isBoolean()
@@ -73,33 +65,16 @@ const createTemplateValidation = [
 ];
 
 const updateTemplateValidation = [
-  param('id')
-    .notEmpty()
-    .withMessage('模板ID不能为空'),
-  body('name')
-    .optional()
-    .isLength({ max: 100 })
-    .withMessage('模板名称最多100个字符'),
-  body('description')
-    .optional()
-    .isLength({ max: 500 })
-    .withMessage('描述最多500个字符'),
+  param('id').notEmpty().withMessage('模板ID不能为空'),
+  body('name').optional().isLength({ max: 100 }).withMessage('模板名称最多100个字符'),
+  body('description').optional().isLength({ max: 500 }).withMessage('描述最多500个字符'),
   body('category')
     .optional()
     .isIn(['general', 'creative', 'technical', 'business', 'educational', 'marketing'])
     .withMessage('无效的分类'),
-  body('template')
-    .optional()
-    .isLength({ max: 10000 })
-    .withMessage('模板内容最多10000个字符'),
-  body('variables')
-    .optional()
-    .isArray()
-    .withMessage('变量列表必须是数组'),
-  body('tags')
-    .optional()
-    .isArray()
-    .withMessage('标签列表必须是数组'),
+  body('template').optional().isLength({ max: 10000 }).withMessage('模板内容最多10000个字符'),
+  body('variables').optional().isArray().withMessage('变量列表必须是数组'),
+  body('tags').optional().isArray().withMessage('标签列表必须是数组'),
   body('config.allowCustomVariables')
     .optional()
     .isBoolean()
@@ -123,61 +98,40 @@ const updateTemplateValidation = [
 ];
 
 const previewTemplateValidation = [
-  param('id')
-    .notEmpty()
-    .withMessage('模板ID不能为空'),
-  body('variables')
-    .optional()
-    .isObject()
-    .withMessage('变量必须是对象')
+  param('id').notEmpty().withMessage('模板ID不能为空'),
+  body('variables').optional().isObject().withMessage('变量必须是对象')
 ];
 
 const rateTemplateValidation = [
-  param('id')
-    .notEmpty()
-    .withMessage('模板ID不能为空'),
-  body('rating')
-    .isInt({ min: 1, max: 5 })
-    .withMessage('评分必须是1-5之间的整数')
+  param('id').notEmpty().withMessage('模板ID不能为空'),
+  body('rating').isInt({ min: 1, max: 5 }).withMessage('评分必须是1-5之间的整数')
 ];
 
 const queryValidation = [
-  query('page')
-    .optional()
-    .isInt({ min: 1, max: 1000 })
-    .withMessage('页码必须是1-1000之间的整数'),
+  query('page').optional().isInt({ min: 1, max: 1000 }).withMessage('页码必须是1-1000之间的整数'),
   query('limit')
     .optional()
     .isInt({ min: 1, max: 100 })
     .withMessage('每页数量必须是1-100之间的整数'),
-  query('status')
-    .optional()
-    .isIn(['draft', 'published', 'archived'])
-    .withMessage('无效的状态值'),
+  query('status').optional().isIn(['draft', 'published', 'archived']).withMessage('无效的状态值'),
   query('category')
     .optional()
     .isIn(['general', 'creative', 'technical', 'business', 'educational', 'marketing'])
     .withMessage('无效的分类'),
-  query('complexity')
-    .optional()
-    .isIn(['simple', 'medium', 'complex'])
-    .withMessage('无效的复杂度'),
+  query('complexity').optional().isIn(['simple', 'medium', 'complex']).withMessage('无效的复杂度'),
   query('sortBy')
     .optional()
     .isIn(['created_at', 'updated_at', 'used_count', 'avg_rating'])
     .withMessage('无效的排序字段'),
-  query('sortOrder')
-    .optional()
-    .isIn(['asc', 'desc'])
-    .withMessage('无效的排序方向'),
+  query('sortOrder').optional().isIn(['asc', 'desc']).withMessage('无效的排序方向'),
   query('tags')
     .optional()
-    .custom(value => {
+    .custom((value: any) => {
       if (typeof value === 'string') {
         return true; // 单个标签
       }
       if (Array.isArray(value)) {
-        return value.every(tag => typeof tag === 'string');
+        return value.every((tag) => typeof tag === 'string');
       }
       throw new Error('标签必须是字符串或字符串数组');
     })
@@ -193,10 +147,7 @@ const searchValidation = [
     .optional()
     .isIn(['general', 'creative', 'technical', 'business', 'educational', 'marketing'])
     .withMessage('无效的分类'),
-  query('limit')
-    .optional()
-    .isInt({ min: 1, max: 50 })
-    .withMessage('返回数量必须是1-50之间')
+  query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('返回数量必须是1-50之间')
 ];
 
 /**
@@ -210,23 +161,26 @@ router.use(authenticateToken);
 router.use(promptRateLimit);
 
 // 应用权限中间件
-router.use(requirePermission({
-  resource: 'prompt_templates',
-  actions: ['read']
-}));
+router.use(
+  requirePermission({
+    resource: 'prompt_templates',
+    actions: ['read']
+  })
+);
 
 /**
  * 获取Prompt模板列表
  * GET /api/admin/prompt-templates
  */
-router.get('/',
+router.get(
+  '/',
   queryValidation,
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const {
-        page = 1,
-        limit = 20,
+        page = '1',
+        limit = '20',
         status,
         category,
         complexity,
@@ -236,8 +190,8 @@ router.get('/',
       } = req.query;
 
       const filters: any = {
-        page: parseInt(page),
-        limit: parseInt(limit)
+        page: parseInt(page as string),
+        limit: parseInt(limit as string)
       };
 
       if (status) filters.status = status;
@@ -267,20 +221,21 @@ router.get('/',
  * 搜索Prompt模板
  * GET /api/admin/prompt-templates/search
  */
-router.get('/search',
+router.get(
+  '/search',
   searchValidation,
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { q: query, category, limit = 10, tags } = req.query;
+      const { q: query, category, limit = '10', tags } = req.query;
 
-      const filters: any = { limit: parseInt(limit) };
+      const filters: any = { limit: parseInt(limit as string) };
       if (category) filters.category = category;
       if (tags) {
         filters.tags = Array.isArray(tags) ? tags : [tags];
       }
 
-      const templates = await promptTemplateService.searchTemplates(query, filters);
+      const templates = await promptTemplateService.searchTemplates(query as string, filters);
 
       res.json({
         success: true,
@@ -298,16 +253,14 @@ router.get('/search',
  * 获取热门标签
  * GET /api/admin/prompt-templates/tags/popular
  */
-router.get('/tags/popular',
-  query('limit')
-    .optional()
-    .isInt({ min: 1, max: 100 })
-    .withMessage('数量限制必须是1-100之间'),
+router.get(
+  '/tags/popular',
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('数量限制必须是1-100之间'),
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { limit = 20 } = req.query;
-      const tags = await promptTemplateService.getPopularTags(parseInt(limit));
+      const { limit = '20' } = req.query;
+      const tags = await promptTemplateService.getPopularTags(parseInt(limit as string));
 
       res.json({
         success: true,
@@ -325,12 +278,11 @@ router.get('/tags/popular',
  * 获取Prompt模板详情
  * GET /api/admin/prompt-templates/:id
  */
-router.get('/:id',
-  param('id')
-    .notEmpty()
-    .withMessage('模板ID不能为空'),
+router.get(
+  '/:id',
+  param('id').notEmpty().withMessage('模板ID不能为空'),
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
       const template = await promptTemplateService.getTemplate(id);
@@ -362,12 +314,11 @@ router.get('/:id',
  * 获取Prompt模板历史
  * GET /api/admin/prompt-templates/:id/history
  */
-router.get('/:id/history',
-  param('id')
-    .notEmpty()
-    .withMessage('模板ID不能为空'),
+router.get(
+  '/:id/history',
+  param('id').notEmpty().withMessage('模板ID不能为空'),
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
       const history = await promptTemplateService.getTemplateHistory(id);
@@ -388,16 +339,12 @@ router.get('/:id/history',
  * 验证Prompt模板
  * POST /api/admin/prompt-templates/validate
  */
-router.post('/validate',
-  body('template')
-    .notEmpty()
-    .withMessage('模板内容不能为空'),
-  body('variables')
-    .optional()
-    .isArray()
-    .withMessage('变量列表必须是数组'),
+router.post(
+  '/validate',
+  body('template').notEmpty().withMessage('模板内容不能为空'),
+  body('variables').optional().isArray().withMessage('变量列表必须是数组'),
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { template, variables = [] } = req.body;
       const validation = await promptTemplateService.validateTemplate(template, variables);
@@ -418,68 +365,63 @@ router.post('/validate',
  * 获取Prompt模板统计信息
  * GET /api/admin/prompt-templates/stats
  */
-router.get('/stats',
-  async (req, res, next) => {
-    try {
-      const stats = await promptTemplateService.getStats();
+router.get('/stats', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const stats = await promptTemplateService.getStats();
 
-      res.json({
-        success: true,
-        data: stats,
-        requestId: req.id
-      });
-    } catch (error) {
-      logger.error('获取Prompt模板统计失败:', error);
-      next(error);
-    }
+    res.json({
+      success: true,
+      data: stats,
+      requestId: req.id
+    });
+  } catch (error) {
+    logger.error('获取Prompt模板统计失败:', error);
+    next(error);
   }
-);
+});
 
 // ============ 需要编辑权限的路由 ============
-router.use(requirePermission({
-  resource: 'prompt_templates',
-  actions: ['create', 'update', 'delete', 'publish', 'rate']
-}));
+router.use(
+  requirePermission({
+    resource: 'prompt_templates',
+    actions: ['create', 'update', 'delete', 'publish', 'rate']
+  })
+);
 
 /**
  * 创建Prompt模板
  * POST /api/admin/prompt-templates
  */
-router.post('/',
+router.post(
+  '/',
   requirePermission({
     resource: 'prompt_templates',
     actions: ['create']
   }),
   createTemplateValidation,
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const {
-        name,
-        description,
-        category,
-        template,
-        variables,
-        tags,
-        config,
-        metadata
-      } = req.body;
+      const { name, description, category, template, variables, tags, config, metadata } = req.body;
 
-      const promptTemplate = await promptTemplateService.createTemplate({
-        name,
-        description,
-        category,
-        template,
-        variables,
-        tags,
-        config,
-        metadata
-      }, req.user.id);
+      const promptTemplate = await promptTemplateService.createTemplate(
+        {
+          name,
+          description,
+          category,
+          template,
+          variables,
+          tags,
+          config,
+          metadata
+        },
+        req.user!.id
+      );
 
       logger.info('Prompt模板已创建', {
         templateId: promptTemplate.id,
         name: promptTemplate.name,
-        createdBy: req.user.id,
+        createdBy: req.user?.id,
         ip: req.ip
       });
 
@@ -500,23 +442,24 @@ router.post('/',
  * 更新Prompt模板
  * PUT /api/admin/prompt-templates/:id
  */
-router.put('/:id',
+router.put(
+  '/:id',
   requirePermission({
     resource: 'prompt_templates',
     actions: ['update']
   }),
   updateTemplateValidation,
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
       const updateData = req.body;
 
-      const template = await promptTemplateService.updateTemplate(id, updateData, req.user.id);
+      const template = await promptTemplateService.updateTemplate(id, updateData, req.user!.id);
 
       logger.info('Prompt模板已更新', {
         templateId: id,
-        updatedBy: req.user.id,
+        updatedBy: req.user?.id,
         ip: req.ip
       });
 
@@ -537,24 +480,23 @@ router.put('/:id',
  * 发布Prompt模板
  * POST /api/admin/prompt-templates/:id/publish
  */
-router.post('/:id/publish',
+router.post(
+  '/:id/publish',
   requirePermission({
     resource: 'prompt_templates',
     actions: ['publish']
   }),
-  param('id')
-    .notEmpty()
-    .withMessage('模板ID不能为空'),
+  param('id').notEmpty().withMessage('模板ID不能为空'),
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
 
-      await promptTemplateService.publishTemplate(id, req.user.id);
+      await promptTemplateService.publishTemplate(id, req.user!.id);
 
       logger.info('Prompt模板已发布', {
         templateId: id,
-        publishedBy: req.user.id,
+        publishedBy: req.user?.id,
         ip: req.ip
       });
 
@@ -574,33 +516,27 @@ router.post('/:id/publish',
  * 回滚Prompt模板
  * POST /api/admin/prompt-templates/:id/rollback
  */
-router.post('/:id/rollback',
+router.post(
+  '/:id/rollback',
   requirePermission({
     resource: 'prompt_templates',
     actions: ['publish']
   }),
-  param('id')
-    .notEmpty()
-    .withMessage('模板ID不能为空'),
-  body('targetVersion')
-    .notEmpty()
-    .withMessage('目标版本不能为空'),
-  body('reason')
-    .optional()
-    .isLength({ max: 500 })
-    .withMessage('回滚原因最多500个字符'),
+  param('id').notEmpty().withMessage('模板ID不能为空'),
+  body('targetVersion').notEmpty().withMessage('目标版本不能为空'),
+  body('reason').optional().isLength({ max: 500 }).withMessage('回滚原因最多500个字符'),
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
       const { targetVersion, reason } = req.body;
 
-      await promptTemplateService.rollbackTemplate(id, targetVersion, req.user.id, reason);
+      await promptTemplateService.rollbackTemplate(id, targetVersion, req.user!.id, reason);
 
       logger.info('Prompt模板已回滚', {
         templateId: id,
         targetVersion,
-        rolledBy: req.user.id,
+        rolledBy: req.user?.id,
         reason,
         ip: req.ip
       });
@@ -621,14 +557,15 @@ router.post('/:id/rollback',
  * 预览Prompt模板
  * POST /api/admin/prompt-templates/:id/preview
  */
-router.post('/:id/preview',
+router.post(
+  '/:id/preview',
   requirePermission({
     resource: 'prompt_templates',
     actions: ['read']
   }),
   previewTemplateValidation,
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
       const { variables = {} } = req.body;
@@ -637,7 +574,7 @@ router.post('/:id/preview',
 
       logger.info('Prompt模板预览完成', {
         templateId: id,
-        userId: req.user.id,
+        userId: req.user?.id,
         ip: req.ip
       });
 
@@ -657,23 +594,24 @@ router.post('/:id/preview',
  * 评价Prompt模板
  * POST /api/admin/prompt-templates/:id/rate
  */
-router.post('/:id/rate',
+router.post(
+  '/:id/rate',
   requirePermission({
     resource: 'prompt_templates',
     actions: ['rate']
   }),
   rateTemplateValidation,
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
       const { rating } = req.body;
 
-      await promptTemplateService.rateTemplate(id, req.user.id, rating);
+      await promptTemplateService.rateTemplate(id, req.user!.id, rating);
 
       logger.info('Prompt模板评价已提交', {
         templateId: id,
-        userId: req.user.id,
+        userId: req.user?.id,
         rating,
         ip: req.ip
       });
@@ -694,24 +632,23 @@ router.post('/:id/rate',
  * 删除Prompt模板
  * DELETE /api/admin/prompt-templates/:id
  */
-router.delete('/:id',
+router.delete(
+  '/:id',
   requirePermission({
     resource: 'prompt_templates',
     actions: ['delete']
   }),
-  param('id')
-    .notEmpty()
-    .withMessage('模板ID不能为空'),
+  param('id').notEmpty().withMessage('模板ID不能为空'),
   validate,
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
 
-      await promptTemplateService.deleteTemplate(id, req.user.id);
+      await promptTemplateService.deleteTemplate(id, req.user!.id);
 
       logger.info('Prompt模板已删除', {
         templateId: id,
-        deletedBy: req.user.id,
+        deletedBy: req.user?.id,
         ip: req.ip
       });
 
@@ -727,4 +664,4 @@ router.delete('/:id',
   }
 );
 
-module.exports = router;
+export default router;

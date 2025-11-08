@@ -3,7 +3,7 @@
  * 艹，这个憨批负责解析各种文档格式，去噪并输出干净文本！
  */
 
-import logger from '../../utils/logger';
+import logger from '../../utils/logger.js';
 
 export interface ParseResult {
   text: string;
@@ -26,7 +26,7 @@ export class DocumentParser {
       case 'html':
         return this.parseHTML(content.toString());
       case 'pdf':
-        return this.parsePDF(content);
+        return this.parsePDF(Buffer.isBuffer(content) ? content : Buffer.from(content));
       default:
         throw new Error(`Unsupported format: ${format}`);
     }
@@ -42,7 +42,9 @@ export class DocumentParser {
     // 去除HTML标签
     text = text.replace(/<[^>]+>/g, '');
     // 标题提取
-    const sections = content.match(/^#+\s+(.+)$/gm)?.map(h => h.replace(/^#+\s+/, '')) || [];
+    const sections = content.match(/^#+\s+(.+)$/gm)?.map((h) => h.replace(/^#+\s+/, '')) || [];
+
+    logger.info(`[Parser] Markdown解析完成: length=${text.length}, sections=${sections.length}`);
 
     return {
       text: text.trim(),

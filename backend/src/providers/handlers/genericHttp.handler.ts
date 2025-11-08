@@ -5,14 +5,9 @@
  */
 
 import axios, { AxiosRequestConfig, AxiosError } from 'axios';
-import { BaseProvider } from '../base/base-provider';
-import {
-  ExecContext,
-  ExecResult,
-  ProviderErrorCode,
-  ProviderError,
-} from '../types';
-import { replaceVariables, extractValue } from '../../utils/template';
+import { BaseProvider } from '../base/base-provider.js';
+import { ExecContext, ExecResult, ProviderErrorCode, ProviderError } from '../types.js';
+import { replaceVariables, extractValue } from '../../utils/template.js';
 
 /**
  * 请求模板接口
@@ -106,14 +101,14 @@ export class GenericHttpProvider extends BaseProvider {
       // 1. 变量替换（艹，只替换{{var}}，不执行表达式）
       const method = req_template.method.toUpperCase();
       const url = replaceVariables(req_template.url, variables) as string;
-      const headers = replaceVariables(
-        req_template.headers || {},
-        variables
-      ) as Record<string, string>;
-      const params = replaceVariables(
-        req_template.params || {},
-        variables
-      ) as Record<string, string>;
+      const headers = replaceVariables(req_template.headers || {}, variables) as Record<
+        string,
+        string
+      >;
+      const params = replaceVariables(req_template.params || {}, variables) as Record<
+        string,
+        string
+      >;
 
       let body = req_template.body;
       if (body) {
@@ -124,7 +119,7 @@ export class GenericHttpProvider extends BaseProvider {
         taskId: context.taskId,
         method,
         url,
-        hasBody: !!body,
+        hasBody: !!body
       });
 
       // 2. 构建axios配置
@@ -133,7 +128,7 @@ export class GenericHttpProvider extends BaseProvider {
         url,
         headers,
         params,
-        timeout: req_template.timeout || this.defaultTimeout,
+        timeout: req_template.timeout || this.defaultTimeout
       };
 
       // 3. 添加请求体（仅POST/PUT/PATCH）
@@ -153,7 +148,7 @@ export class GenericHttpProvider extends BaseProvider {
       this.logger.info(`[${this.key}] HTTP请求成功`, {
         taskId: context.taskId,
         statusCode: response.status,
-        url,
+        url
       });
 
       // 6. 提取结果数据（可选）
@@ -162,10 +157,9 @@ export class GenericHttpProvider extends BaseProvider {
         resultData = extractValue(response.data, req_template.extractPath);
 
         if (resultData === undefined) {
-          this.logger.warn(
-            `[${this.key}] extractPath未找到数据: ${req_template.extractPath}`,
-            { taskId: context.taskId }
-          );
+          this.logger.warn(`[${this.key}] extractPath未找到数据: ${req_template.extractPath}`, {
+            taskId: context.taskId
+          });
         }
       }
 
@@ -176,15 +170,15 @@ export class GenericHttpProvider extends BaseProvider {
           statusCode: response.status,
           headers: response.headers,
           body: resultData,
-          fullResponse: response.data, // 保留完整响应（用于调试）
-        },
+          fullResponse: response.data // 保留完整响应（用于调试）
+        }
       };
     } catch (error: any) {
       // 艹，HTTP请求失败了！
       this.logger.error(`[${this.key}] HTTP请求失败`, {
         taskId: context.taskId,
         error: error.message,
-        url: req_template.url,
+        url: req_template.url
       });
 
       // 处理Axios错误
@@ -200,9 +194,9 @@ export class GenericHttpProvider extends BaseProvider {
             code: ProviderErrorCode.ERR_PROVIDER_TIMEOUT,
             message: `HTTP请求超时: ${req_template.url}`,
             details: {
-              timeout: req_template.timeout || this.defaultTimeout,
-            },
-          },
+              timeout: req_template.timeout || this.defaultTimeout
+            }
+          }
         };
       }
 
@@ -212,8 +206,8 @@ export class GenericHttpProvider extends BaseProvider {
         error: {
           code: ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED,
           message: error.message || 'HTTP请求执行失败',
-          details: { stack: error.stack },
-        },
+          details: { stack: error.stack }
+        }
       };
     }
   }
@@ -251,9 +245,9 @@ export class GenericHttpProvider extends BaseProvider {
             statusCode,
             statusText: response.statusText,
             responseData: response.data,
-            requestUrl: error.config?.url,
-          },
-        },
+            requestUrl: error.config?.url
+          }
+        }
       };
     }
 
@@ -266,9 +260,9 @@ export class GenericHttpProvider extends BaseProvider {
           message: '请求超时',
           details: {
             requestUrl: error.config?.url,
-            timeout: error.config?.timeout,
-          },
-        },
+            timeout: error.config?.timeout
+          }
+        }
       };
     }
 
@@ -280,9 +274,9 @@ export class GenericHttpProvider extends BaseProvider {
         message: `网络错误: ${error.message}`,
         details: {
           requestUrl: error.config?.url,
-          errorCode: error.code,
-        },
-      },
+          errorCode: error.code
+        }
+      }
     };
   }
 
@@ -303,7 +297,7 @@ export class GenericHttpProvider extends BaseProvider {
       500: 'Internal Server Error',
       502: 'Bad Gateway',
       503: 'Service Unavailable',
-      504: 'Gateway Timeout',
+      504: 'Gateway Timeout'
     };
 
     return statusTexts[statusCode] || 'Unknown';

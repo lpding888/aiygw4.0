@@ -4,7 +4,7 @@
  */
 
 import { Router } from 'express';
-import plansController from '../controllers/membershipPlans.controller';
+import plansController from '../controllers/membershipPlans.controller.js';
 
 const router = Router();
 
@@ -16,7 +16,10 @@ router.put('/admin/membership/plans/:id', plansController.updatePlan.bind(plansC
 router.delete('/admin/membership/plans/:id', plansController.deletePlan.bind(plansController));
 
 // 艹，设置套餐权益
-router.put('/admin/membership/plans/:id/benefits', plansController.setPlanBenefits.bind(plansController));
+router.put(
+  '/admin/membership/plans/:id/benefits',
+  plansController.setPlanBenefits.bind(plansController)
+);
 
 // 前台路由（公开访问）
 router.get('/membership/plans', plansController.getActivePlans.bind(plansController));

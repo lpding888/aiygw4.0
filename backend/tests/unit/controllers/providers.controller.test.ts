@@ -4,11 +4,11 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { ProvidersController } from '../../../src/controllers/providers.controller';
-import * as providerRepo from '../../../src/repositories/providerEndpoints.repo';
+import { ProvidersController } from '../../../src/controllers/providers.controller.js';
+import * as providerRepo from '../../../src/repositories/providerEndpoints.repo.js';
 
 // Mock providerRepo
-jest.mock('../../../src/repositories/providerEndpoints.repo');
+jest.mock('../../../src/repositories/providerEndpoints.repo.js');
 
 describe('ProvidersController - 单元测试', () => {
   let controller: ProvidersController;
@@ -23,12 +23,12 @@ describe('ProvidersController - 单元测试', () => {
       params: {},
       query: {},
       body: {},
-      user: { id: 1 }, // Mock user
+      user: { id: '1', role: 'admin' } // 艹，必须包含id和role！Mock user
     };
 
     mockRes = {
       json: jest.fn().mockReturnThis(),
-      status: jest.fn().mockReturnThis(),
+      status: jest.fn().mockReturnThis()
     };
 
     mockNext = jest.fn();
@@ -45,15 +45,15 @@ describe('ProvidersController - 单元测试', () => {
           provider_name: '测试Provider1',
           endpoint_url: 'https://api1.example.com',
           credentials_encrypted: { key: 'value1' },
-          auth_type: 'api_key',
+          auth_type: 'api_key'
         },
         {
           provider_ref: 'test-002',
           provider_name: '测试Provider2',
           endpoint_url: 'https://api2.example.com',
           credentials_encrypted: { key: 'value2' },
-          auth_type: 'bearer',
-        },
+          auth_type: 'bearer'
+        }
       ];
 
       (providerRepo.listProviderEndpoints as jest.Mock)
@@ -62,11 +62,7 @@ describe('ProvidersController - 单元测试', () => {
 
       mockReq.query = { limit: '10', offset: '0' };
 
-      await controller.listProviders(
-        mockReq as Request,
-        mockRes as Response,
-        mockNext
-      );
+      await controller.listProviders(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
@@ -74,8 +70,8 @@ describe('ProvidersController - 单元测试', () => {
           items: mockProviders,
           total: 2,
           limit: 10,
-          offset: 0,
-        },
+          offset: 0
+        }
       });
     });
 
@@ -84,15 +80,11 @@ describe('ProvidersController - 单元测试', () => {
 
       (providerRepo.listProviderEndpoints as jest.Mock).mockResolvedValue([]);
 
-      await controller.listProviders(
-        mockReq as Request,
-        mockRes as Response,
-        mockNext
-      );
+      await controller.listProviders(mockReq as Request, mockRes as Response, mockNext);
 
       expect(providerRepo.listProviderEndpoints).toHaveBeenCalledWith(
         expect.objectContaining({
-          authType: 'api_key',
+          authType: 'api_key'
         })
       );
     });
@@ -105,24 +97,18 @@ describe('ProvidersController - 单元测试', () => {
         provider_name: '测试Provider',
         endpoint_url: 'https://api.example.com',
         credentials_encrypted: { key: 'value' },
-        auth_type: 'api_key',
+        auth_type: 'api_key'
       };
 
-      (providerRepo.getProviderEndpoint as jest.Mock).mockResolvedValue(
-        mockProvider
-      );
+      (providerRepo.getProviderEndpoint as jest.Mock).mockResolvedValue(mockProvider);
 
       mockReq.params = { provider_ref: 'test-001' };
 
-      await controller.getProvider(
-        mockReq as Request,
-        mockRes as Response,
-        mockNext
-      );
+      await controller.getProvider(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
-        data: mockProvider,
+        data: mockProvider
       });
     });
 
@@ -131,19 +117,15 @@ describe('ProvidersController - 单元测试', () => {
 
       mockReq.params = { provider_ref: 'non-existent' };
 
-      await controller.getProvider(
-        mockReq as Request,
-        mockRes as Response,
-        mockNext
-      );
+      await controller.getProvider(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(404);
       expect(mockRes.json).toHaveBeenCalledWith({
         success: false,
         error: {
           code: 'NOT_FOUND',
-          message: 'Provider端点不存在: non-existent',
-        },
+          message: 'Provider端点不存在: non-existent'
+        }
       });
     });
   });
@@ -155,57 +137,45 @@ describe('ProvidersController - 单元测试', () => {
         provider_name: '新Provider',
         endpoint_url: 'https://new-api.example.com',
         credentials: { apiKey: 'secret-key' },
-        auth_type: 'api_key',
+        auth_type: 'api_key'
       };
 
       const createdProvider = {
         ...inputData,
         credentials_encrypted: inputData.credentials,
         created_at: new Date(),
-        updated_at: new Date(),
+        updated_at: new Date()
       };
 
-      (providerRepo.providerEndpointExists as jest.Mock).mockResolvedValue(
-        false
-      );
-      (providerRepo.createProviderEndpoint as jest.Mock).mockResolvedValue(
-        createdProvider
-      );
+      (providerRepo.providerEndpointExists as jest.Mock).mockResolvedValue(false);
+      (providerRepo.createProviderEndpoint as jest.Mock).mockResolvedValue(createdProvider);
 
       mockReq.body = inputData;
 
-      await controller.createProvider(
-        mockReq as Request,
-        mockRes as Response,
-        mockNext
-      );
+      await controller.createProvider(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(201);
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
-        data: createdProvider,
+        data: createdProvider
       });
     });
 
     test('缺少必填字段应该返回400', async () => {
       mockReq.body = {
-        provider_ref: 'test',
+        provider_ref: 'test'
         // 缺少其他必填字段
       };
 
-      await controller.createProvider(
-        mockReq as Request,
-        mockRes as Response,
-        mockNext
-      );
+      await controller.createProvider(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
       expect(mockRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
           error: expect.objectContaining({
-            code: 'VALIDATION_ERROR',
-          }),
+            code: 'VALIDATION_ERROR'
+          })
         })
       );
     });
@@ -216,14 +186,10 @@ describe('ProvidersController - 单元测试', () => {
         provider_name: '测试',
         endpoint_url: 'https://api.example.com',
         credentials: { key: 'value' },
-        auth_type: 'api_key',
+        auth_type: 'api_key'
       };
 
-      await controller.createProvider(
-        mockReq as Request,
-        mockRes as Response,
-        mockNext
-      );
+      await controller.createProvider(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
       expect(mockRes.json).toHaveBeenCalledWith(
@@ -231,38 +197,32 @@ describe('ProvidersController - 单元测试', () => {
           success: false,
           error: expect.objectContaining({
             code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('只能包含'),
-          }),
+            message: expect.stringContaining('只能包含')
+          })
         })
       );
     });
 
     test('Provider已存在应该返回409', async () => {
-      (providerRepo.providerEndpointExists as jest.Mock).mockResolvedValue(
-        true
-      );
+      (providerRepo.providerEndpointExists as jest.Mock).mockResolvedValue(true);
 
       mockReq.body = {
         provider_ref: 'existing-provider',
         provider_name: '测试',
         endpoint_url: 'https://api.example.com',
         credentials: { key: 'value' },
-        auth_type: 'api_key',
+        auth_type: 'api_key'
       };
 
-      await controller.createProvider(
-        mockReq as Request,
-        mockRes as Response,
-        mockNext
-      );
+      await controller.createProvider(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(409);
       expect(mockRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
           error: expect.objectContaining({
-            code: 'CONFLICT',
-          }),
+            code: 'CONFLICT'
+          })
         })
       );
     });
@@ -272,32 +232,26 @@ describe('ProvidersController - 单元测试', () => {
     test('应该成功更新Provider', async () => {
       const updates = {
         provider_name: '更新后的名字',
-        endpoint_url: 'https://updated-api.example.com',
+        endpoint_url: 'https://updated-api.example.com'
       };
 
       const updatedProvider = {
         provider_ref: 'test-001',
         ...updates,
         credentials_encrypted: { key: 'value' },
-        auth_type: 'api_key',
+        auth_type: 'api_key'
       };
 
-      (providerRepo.updateProviderEndpoint as jest.Mock).mockResolvedValue(
-        updatedProvider
-      );
+      (providerRepo.updateProviderEndpoint as jest.Mock).mockResolvedValue(updatedProvider);
 
       mockReq.params = { provider_ref: 'test-001' };
       mockReq.body = updates;
 
-      await controller.updateProvider(
-        mockReq as Request,
-        mockRes as Response,
-        mockNext
-      );
+      await controller.updateProvider(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
-        data: updatedProvider,
+        data: updatedProvider
       });
     });
 
@@ -309,19 +263,15 @@ describe('ProvidersController - 单元测试', () => {
       mockReq.params = { provider_ref: 'test-999' };
       mockReq.body = { provider_name: '新名字' };
 
-      await controller.updateProvider(
-        mockReq as Request,
-        mockRes as Response,
-        mockNext
-      );
+      await controller.updateProvider(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(404);
       expect(mockRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
           error: expect.objectContaining({
-            code: 'NOT_FOUND',
-          }),
+            code: 'NOT_FOUND'
+          })
         })
       );
     });
@@ -329,44 +279,32 @@ describe('ProvidersController - 单元测试', () => {
 
   describe('deleteProvider', () => {
     test('应该成功删除Provider', async () => {
-      (providerRepo.deleteProviderEndpoint as jest.Mock).mockResolvedValue(
-        true
-      );
+      (providerRepo.deleteProviderEndpoint as jest.Mock).mockResolvedValue(true);
 
       mockReq.params = { provider_ref: 'test-001' };
 
-      await controller.deleteProvider(
-        mockReq as Request,
-        mockRes as Response,
-        mockNext
-      );
+      await controller.deleteProvider(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
-        message: 'Provider端点已删除',
+        message: 'Provider端点已删除'
       });
     });
 
     test('删除不存在的Provider应该返回404', async () => {
-      (providerRepo.deleteProviderEndpoint as jest.Mock).mockResolvedValue(
-        false
-      );
+      (providerRepo.deleteProviderEndpoint as jest.Mock).mockResolvedValue(false);
 
       mockReq.params = { provider_ref: 'non-existent' };
 
-      await controller.deleteProvider(
-        mockReq as Request,
-        mockRes as Response,
-        mockNext
-      );
+      await controller.deleteProvider(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(404);
       expect(mockRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
           error: expect.objectContaining({
-            code: 'NOT_FOUND',
-          }),
+            code: 'NOT_FOUND'
+          })
         })
       );
     });
@@ -379,28 +317,22 @@ describe('ProvidersController - 单元测试', () => {
         provider_name: '测试Provider',
         endpoint_url: 'https://api.example.com',
         credentials_encrypted: { key: 'value' },
-        auth_type: 'api_key',
+        auth_type: 'api_key'
       };
 
-      (providerRepo.getProviderEndpoint as jest.Mock).mockResolvedValue(
-        mockProvider
-      );
+      (providerRepo.getProviderEndpoint as jest.Mock).mockResolvedValue(mockProvider);
 
       mockReq.params = { provider_ref: 'test-001' };
 
-      await controller.testConnection(
-        mockReq as Request,
-        mockRes as Response,
-        mockNext
-      );
+      await controller.testConnection(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
         data: expect.objectContaining({
           healthy: true,
           message: expect.any(String),
-          tested_at: expect.any(String),
-        }),
+          tested_at: expect.any(String)
+        })
       });
     });
 
@@ -409,11 +341,7 @@ describe('ProvidersController - 单元测试', () => {
 
       mockReq.params = { provider_ref: 'non-existent' };
 
-      await controller.testConnection(
-        mockReq as Request,
-        mockRes as Response,
-        mockNext
-      );
+      await controller.testConnection(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(404);
     });
@@ -422,15 +350,9 @@ describe('ProvidersController - 单元测试', () => {
   describe('错误处理', () => {
     test('意外错误应该传递给next中间件', async () => {
       const testError = new Error('数据库连接失败');
-      (providerRepo.listProviderEndpoints as jest.Mock).mockRejectedValue(
-        testError
-      );
+      (providerRepo.listProviderEndpoints as jest.Mock).mockRejectedValue(testError);
 
-      await controller.listProviders(
-        mockReq as Request,
-        mockRes as Response,
-        mockNext
-      );
+      await controller.listProviders(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockNext).toHaveBeenCalledWith(testError);
     });

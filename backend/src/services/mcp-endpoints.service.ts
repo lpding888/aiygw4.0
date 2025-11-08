@@ -4,11 +4,11 @@
  * 管理MCP（Model Context Protocol）连接，支持CRUD、工具发现和测试
  */
 
-const axios = require('axios');
-const { knex } = require('../db/connection');
-const logger = require('../utils/logger');
-const kmsService = require('./kms.service');
-const configCacheService = require('../cache/config-cache');
+import axios from 'axios';
+import { db as knex } from '../db/index.js';
+import logger from '../utils/logger.js';
+const kmsService = require('./kms.service.js');
+import configCacheService from '../cache/config-cache.js';
 
 interface MCPEndpoint {
   id: string;
@@ -73,15 +73,22 @@ class MCPEndpointsService {
   /**
    * 创建MCP端点
    */
-  async createEndpoint(endpointData: Partial<MCPEndpoint>, secrets: {
-    apiKey: string;
-  }, createdBy: string): Promise<MCPEndpoint> {
+  async createEndpoint(
+    endpointData: Partial<MCPEndpoint>,
+    secrets: {
+      apiKey: string;
+    },
+    createdBy: string
+  ): Promise<MCPEndpoint> {
     const endpointId = this.generateId();
 
     try {
       await knex.transaction(async (trx) => {
         // 加密API密钥
-        const encryptedApiKey = await kmsService.encrypt(secrets.apiKey, `mcp_${endpointId}_api_key`);
+        const encryptedApiKey = await kmsService.encrypt(
+          secrets.apiKey,
+          `mcp_${endpointId}_api_key`
+        );
 
         const endpoint: MCPEndpoint = {
           id: endpointId,
@@ -130,8 +137,12 @@ class MCPEndpointsService {
       await this.invalidateCache();
 
       logger.info('MCP端点已创建', { endpointId, name: endpointData.name, createdBy });
-      return await this.getEndpoint(endpointId);
-    } catch (error) {
+      const endpoint = await this.getEndpoint(endpointId);
+      if (!endpoint) {
+        throw new Error('创建MCP端点后无法读取');
+      }
+      return endpoint;
+    } catch (error: any) {
       logger.error('创建MCP端点失败:', error);
       throw error;
     }
@@ -140,7 +151,11 @@ class MCPEndpointsService {
   /**
    * 更新MCP端点
    */
-  async updateEndpoint(endpointId: string, updateData: Partial<MCPEndpoint>, updatedBy: string): Promise<MCPEndpoint> {
+  async updateEndpoint(
+    endpointId: string,
+    updateData: Partial<MCPEndpoint>,
+    updatedBy: string
+  ): Promise<MCPEndpoint> {
     const existingEndpoint = await this.getEndpoint(endpointId);
     if (!existingEndpoint) {
       throw new Error('MCP端点不存在');
@@ -153,7 +168,11 @@ class MCPEndpointsService {
         updated_at: now
       };
 
-      const assignIfPresent = (property: keyof MCPEndpoint, column: string, transform?: (value: any) => any) => {
+      const assignIfPresent = (
+        property: keyof MCPEndpoint,
+        column: string,
+        transform?: (value: any) => any
+      ) => {
         if (Object.prototype.hasOwnProperty.call(updateData, property)) {
           const rawValue = (updateData as any)[property];
           updateFields[column] = transform ? transform(rawValue) : rawValue;
@@ -175,16 +194,18 @@ class MCPEndpointsService {
       assignIfPresent('lastSyncAt', 'last_sync_at');
       assignIfPresent('lastError', 'last_error');
 
-      await knex('mcp_endpoints')
-        .where('id', endpointId)
-        .update(updateFields);
+      await knex('mcp_endpoints').where('id', endpointId).update(updateFields);
 
       // 失效缓存
       await this.invalidateCache();
 
       logger.info('MCP端点已更新', { endpointId, updatedBy });
-      return await this.getEndpoint(endpointId);
-    } catch (error) {
+      const endpoint = await this.getEndpoint(endpointId);
+      if (!endpoint) {
+        throw new Error('更新MCP端点后无法读取');
+      }
+      return endpoint;
+    } catch (error: any) {
       logger.error('更新MCP端点失败:', error);
       throw error;
     }
@@ -205,14 +226,12 @@ class MCPEndpointsService {
         await kmsService.delete(endpoint.apiKeyId);
 
         // 软删除端点
-        await trx('mcp_endpoints')
-          .where('id', endpointId)
-          .update({
-            enabled: false,
-            status: 'inactive',
-            updated_by: deletedBy,
-            updated_at: new Date()
-          });
+        await trx('mcp_endpoints').where('id', endpointId).update({
+          enabled: false,
+          status: 'inactive',
+          updated_by: deletedBy,
+          updated_at: new Date()
+        });
       });
 
       // 失效缓存
@@ -240,9 +259,7 @@ class MCPEndpointsService {
           version: this.DEFAULT_VERSION
         },
         async () => {
-          const endpoint = await knex('mcp_endpoints')
-            .where('id', endpointId)
-            .first();
+          const endpoint = await knex('mcp_endpoints').where('id', endpointId).first();
 
           if (endpoint) {
             return this.mapDbRowToEndpoint(endpoint);
@@ -260,20 +277,16 @@ class MCPEndpointsService {
   /**
    * 获取MCP端点列表
    */
-  async getEndpoints(filters: {
-    status?: string;
-    enabled?: boolean;
-    healthy?: boolean;
-    page?: number;
-    limit?: number;
-  } = {}): Promise<{ endpoints: MCPEndpoint[]; total: number }> {
-    const {
-      status,
-      enabled,
-      healthy,
-      page = 1,
-      limit = 20
-    } = filters;
+  async getEndpoints(
+    filters: {
+      status?: string;
+      enabled?: boolean;
+      healthy?: boolean;
+      page?: number;
+      limit?: number;
+    } = {}
+  ): Promise<{ endpoints: MCPEndpoint[]; total: number }> {
+    const { status, enabled, healthy, page = 1, limit = 20 } = filters;
 
     try {
       let query = knex('mcp_endpoints').select('*');
@@ -292,16 +305,13 @@ class MCPEndpointsService {
       // 获取总数
       const totalQuery = query.clone().clearSelect().count('* as count');
       const [{ count }] = await totalQuery;
-      const total = parseInt(count);
+      const total = parseInt(String(count));
 
       // 分页查询
       const offset = (page - 1) * limit;
-      const endpoints = await query
-        .orderBy('created_at', 'desc')
-        .limit(limit)
-        .offset(offset);
+      const endpoints = await query.orderBy('created_at', 'desc').limit(limit).offset(offset);
 
-      const mappedEndpoints = endpoints.map(endpoint => this.mapDbRowToEndpoint(endpoint));
+      const mappedEndpoints = endpoints.map((endpoint) => this.mapDbRowToEndpoint(endpoint));
 
       return { endpoints: mappedEndpoints, total };
     } catch (error) {
@@ -339,7 +349,7 @@ class MCPEndpointsService {
         {
           timeout: endpoint.timeoutMs,
           headers: {
-            'Authorization': `Bearer ${apiKey}`,
+            Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json'
           }
         }
@@ -373,13 +383,13 @@ class MCPEndpointsService {
           success: true,
           latency,
           toolsCount: tools.length,
-          sampleTools: tools.slice(0, 5).map(t => t.name),
+          sampleTools: tools.slice(0, 5).map((t) => t.name),
           capabilities: serverInfo.capabilities || []
         };
       } else {
         throw new Error(`MCP握手失败: ${response.status}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       const latency = Date.now() - startTime;
       const errorMessage = error.message || '连接失败';
 
@@ -408,16 +418,13 @@ class MCPEndpointsService {
    */
   async discoverTools(endpoint: MCPEndpoint, apiKey: string): Promise<MCPTool[]> {
     try {
-      const response = await axios.get(
-        `${endpoint.endpointUrl}/tools`,
-        {
-          timeout: endpoint.timeoutMs,
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          }
+      const response = await axios.get(`${endpoint.endpointUrl}/tools`, {
+        timeout: endpoint.timeoutMs,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
         }
-      );
+      });
 
       if (response.status === 200 && response.data.tools) {
         return response.data.tools.map((tool: any) => ({
@@ -441,7 +448,12 @@ class MCPEndpointsService {
   /**
    * 执行MCP工具
    */
-  async executeTool(endpointId: string, toolName: string, parameters: Record<string, any>, userId: string): Promise<any> {
+  async executeTool(
+    endpointId: string,
+    toolName: string,
+    parameters: Record<string, any>,
+    userId: string
+  ): Promise<any> {
     const endpoint = await this.getEndpoint(endpointId);
     if (!endpoint) {
       throw new Error('MCP端点不存在');
@@ -456,7 +468,7 @@ class MCPEndpointsService {
       const apiKey = await kmsService.decrypt(endpoint.apiKeyId);
 
       // 验证工具是否存在
-      const tool = endpoint.supportedTools.find(t => t.name === toolName);
+      const tool = endpoint.supportedTools.find((t) => t.name === toolName);
       if (!tool) {
         throw new Error(`工具不存在: ${toolName}`);
       }
@@ -477,7 +489,7 @@ class MCPEndpointsService {
         {
           timeout: endpoint.timeoutMs,
           headers: {
-            'Authorization': `Bearer ${apiKey}`,
+            Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json'
           }
         }
@@ -504,15 +516,18 @@ class MCPEndpointsService {
   /**
    * 批量测试所有端点
    */
-  async testAllEndpoints(): Promise<{ results: Array<{ id: string; name: string; result: MCPTestResult }>; summary: any }> {
+  async testAllEndpoints(): Promise<{
+    results: Array<{ id: string; name: string; result: MCPTestResult }>;
+    summary: any;
+  }> {
     const { endpoints } = await this.getEndpoints({ enabled: true });
     const testPromises = [];
 
     for (const endpoint of endpoints) {
       testPromises.push(
         this.testEndpoint(endpoint.id)
-          .then(result => ({ id: endpoint.id, name: endpoint.name, result }))
-          .catch(error => ({
+          .then((result) => ({ id: endpoint.id, name: endpoint.name, result }))
+          .catch((error) => ({
             id: endpoint.id,
             name: endpoint.name,
             result: {
@@ -528,19 +543,32 @@ class MCPEndpointsService {
     }
 
     const results = await Promise.allSettled(testPromises);
-    const testResults = results.map(result =>
-      result.status === 'fulfilled' ? result.value : { id: 'unknown', name: 'unknown', result: { success: false, error: 'Test failed' } }
+    const testResults = results.map((result) =>
+      result.status === 'fulfilled'
+        ? result.value
+        : {
+            id: 'unknown',
+            name: 'unknown',
+            result: {
+              success: false,
+              latency: 0,
+              toolsCount: 0,
+              sampleTools: [],
+              capabilities: [],
+              error: 'Test failed'
+            }
+          }
     );
 
     // 统计结果
-    const successCount = testResults.filter(r => r.result.success).length;
+    const successCount = testResults.filter((r) => r.result.success).length;
     const totalCount = testResults.length;
 
     const summary = {
       total: totalCount,
       success: successCount,
       failed: totalCount - successCount,
-      successRate: totalCount > 0 ? (successCount / totalCount * 100).toFixed(2) : 0,
+      successRate: totalCount > 0 ? ((successCount / totalCount) * 100).toFixed(2) : 0,
       totalTools: testResults.reduce((sum, r) => sum + (r.result.toolsCount || 0), 0)
     };
 
@@ -561,7 +589,7 @@ class MCPEndpointsService {
       try {
         await this.testEndpoint(endpoint.id);
         updated++;
-      } catch (error) {
+      } catch (error: any) {
         errors.push(`${endpoint.name}: ${error.message}`);
       }
     }
@@ -577,29 +605,26 @@ class MCPEndpointsService {
   async getStats(): Promise<any> {
     try {
       const [statusStats, totalEndpoints] = await Promise.all([
-        knex('mcp_endpoints')
-          .select('status')
-          .count('* as count')
-          .groupBy('status'),
+        knex('mcp_endpoints').select('status').count('* as count').groupBy('status'),
         knex('mcp_endpoints').count('* as total').first()
       ]);
 
       const { endpoints } = await this.getEndpoints();
       const totalTools = endpoints.reduce((sum, ep) => sum + (ep.supportedTools?.length || 0), 0);
       const activeTools = endpoints
-        .filter(ep => ep.status === 'active' && ep.healthy)
+        .filter((ep) => ep.status === 'active' && ep.healthy)
         .reduce((sum, ep) => sum + (ep.supportedTools?.length || 0), 0);
 
       return {
-        total: totalEndpoints.total || 0,
+        total: totalEndpoints?.total || 0,
         byStatus: statusStats.reduce((acc, row) => {
-          acc[row.status] = parseInt(row.count);
+          acc[row.status] = parseInt(String(row.count));
           return acc;
-        }, {}),
+        }, {} as any),
         totalTools,
         activeTools,
-        healthyEndpoints: endpoints.filter(ep => ep.healthy).length,
-        enabledEndpoints: endpoints.filter(ep => ep.enabled).length
+        healthyEndpoints: endpoints.filter((ep) => ep.healthy).length,
+        enabledEndpoints: endpoints.filter((ep) => ep.enabled).length
       };
     } catch (error) {
       logger.error('获取MCP端点统计失败:', error);
@@ -617,14 +642,17 @@ class MCPEndpointsService {
   /**
    * 更新端点状态
    */
-  private async updateEndpointStatus(endpointId: string, statusUpdate: {
-    status?: string;
-    healthy?: boolean;
-    lastSyncAt?: Date;
-    lastError?: string;
-    supportedTools?: MCPTool[];
-    capabilities?: string[];
-  }): Promise<void> {
+  private async updateEndpointStatus(
+    endpointId: string,
+    statusUpdate: {
+      status?: string;
+      healthy?: boolean;
+      lastSyncAt?: Date;
+      lastError?: string;
+      supportedTools?: MCPTool[];
+      capabilities?: string[];
+    }
+  ): Promise<void> {
     const updateFields: any = {
       updated_at: new Date()
     };
@@ -633,12 +661,12 @@ class MCPEndpointsService {
     if (statusUpdate.healthy !== undefined) updateFields.healthy = statusUpdate.healthy;
     if (statusUpdate.lastSyncAt) updateFields.last_sync_at = statusUpdate.lastSyncAt;
     if (statusUpdate.lastError) updateFields.last_error = statusUpdate.lastError;
-    if (statusUpdate.supportedTools) updateFields.supported_tools = JSON.stringify(statusUpdate.supportedTools);
-    if (statusUpdate.capabilities) updateFields.capabilities = JSON.stringify(statusUpdate.capabilities);
+    if (statusUpdate.supportedTools)
+      updateFields.supported_tools = JSON.stringify(statusUpdate.supportedTools);
+    if (statusUpdate.capabilities)
+      updateFields.capabilities = JSON.stringify(statusUpdate.capabilities);
 
-    await knex('mcp_endpoints')
-      .where('id', endpointId)
-      .update(updateFields);
+    await knex('mcp_endpoints').where('id', endpointId).update(updateFields);
 
     // 失效缓存
     await this.invalidateCache();
@@ -652,17 +680,18 @@ class MCPEndpointsService {
 
     if (inputSchema.properties) {
       for (const [name, schema] of Object.entries(inputSchema.properties as any)) {
+        const s = schema as any;
         parameters.push({
           name,
-          type: schema.type || 'string',
+          type: s.type || 'string',
           required: inputSchema.required?.includes(name) || false,
-          description: schema.description || '',
-          defaultValue: schema.default,
+          description: s.description || '',
+          defaultValue: s.default,
           validation: {
-            min: schema.minimum,
-            max: schema.maximum,
-            pattern: schema.pattern,
-            enum: schema.enum
+            min: s.minimum,
+            max: s.maximum,
+            pattern: s.pattern,
+            enum: s.enum
           }
         });
       }
@@ -707,7 +736,9 @@ class MCPEndpointsService {
 
         // 枚举值检查
         if (param.validation?.enum && !param.validation.enum.includes(value)) {
-          throw new Error(`参数值无效: ${param.name} 必须为 ${param.validation.enum.join(', ')} 之一`);
+          throw new Error(
+            `参数值无效: ${param.name} 必须为 ${param.validation.enum.join(', ')} 之一`
+          );
         }
 
         // 正则表达式检查
@@ -765,4 +796,17 @@ class MCPEndpointsService {
 }
 
 const mcpEndpointsService = new MCPEndpointsService();
-module.exports = mcpEndpointsService;
+
+// 导出类实例的所有方法
+export const createEndpoint = mcpEndpointsService.createEndpoint.bind(mcpEndpointsService);
+export const updateEndpoint = mcpEndpointsService.updateEndpoint.bind(mcpEndpointsService);
+export const deleteEndpoint = mcpEndpointsService.deleteEndpoint.bind(mcpEndpointsService);
+export const getEndpoint = mcpEndpointsService.getEndpoint.bind(mcpEndpointsService);
+export const getEndpoints = mcpEndpointsService.getEndpoints.bind(mcpEndpointsService);
+export const testEndpoint = mcpEndpointsService.testEndpoint.bind(mcpEndpointsService);
+export const testAllEndpoints = mcpEndpointsService.testAllEndpoints.bind(mcpEndpointsService);
+export const syncAllEndpoints = mcpEndpointsService.syncAllEndpoints.bind(mcpEndpointsService);
+export const executeTool = mcpEndpointsService.executeTool.bind(mcpEndpointsService);
+export const getStats = mcpEndpointsService.getStats.bind(mcpEndpointsService);
+
+export default mcpEndpointsService;

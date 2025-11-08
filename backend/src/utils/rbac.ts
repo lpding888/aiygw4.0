@@ -10,7 +10,17 @@
 export type UserRole = 'viewer' | 'editor' | 'admin';
 
 export type Resource = string;
-export type Action = 'read' | 'create' | 'update' | 'delete' | 'publish' | 'rollback' | 'test';
+export type Action =
+  | 'read'
+  | 'create'
+  | 'update'
+  | 'delete'
+  | 'publish'
+  | 'rollback'
+  | 'test'
+  | 'manage'
+  | 'execute'
+  | 'rate';
 
 export interface Permission {
   role: UserRole;
@@ -21,57 +31,60 @@ export interface Permission {
 /**
  * 权限定义矩阵
  */
+// 先定义viewer权限
+const VIEWER_PERMISSIONS: Record<Resource, Action[]> = {
+  // 功能管理 - 只读
+  features: ['read'],
+  'features:list': ['read'],
+  'features:view': ['read'],
+
+  // Provider管理 - 只读
+  providers: ['read'],
+  'providers:list': ['read'],
+  'providers:view': ['read'],
+
+  // MCP管理 - 只读
+  mcp: ['read'],
+  'mcp:list': ['read'],
+  'mcp:view': ['read'],
+
+  // 流程管理 - 只读
+  pipelines: ['read'],
+  'pipelines:list': ['read'],
+  'pipelines:view': ['read'],
+
+  // Prompt管理 - 只读
+  prompts: ['read'],
+  'prompts:list': ['read'],
+  'prompts:view': ['read'],
+
+  // UI配置 - 只读
+  ui: ['read'],
+  'ui:menus': ['read'],
+  'ui:schema': ['read'],
+
+  // 系统状态 - 只读
+  system: ['read'],
+  'system:health': ['read'],
+  'system:metrics': ['read']
+};
+
 const PERMISSION_MATRIX: Record<UserRole, Record<Resource, Action[]>> = {
-  viewer: {
-    // 功能管理 - 只读
-    'features': ['read'],
-    'features:list': ['read'],
-    'features:view': ['read'],
-
-    // Provider管理 - 只读
-    'providers': ['read'],
-    'providers:list': ['read'],
-    'providers:view': ['read'],
-
-    // MCP管理 - 只读
-    'mcp': ['read'],
-    'mcp:list': ['read'],
-    'mcp:view': ['read'],
-
-    // 流程管理 - 只读
-    'pipelines': ['read'],
-    'pipelines:list': ['read'],
-    'pipelines:view': ['read'],
-
-    // Prompt管理 - 只读
-    'prompts': ['read'],
-    'prompts:list': ['read'],
-    'prompts:view': ['read'],
-
-    // UI配置 - 只读
-    'ui': ['read'],
-    'ui:menus': ['read'],
-    'ui:schema': ['read'],
-
-    // 系统状态 - 只读
-    'system': ['read'],
-    'system:health': ['read'],
-    'system:metrics': ['read']
-  },
+  viewer: VIEWER_PERMISSIONS,
 
   editor: {
     // 继承viewer所有权限
-    ...PERMISSION_MATRIX.viewer,
+    ...VIEWER_PERMISSIONS,
 
     // 功能管理 - 编辑权限
-    'features': ['read', 'create', 'update'],
+    features: ['read', 'create', 'update'],
     'features:list': ['read'],
     'features:view': ['read', 'update'],
     'features:create': ['create'],
     'features:update': ['update'],
 
     // Provider管理 - 编辑权限
-    'providers': ['read', 'create', 'update'],
+    providers: ['read', 'create', 'update'],
     'providers:list': ['read'],
     'providers:view': ['read', 'update'],
     'providers:create': ['create'],
@@ -79,7 +92,7 @@ const PERMISSION_MATRIX: Record<UserRole, Record<Resource, Action[]>> = {
     'providers:test': ['test'], // 可以测试连接
 
     // MCP管理 - 编辑权限
-    'mcp': ['read', 'create', 'update'],
+    mcp: ['read', 'create', 'update'],
     'mcp:list': ['read'],
     'mcp:view': ['read', 'update'],
     'mcp:create': ['create'],
@@ -87,7 +100,7 @@ const PERMISSION_MATRIX: Record<UserRole, Record<Resource, Action[]>> = {
     'mcp:test': ['test'], // 可以测试连接
 
     // 流程管理 - 编辑权限
-    'pipelines': ['read', 'create', 'update'],
+    pipelines: ['read', 'create', 'update'],
     'pipelines:list': ['read'],
     'pipelines:view': ['read', 'update'],
     'pipelines:create': ['create'],
@@ -95,7 +108,7 @@ const PERMISSION_MATRIX: Record<UserRole, Record<Resource, Action[]>> = {
     'pipelines:test': ['test'], // 可以试跑
 
     // Prompt管理 - 编辑权限
-    'prompts': ['read', 'create', 'update'],
+    prompts: ['read', 'create', 'update'],
     'prompts:list': ['read'],
     'prompts:view': ['read', 'update'],
     'prompts:create': ['create'],
@@ -105,7 +118,7 @@ const PERMISSION_MATRIX: Record<UserRole, Record<Resource, Action[]>> = {
 
   admin: {
     // 完全控制权限
-    'features': ['read', 'create', 'update', 'delete', 'publish', 'rollback'],
+    features: ['read', 'create', 'update', 'delete', 'publish', 'rollback'],
     'features:list': ['read'],
     'features:view': ['read', 'update', 'delete'],
     'features:create': ['create'],
@@ -114,7 +127,7 @@ const PERMISSION_MATRIX: Record<UserRole, Record<Resource, Action[]>> = {
     'features:publish': ['publish'],
     'features:rollback': ['rollback'],
 
-    'providers': ['read', 'create', 'update', 'delete', 'test'],
+    providers: ['read', 'create', 'update', 'delete', 'test'],
     'providers:list': ['read'],
     'providers:view': ['read', 'update', 'delete'],
     'providers:create': ['create'],
@@ -122,7 +135,7 @@ const PERMISSION_MATRIX: Record<UserRole, Record<Resource, Action[]>> = {
     'providers:delete': ['delete'],
     'providers:test': ['test'],
 
-    'mcp': ['read', 'create', 'update', 'delete', 'test'],
+    mcp: ['read', 'create', 'update', 'delete', 'test'],
     'mcp:list': ['read'],
     'mcp:view': ['read', 'update', 'delete'],
     'mcp:create': ['create'],
@@ -130,7 +143,7 @@ const PERMISSION_MATRIX: Record<UserRole, Record<Resource, Action[]>> = {
     'mcp:delete': ['delete'],
     'mcp:test': ['test'],
 
-    'pipelines': ['read', 'create', 'update', 'delete', 'test'],
+    pipelines: ['read', 'create', 'update', 'delete', 'test'],
     'pipelines:list': ['read'],
     'pipelines:view': ['read', 'update', 'delete'],
     'pipelines:create': ['create'],
@@ -138,7 +151,7 @@ const PERMISSION_MATRIX: Record<UserRole, Record<Resource, Action[]>> = {
     'pipelines:delete': ['delete'],
     'pipelines:test': ['test'],
 
-    'prompts': ['read', 'create', 'update', 'delete', 'test'],
+    prompts: ['read', 'create', 'update', 'delete', 'test'],
     'prompts:list': ['read'],
     'prompts:view': ['read', 'update', 'delete'],
     'prompts:create': ['create'],
@@ -146,32 +159,28 @@ const PERMISSION_MATRIX: Record<UserRole, Record<Resource, Action[]>> = {
     'prompts:delete': ['delete'],
     'prompts:preview': ['test'],
 
-    'ui': ['read', 'create', 'update'],
+    ui: ['read', 'create', 'update'],
     'ui:menus': ['read', 'update'],
     'ui:schema': ['read', 'update'],
 
-    'system': ['read', 'update'],
+    system: ['read', 'update'],
     'system:health': ['read'],
     'system:metrics': ['read'],
     'system:config': ['read', 'update'],
 
     // 用户和权限管理
-    'users': ['read', 'update'],
+    users: ['read', 'update'],
     'users:list': ['read'],
     'users:view': ['read', 'update'],
-    'permissions': ['read', 'update'],
-    'audit': ['read']
+    permissions: ['read', 'update'],
+    audit: ['read']
   }
 };
 
 /**
  * 检查用户是否有指定权限
  */
-export function hasPermission(
-  userRole: UserRole,
-  resource: Resource,
-  action: Action
-): boolean {
+export function hasPermission(userRole: UserRole, resource: Resource, action: Action): boolean {
   const rolePermissions = PERMISSION_MATRIX[userRole];
   if (!rolePermissions) {
     return false;
@@ -192,9 +201,7 @@ export function hasAnyPermission(
   userRole: UserRole,
   permissions: Array<{ resource: Resource; action: Action }>
 ): boolean {
-  return permissions.some(({ resource, action }) =>
-    hasPermission(userRole, resource, action)
-  );
+  return permissions.some(({ resource, action }) => hasPermission(userRole, resource, action));
 }
 
 /**
@@ -204,9 +211,7 @@ export function hasAllPermissions(
   userRole: UserRole,
   permissions: Array<{ resource: Resource; action: Action }>
 ): boolean {
-  return permissions.every(({ resource, action }) =>
-    hasPermission(userRole, resource, action)
-  );
+  return permissions.every(({ resource, action }) => hasPermission(userRole, resource, action));
 }
 
 /**
@@ -228,11 +233,7 @@ export function getResourcePermissions(userRole: UserRole, resource: Resource): 
  * 检查路由权限
  * 将HTTP方法映射到权限动作
  */
-export function checkRoutePermission(
-  userRole: UserRole,
-  method: string,
-  route: string
-): boolean {
+export function checkRoutePermission(userRole: UserRole, method: string, route: string): boolean {
   // 根据HTTP方法确定动作
   let action: Action;
   switch (method.toLowerCase()) {

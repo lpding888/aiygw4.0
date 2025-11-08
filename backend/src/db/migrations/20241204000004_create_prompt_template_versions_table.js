@@ -1,10 +1,15 @@
 /**
  * 创建提示词模板版本表
  */
-exports.up = function(knex) {
-  return knex.schema.createTable('prompt_template_versions', function(table) {
+exports.up = function (knex) {
+  return knex.schema.createTable('prompt_template_versions', function (table) {
     table.uuid('id').primary().defaultTo(knex.raw('(UUID())'));
-    table.uuid('template_id').references('id').inTable('prompt_templates').onDelete('CASCADE').comment('模板ID');
+    table
+      .uuid('template_id')
+      .references('id')
+      .inTable('prompt_templates')
+      .onDelete('CASCADE')
+      .comment('模板ID');
     table.integer('version').notNullable().comment('版本号');
     table.text('content').notNullable().comment('模板内容');
     table.json('variables').nullable().comment('模板变量定义');
@@ -24,6 +29,6 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
+exports.down = function (knex) {
   return knex.schema.dropTableIfExists('prompt_template_versions');
 };

@@ -4,8 +4,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import * as planRepo from '../repositories/membershipPlans.repo';
-import { CreatePlanInput } from '../repositories/membershipPlans.repo';
+import * as planRepo from '../repositories/membershipPlans.repo.js';
+import type { CreatePlanInput } from '../repositories/membershipPlans.repo.js';
 
 export class MembershipPlansController {
   /**
@@ -18,7 +18,7 @@ export class MembershipPlansController {
       const plans = await planRepo.listPlans({
         status: status as string,
         limit: parseInt(limit as string),
-        offset: parseInt(offset as string),
+        offset: parseInt(offset as string)
       });
 
       res.json({
@@ -26,8 +26,8 @@ export class MembershipPlansController {
         data: {
           items: plans,
           limit: parseInt(limit as string),
-          offset: parseInt(offset as string),
-        },
+          offset: parseInt(offset as string)
+        }
       });
     } catch (error: any) {
       console.error('[PlansController] 列出套餐失败:', error.message);
@@ -44,7 +44,7 @@ export class MembershipPlansController {
 
       res.json({
         success: true,
-        data: plans,
+        data: plans
       });
     } catch (error: any) {
       console.error('[PlansController] 获取激活套餐失败:', error.message);
@@ -63,7 +63,7 @@ export class MembershipPlansController {
       if (!plan) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: '套餐不存在' },
+          error: { code: 'NOT_FOUND', message: '套餐不存在' }
         });
         return;
       }
@@ -86,7 +86,7 @@ export class MembershipPlansController {
       if (!plan) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: '套餐不存在' },
+          error: { code: 'NOT_FOUND', message: '套餐不存在' }
         });
         return;
       }
@@ -112,7 +112,7 @@ export class MembershipPlansController {
       if (!input.name?.trim()) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: '套餐名称不能为空' },
+          error: { code: 'VALIDATION_ERROR', message: '套餐名称不能为空' }
         });
         return;
       }
@@ -120,7 +120,7 @@ export class MembershipPlansController {
       if (!input.slug?.trim()) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'slug不能为空' },
+          error: { code: 'VALIDATION_ERROR', message: 'slug不能为空' }
         });
         return;
       }
@@ -128,7 +128,7 @@ export class MembershipPlansController {
       if (typeof input.price !== 'number' || input.price < 0) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: '价格必须是非负数' },
+          error: { code: 'VALIDATION_ERROR', message: '价格必须是非负数' }
         });
         return;
       }
@@ -136,7 +136,7 @@ export class MembershipPlansController {
       if (!input.duration_days || input.duration_days <= 0) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: '有效期必须大于0' },
+          error: { code: 'VALIDATION_ERROR', message: '有效期必须大于0' }
         });
         return;
       }
@@ -165,7 +165,7 @@ export class MembershipPlansController {
       if (error.message.includes('不存在')) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: error.message },
+          error: { code: 'NOT_FOUND', message: error.message }
         });
         return;
       }
@@ -185,7 +185,7 @@ export class MembershipPlansController {
       if (!deleted) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: '套餐不存在' },
+          error: { code: 'NOT_FOUND', message: '套餐不存在' }
         });
         return;
       }
@@ -209,7 +209,7 @@ export class MembershipPlansController {
       if (!Array.isArray(benefits)) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'benefits必须是数组' },
+          error: { code: 'VALIDATION_ERROR', message: 'benefits必须是数组' }
         });
         return;
       }

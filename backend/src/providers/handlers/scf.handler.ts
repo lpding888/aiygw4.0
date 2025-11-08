@@ -10,12 +10,8 @@
  * 艹，这个Provider遵循最小权限、幂等、重试+死信、可观测四大基线！
  */
 
-import { BaseProvider } from '../base/base-provider';
-import {
-  ExecContext,
-  ExecResult,
-  ProviderErrorCode,
-} from '../types';
+import { BaseProvider } from '../base/base-provider.js';
+import { ExecContext, ExecResult, ProviderErrorCode } from '../types.js';
 
 // 导入腾讯云SCF SDK
 const tencentcloud = require('tencentcloud-sdk-nodejs');
@@ -164,7 +160,7 @@ export class ScfProvider extends BaseProvider {
         taskId: context.taskId,
         functionName: params.functionName,
         namespace: params.namespace || 'default',
-        invokeType: params.invokeType,
+        invokeType: params.invokeType
       });
 
       // 1. 初始化SCF客户端
@@ -172,14 +168,14 @@ export class ScfProvider extends BaseProvider {
         credential: {
           secretId: auth.secretId,
           secretKey: auth.secretKey,
-          token: auth.token, // 临时密钥Token（可选）
+          token: auth.token // 临时密钥Token（可选）
         },
         region: auth.region,
         profile: {
           httpProfile: {
-            endpoint: 'scf.tencentcloudapi.com',
-          },
-        },
+            endpoint: 'scf.tencentcloudapi.com'
+          }
+        }
       });
 
       // 2. 构建调用参数
@@ -191,17 +187,16 @@ export class ScfProvider extends BaseProvider {
         InvocationType: params.invokeType === 'sync' ? 'RequestResponse' : 'Event',
         LogType: params.logType || 'None',
         // 艹，payload需要转成JSON字符串（如果不是字符串的话）
-        ClientContext: typeof params.payload === 'string'
-          ? params.payload
-          : JSON.stringify(params.payload),
+        ClientContext:
+          typeof params.payload === 'string' ? params.payload : JSON.stringify(params.payload)
       };
 
       this.logger.debug(`[${this.key}] SCF调用参数`, {
         taskId: context.taskId,
         invokeParams: {
           ...invokeParams,
-          ClientContext: `${invokeParams.ClientContext.substring(0, 100)}...`, // 只打印前100字符
-        },
+          ClientContext: `${invokeParams.ClientContext.substring(0, 100)}...` // 只打印前100字符
+        }
       });
 
       // 3. 执行云函数调用
@@ -213,7 +208,7 @@ export class ScfProvider extends BaseProvider {
         taskId: context.taskId,
         functionName: params.functionName,
         duration,
-        requestId: response.RequestId,
+        requestId: response.RequestId
       });
 
       // 4. 解析响应结果
@@ -231,8 +226,8 @@ export class ScfProvider extends BaseProvider {
           result: result,
           duration,
           // 可选：返回日志（仅当logType=Tail时）
-          log: response.Log ? Buffer.from(response.Log, 'base64').toString('utf-8') : undefined,
-        },
+          log: response.Log ? Buffer.from(response.Log, 'base64').toString('utf-8') : undefined
+        }
       };
     } catch (error: any) {
       // 艹，SCF调用失败了！
@@ -240,7 +235,7 @@ export class ScfProvider extends BaseProvider {
         taskId: context.taskId,
         functionName: params.functionName,
         error: error.message,
-        code: error.code,
+        code: error.code
       });
 
       // 处理腾讯云API错误
@@ -259,7 +254,7 @@ export class ScfProvider extends BaseProvider {
     if (invokeType === 'async') {
       return {
         message: '异步调用已提交',
-        requestId: response.RequestId,
+        requestId: response.RequestId
       };
     }
 
@@ -284,7 +279,7 @@ export class ScfProvider extends BaseProvider {
     } catch (error) {
       // 解析失败，返回原始字符串
       this.logger.warn(`[${this.key}] 无法解析SCF返回结果为JSON`, {
-        result: response.Result,
+        result: response.Result
       });
       return response.Result;
     }
@@ -304,7 +299,7 @@ export class ScfProvider extends BaseProvider {
       taskId,
       functionName,
       originalCode: error.code,
-      originalMessage: error.message,
+      originalMessage: error.message
     };
 
     // 艹，根据腾讯云错误码归一化
@@ -375,7 +370,7 @@ export class ScfProvider extends BaseProvider {
     // 记录详细错误
     this.logger.error(`[${this.key}] SCF错误详情`, {
       ...details,
-      stack: error.stack,
+      stack: error.stack
     });
 
     return {
@@ -383,8 +378,8 @@ export class ScfProvider extends BaseProvider {
       error: {
         code: errorCode,
         message,
-        details,
-      },
+        details
+      }
     };
   }
 

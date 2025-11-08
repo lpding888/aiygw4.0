@@ -4,10 +4,10 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { AuditLogsController } from '../../../src/controllers/auditLogs.controller';
-import * as auditRepo from '../../../src/repositories/auditLogs.repo';
+import { AuditLogsController } from '../../../src/controllers/auditLogs.controller.ts';
+import * as auditRepo from '../../../src/repositories/auditLogs.repo.ts';
 
-jest.mock('../../../src/repositories/auditLogs.repo');
+jest.mock('../../../src/repositories/auditLogs.repo.ts');
 
 describe('AuditLogsController - 单元测试', () => {
   let controller: AuditLogsController;
@@ -35,17 +35,15 @@ describe('AuditLogsController - 单元测试', () => {
         success: true,
         data: expect.objectContaining({
           items: mockLogs,
-          total: 10,
-        }),
+          total: 10
+        })
       });
     });
   });
 
   describe('getEntityHistory', () => {
     test('应该成功获取实体历史', async () => {
-      const mockHistory = [
-        { id: 1, entity_type: 'announcement', entity_id: 1, action: 'create' },
-      ];
+      const mockHistory = [{ id: 1, entity_type: 'announcement', entity_id: 1, action: 'create' }];
       (auditRepo.getEntityHistory as jest.Mock).mockResolvedValue(mockHistory);
 
       mockReq.params = { entity_type: 'announcement', entity_id: '1' };
@@ -54,7 +52,7 @@ describe('AuditLogsController - 单元测试', () => {
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
-        data: mockHistory,
+        data: mockHistory
       });
     });
   });
@@ -71,7 +69,7 @@ describe('AuditLogsController - 单元测试', () => {
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
-        data: mockHistory,
+        data: mockHistory
       });
     });
   });

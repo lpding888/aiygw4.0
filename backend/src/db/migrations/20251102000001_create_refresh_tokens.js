@@ -3,7 +3,7 @@
  *
  * 存储refresh token信息，支持黑名单机制
  */
-exports.up = function(knex) {
+exports.up = function (knex) {
   return knex.schema.createTable('refresh_tokens', (table) => {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
 
@@ -36,6 +36,6 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
+exports.down = function (knex) {
   return knex.schema.dropTableIfExists('refresh_tokens');
 };

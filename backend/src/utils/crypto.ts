@@ -66,14 +66,10 @@ class KeyManager {
     if (!masterKeyEnv) {
       // 艹，开发环境生成临时密钥（生产环境必须配置！）
       if (process.env.NODE_ENV === 'production') {
-        throw new Error(
-          '生产环境必须配置MASTER_KEY环境变量！这tm是安全红线！'
-        );
+        throw new Error('生产环境必须配置MASTER_KEY环境变量！这tm是安全红线！');
       }
 
-      console.warn(
-        '[CRYPTO] 警告：未配置MASTER_KEY，使用临时密钥（仅用于开发）'
-      );
+      console.warn('[CRYPTO] 警告：未配置MASTER_KEY，使用临时密钥（仅用于开发）');
       const tempKey = crypto.randomBytes(KEY_LENGTH);
       this.addKey(1, tempKey);
       return;
@@ -84,9 +80,7 @@ class KeyManager {
       const keyBuffer = Buffer.from(masterKeyEnv, 'base64');
 
       if (keyBuffer.length !== KEY_LENGTH) {
-        throw new Error(
-          `MASTER_KEY长度错误：期望${KEY_LENGTH}字节，实际${keyBuffer.length}字节`
-        );
+        throw new Error(`MASTER_KEY长度错误：期望${KEY_LENGTH}字节，实际${keyBuffer.length}字节`);
       }
 
       this.addKey(1, keyBuffer);
@@ -109,7 +103,7 @@ class KeyManager {
     this.keys.set(version, {
       version,
       key,
-      createdAt: new Date(),
+      createdAt: new Date()
     });
 
     // 更新当前版本
@@ -158,13 +152,9 @@ const keyManager = new KeyManager();
  * @param keyVersion - 密钥版本（可选，默认使用当前版本）
  * @returns EncryptedData - 加密结果
  */
-export function encrypt(
-  plaintext: string | object,
-  keyVersion?: number
-): EncryptedData {
+export function encrypt(plaintext: string | object, keyVersion?: number): EncryptedData {
   // 转换为字符串
-  const plaintextStr =
-    typeof plaintext === 'string' ? plaintext : JSON.stringify(plaintext);
+  const plaintextStr = typeof plaintext === 'string' ? plaintext : JSON.stringify(plaintext);
 
   // 获取密钥
   const { version, key } =
@@ -189,7 +179,7 @@ export function encrypt(
     ciphertext,
     iv: iv.toString('base64'),
     authTag: authTag.toString('base64'),
-    keyVersion: version,
+    keyVersion: version
   };
 }
 
@@ -207,9 +197,7 @@ export function decrypt(encryptedData: EncryptedData): string {
   try {
     key = keyManager.getKey(keyVersion);
   } catch (error: any) {
-    throw new Error(
-      `解密失败：密钥版本${keyVersion}不存在。${error.message}`
-    );
+    throw new Error(`解密失败：密钥版本${keyVersion}不存在。${error.message}`);
   }
 
   // 转换Base64为Buffer
@@ -229,9 +217,7 @@ export function decrypt(encryptedData: EncryptedData): string {
     return plaintext;
   } catch (error: any) {
     // 艹，GCM解密失败通常意味着数据被篡改或密钥错误
-    throw new Error(
-      `解密失败：数据可能被篡改或密钥错误。${error.message}`
-    );
+    throw new Error(`解密失败：数据可能被篡改或密钥错误。${error.message}`);
   }
 }
 
@@ -277,9 +263,7 @@ export function decryptFields(
       try {
         // 解析JSON并解密
         const encryptedData: EncryptedData =
-          typeof obj[field] === 'string'
-            ? JSON.parse(obj[field])
-            : obj[field];
+          typeof obj[field] === 'string' ? JSON.parse(obj[field]) : obj[field];
 
         result[field] = decrypt(encryptedData);
 
@@ -290,9 +274,7 @@ export function decryptFields(
           // 不是JSON，保持字符串
         }
       } catch (error: any) {
-        console.error(
-          `[CRYPTO] 解密字段"${field}"失败: ${error.message}`
-        );
+        console.error(`[CRYPTO] 解密字段"${field}"失败: ${error.message}`);
         // 保留加密数据（不要丢失）
         result[field] = obj[field];
       }
@@ -342,10 +324,7 @@ export function getAvailableKeyVersions(): number[] {
  * @param newKeyVersion - 新密钥版本（可选，默认使用当前版本）
  * @returns EncryptedData - 新密钥加密的数据
  */
-export function reencrypt(
-  encryptedData: EncryptedData,
-  newKeyVersion?: number
-): EncryptedData {
+export function reencrypt(encryptedData: EncryptedData, newKeyVersion?: number): EncryptedData {
   // 1. 用旧密钥解密
   const plaintext = decrypt(encryptedData);
 

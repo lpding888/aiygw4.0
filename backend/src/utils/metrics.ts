@@ -53,7 +53,7 @@ class MetricsCollector {
     lruHits: 0,
     redisHits: 0,
     snapshotHits: 0,
-    dbFallbacks: 0,
+    dbFallbacks: 0
   };
 
   /**
@@ -132,7 +132,7 @@ class MetricsCollector {
       p50: this.percentile(sorted, 0.5),
       p95: this.percentile(sorted, 0.95),
       p99: this.percentile(sorted, 0.99),
-      lastUpdated: Date.now(),
+      lastUpdated: Date.now()
     };
   }
 
@@ -206,7 +206,7 @@ class MetricsCollector {
       lruHits: 0,
       redisHits: 0,
       snapshotHits: 0,
-      dbFallbacks: 0,
+      dbFallbacks: 0
     };
   }
 
@@ -228,7 +228,7 @@ class MetricsCollector {
     return {
       counters: { ...this.counters },
       timings: timingStats,
-      cache: this.getCacheMetrics(),
+      cache: this.getCacheMetrics()
     };
   }
 
@@ -299,10 +299,7 @@ class MetricsCollector {
  * @param fn - 要执行的函数
  * @returns 函数执行结果
  */
-export async function measureTiming<T>(
-  name: string,
-  fn: () => Promise<T>
-): Promise<T> {
+export async function measureTiming<T>(name: string, fn: () => Promise<T>): Promise<T> {
   const start = Date.now();
   try {
     const result = await fn();

@@ -4,7 +4,7 @@
  */
 
 import { Router } from 'express';
-import importExportController from '../controllers/importExport.controller';
+import importExportController from '../controllers/importExport.controller.js';
 
 const router = Router();
 

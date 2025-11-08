@@ -3,7 +3,7 @@
  * 艹，审计日志服务！便捷记录方法
  */
 
-import * as auditRepo from '../repositories/auditLogs.repo';
+import * as auditRepo from '../repositories/auditLogs.repo.js';
 import { Request } from 'express';
 
 /**
@@ -14,7 +14,7 @@ function extractRequestInfo(req?: Request) {
     user_id: (req as any)?.user?.id,
     user_name: (req as any)?.user?.name || (req as any)?.user?.email,
     ip_address: req?.ip || req?.connection?.remoteAddress,
-    user_agent: req?.get('user-agent'),
+    user_agent: req?.get('user-agent')
   };
 }
 
@@ -36,7 +36,7 @@ export async function logCreate(params: {
     action: 'create',
     changes,
     reason,
-    ...extractRequestInfo(req),
+    ...extractRequestInfo(req)
   });
 }
 
@@ -58,7 +58,7 @@ export async function logUpdate(params: {
     action: 'update',
     changes,
     reason,
-    ...extractRequestInfo(req),
+    ...extractRequestInfo(req)
   });
 }
 
@@ -80,7 +80,7 @@ export async function logDelete(params: {
     action: 'delete',
     changes,
     reason,
-    ...extractRequestInfo(req),
+    ...extractRequestInfo(req)
   });
 }
 
@@ -100,7 +100,7 @@ export async function logPublish(params: {
     entity_id,
     action: 'publish',
     reason,
-    ...extractRequestInfo(req),
+    ...extractRequestInfo(req)
   });
 }
 
@@ -120,7 +120,7 @@ export async function logUnpublish(params: {
     entity_id,
     action: 'unpublish',
     reason,
-    ...extractRequestInfo(req),
+    ...extractRequestInfo(req)
   });
 }
 
@@ -140,7 +140,7 @@ export async function logApprove(params: {
     entity_id,
     action: 'approve',
     reason,
-    ...extractRequestInfo(req),
+    ...extractRequestInfo(req)
   });
 }
 
@@ -160,6 +160,6 @@ export async function logReject(params: {
     entity_id,
     action: 'reject',
     reason,
-    ...extractRequestInfo(req),
+    ...extractRequestInfo(req)
   });
 }

@@ -2,8 +2,8 @@
  * 创建供应商密钥表
  */
 
-exports.up = function(knex) {
-  return knex.schema.createTable('provider_secrets', function(table) {
+exports.up = function (knex) {
+  return knex.schema.createTable('provider_secrets', function (table) {
     table.string('id').primary().defaultTo(knex.raw('(UUID())'));
     table.string('provider_id').notNullable().comment('供应商ID');
     table.text('encrypted_secret').notNullable().comment('加密的密钥');
@@ -24,6 +24,6 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
+exports.down = function (knex) {
   return knex.schema.dropTable('provider_secrets');
 };

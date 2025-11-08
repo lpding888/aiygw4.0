@@ -4,8 +4,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import * as benefitRepo from '../repositories/membershipBenefits.repo';
-import { CreateBenefitInput } from '../repositories/membershipBenefits.repo';
+import * as benefitRepo from '../repositories/membershipBenefits.repo.js';
+import type { CreateBenefitInput } from '../repositories/membershipBenefits.repo.js';
 
 export class MembershipBenefitsController {
   /**
@@ -19,7 +19,7 @@ export class MembershipBenefitsController {
         type: type as string,
         status: status as string,
         limit: parseInt(limit as string),
-        offset: parseInt(offset as string),
+        offset: parseInt(offset as string)
       });
 
       res.json({
@@ -27,8 +27,8 @@ export class MembershipBenefitsController {
         data: {
           items: benefits,
           limit: parseInt(limit as string),
-          offset: parseInt(offset as string),
-        },
+          offset: parseInt(offset as string)
+        }
       });
     } catch (error: any) {
       console.error('[BenefitsController] 列出权益失败:', error.message);
@@ -44,12 +44,12 @@ export class MembershipBenefitsController {
       const { type } = req.query;
 
       const benefits = await benefitRepo.getActiveBenefits({
-        type: type as string,
+        type: type as string
       });
 
       res.json({
         success: true,
-        data: benefits,
+        data: benefits
       });
     } catch (error: any) {
       console.error('[BenefitsController] 获取激活权益失败:', error.message);
@@ -68,7 +68,7 @@ export class MembershipBenefitsController {
       if (!benefit) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: '权益不存在' },
+          error: { code: 'NOT_FOUND', message: '权益不存在' }
         });
         return;
       }
@@ -91,7 +91,7 @@ export class MembershipBenefitsController {
       if (!input.name?.trim()) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: '权益名称不能为空' },
+          error: { code: 'VALIDATION_ERROR', message: '权益名称不能为空' }
         });
         return;
       }
@@ -99,7 +99,7 @@ export class MembershipBenefitsController {
       if (!input.key?.trim()) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'key不能为空' },
+          error: { code: 'VALIDATION_ERROR', message: 'key不能为空' }
         });
         return;
       }
@@ -107,7 +107,10 @@ export class MembershipBenefitsController {
       if (!['feature', 'quota', 'service', 'discount'].includes(input.type)) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'type必须是feature/quota/service/discount之一' },
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'type必须是feature/quota/service/discount之一'
+          }
         });
         return;
       }
@@ -136,7 +139,7 @@ export class MembershipBenefitsController {
       if (error.message.includes('不存在')) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: error.message },
+          error: { code: 'NOT_FOUND', message: error.message }
         });
         return;
       }
@@ -156,7 +159,7 @@ export class MembershipBenefitsController {
       if (!deleted) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: '权益不存在' },
+          error: { code: 'NOT_FOUND', message: '权益不存在' }
         });
         return;
       }

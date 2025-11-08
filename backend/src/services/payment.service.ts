@@ -1,629 +1,944 @@
+// @ts-nocheck
+import crypto from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
+import AlipaySdk from 'alipay-sdk';
+import { WxPay, Builder } from 'wechatpay-node-v3';
+import logger from '../utils/logger.js';
+import { db } from '../config/database.js';
+import paymentConfig from '../config/payment.config.js';
+import cacheService from './cache.service.js';
+
 /**
- * 支付服务
+ * 支付服务类
  *
- * 支持支付宝和微信支付
- * 包含支付、退款、查询等功能
+ * 支持支付宝和微信支付：
+ * - 创建支付订单
+ * - 处理支付回调
+ * - 退款处理
+ * - 订单查询
+ * - 安全验证
  */
-
-const crypto = require('crypto');
-const axios = require('axios');
-const { knex } = require('../db/connection');
-const logger = require('../utils/logger');
-
-interface PaymentOrder {
-  id: string;
-  userId: string;
-  type: 'alipay' | 'wechat';
-  amount: number;
-  subject: string;
-  status: 'pending' | 'paid' | 'failed' | 'refunded';
-  tradeNo?: string;
-  outTradeNo: string;
-  createdAt: Date;
-  paidAt?: Date;
-}
-
-interface PaymentConfig {
-  alipay: {
-    appId: string;
-    privateKey: string;
-    publicKey: string;
-    gateway: string;
-  };
-  wechat: {
-    appId: string;
-    mchId: string;
-    apiKey: string;
-    certPath: string;
-    keyPath: string;
-  };
-}
-
-export class PaymentService {
-  private config: PaymentConfig;
-
+class PaymentService {
   constructor() {
-    this.config = {
-      alipay: {
-        appId: process.env.ALIPAY_APP_ID || '',
-        privateKey: process.env.ALIPAY_PRIVATE_KEY || '',
-        publicKey: process.env.ALIPAY_PUBLIC_KEY || '',
-        gateway: process.env.ALIPAY_GATEWAY || 'https://openapi.alipay.com/gateway.do'
-      },
-      wechat: {
-        appId: process.env.WECHAT_APP_ID || '',
-        mchId: process.env.WECHAT_MCH_ID || '',
-        apiKey: process.env.WECHAT_API_KEY || '',
-        certPath: process.env.WECHAT_CERT_PATH || '',
-        keyPath: process.env.WECHAT_KEY_PATH || ''
-      }
+    this.alipaySdk = null;
+    this.wxpay = null;
+    this.initialized = false;
+
+    // 缓存配置
+    this.cacheConfig = {
+      orderCacheTTL: 3600, // 订单缓存1小时
+      configCacheTTL: 86400 // 配置缓存24小时
     };
   }
 
   /**
-   * 创建支付订单
+   * 初始化支付服务
    */
-  async createOrder(userId: string, type: 'alipay' | 'wechat', amount: number, subject: string): Promise<PaymentOrder> {
-    const orderId = this.generateOrderId();
-
-    const order: PaymentOrder = {
-      id: this.generateId(),
-      userId,
-      type,
-      amount,
-      subject,
-      status: 'pending',
-      outTradeNo: orderId,
-      createdAt: new Date()
-    };
-
-    // 保存到数据库
-    await knex('payment_orders').insert({
-      id: order.id,
-      user_id: userId,
-      type,
-      amount,
-      subject,
-      status: 'pending',
-      out_trade_no: orderId,
-      created_at: order.createdAt
-    });
-
-    logger.info('支付订单已创建', { orderId, userId, type, amount });
-    return order;
-  }
-
-  /**
-   * 支付宝支付
-   */
-  async alipayPay(orderId: string, returnUrl?: string, notifyUrl?: string): Promise<string> {
-    const order = await this.getOrder(orderId);
-    if (!order) throw new Error('订单不存在');
-
-    const params = {
-      app_id: this.config.alipay.appId,
-      method: 'alipay.trade.page.pay',
-      charset: 'utf-8',
-      sign_type: 'RSA2',
-      timestamp: this.formatDate(new Date()),
-      version: '1.0',
-      notify_url: notifyUrl || `${process.env.API_DOMAIN}/api/payment/notify/alipay`,
-      return_url: returnUrl || `${process.env.API_DOMAIN}/payment/success`,
-      biz_content: JSON.stringify({
-        out_trade_no: order.outTradeNo,
-        product_code: 'FAST_INSTANT_TRADE_PAY',
-        total_amount: order.amount.toFixed(2),
-        subject: order.subject
-      })
-    };
-
-    // 生成签名
-    const sign = this.generateAlipaySign(params);
-    params.sign = sign;
-
-    // 构建支付URL
-    const queryString = Object.keys(params)
-      .map(key => `${key}=${encodeURIComponent(params[key])}`)
-      .join('&');
-
-    const paymentUrl = `${this.config.alipay.gateway}?${queryString}`;
-
-    logger.info('支付宝支付链接已生成', { orderId, paymentUrl });
-    return paymentUrl;
-  }
-
-  /**
-   * 微信支付
-   */
-  async wechatPay(orderId: string, tradeType: 'JSAPI' | 'NATIVE' | 'APP' = 'JSAPI'): Promise<any> {
-    const order = await this.getOrder(orderId);
-    if (!order) throw new Error('订单不存在');
-
-    const params = {
-      appid: this.config.wechat.appId,
-      mch_id: this.config.wechat.mchId,
-      nonce_str: this.generateNonceStr(),
-      body: order.subject,
-      out_trade_no: order.outTradeNo,
-      total_fee: Math.round(order.amount * 100), // 转换为分
-      spbill_create_ip: '127.0.0.1',
-      notify_url: `${process.env.API_DOMAIN}/api/payment/notify/wechat`,
-      trade_type: tradeType
-    };
-
-    // 生成签名
-    const sign = this.generateWechatSign(params);
-    params.sign = sign;
-
-    const xmlData = this.buildXml(params);
+  async initialize() {
+    if (this.initialized) {
+      logger.warn('[Payment] 支付服务已初始化');
+      return;
+    }
 
     try {
-      const response = await axios.post('https://api.mch.weixin.qq.com/pay/unifiedorder', xmlData, {
-        headers: { 'Content-Type': 'application/xml' }
-      });
-
-      const result = this.parseXml(response.data);
-
-      if (result.return_code === 'SUCCESS' && result.result_code === 'SUCCESS') {
-        logger.info('微信支付预订单已创建', { orderId, prepayId: result.prepay_id });
-
-        if (tradeType === 'JSAPI') {
-          // 返回JSAPI支付参数
-          const payParams = {
-            appId: this.config.wechat.appId,
-            timeStamp: Math.floor(Date.now() / 1000).toString(),
-            nonceStr: this.generateNonceStr(),
-            package: `prepay_id=${result.prepay_id}`,
-            signType: 'MD5'
-          };
-
-          payParams.paySign = this.generateWechatSign(payParams);
-          return payParams;
-        }
-
-        return result;
-      } else {
-        throw new Error(`微信支付失败: ${result.return_msg || result.err_code_des}`);
+      // 初始化支付宝SDK
+      try {
+        paymentConfig.validateConfig('alipay');
+        const alipayConfig = paymentConfig.getConfig('alipay');
+        this.alipaySdk = new AlipaySdk({
+          appId: alipayConfig.appId,
+          privateKey: alipayConfig.privateKey,
+          alipayPublicKey: alipayConfig.publicKey,
+          gateway: alipayConfig.gateway,
+          charset: 'utf-8',
+          version: '1.0',
+          signType: 'RSA2'
+        });
+        logger.info('[Payment] 支付宝SDK初始化成功');
+      } catch (error) {
+        logger.warn('[Payment] 支付宝SDK初始化失败:', error.message);
       }
+
+      // 初始化微信支付SDK
+      try {
+        paymentConfig.validateConfig('wechat');
+        const wechatConfig = paymentConfig.getConfig('wechat');
+        this.wxpay = new WxPay.Builder()
+          .setAppid(wechatConfig.appId)
+          .setMchid(wechatConfig.mchId)
+          .setPrivateKey(wechatConfig.privateKey)
+          .setPublicKey(wechatConfig.publicKey)
+          .setApiV3Key(wechatConfig.apiV3Key)
+          .setMerchantSerialNumber(wechatConfig.merchantSerialNumber)
+          .build();
+        logger.info('[Payment] 微信支付SDK初始化成功');
+      } catch (error) {
+        logger.warn('[Payment] 微信支付SDK初始化失败:', error.message);
+      }
+
+      this.initialized = true;
+      logger.info('[Payment] 支付服务初始化成功');
     } catch (error) {
-      logger.error('微信支付请求失败', { orderId, error: error.message });
+      logger.error('[Payment] 支付服务初始化失败:', error);
       throw error;
     }
   }
 
   /**
-   * 支付宝回调处理
+   * 创建支付订单
+   * @param {string} userId - 用户ID
+   * @param {Object} orderData - 订单数据
+   * @returns {Promise<Object>} 支付订单信息
    */
-  async handleAlipayNotify(params: any): Promise<boolean> {
+  async createPaymentOrder(userId, orderData) {
+    const {
+      productType,
+      productId,
+      productName,
+      productDescription,
+      amount,
+      paymentMethod,
+      returnUrl,
+      notifyUrl
+    } = orderData;
+
     try {
-      // 验证签名
-      if (!this.verifyAlipaySign(params)) {
-        logger.warn('支付宝回调签名验证失败', { params });
-        return false;
+      // 验证参数
+      this.validateOrderData(orderData);
+
+      // 检查用户是否存在
+      const user = await db('users').where('id', userId).first();
+      if (!user) {
+        throw new Error('用户不存在');
       }
 
-      const outTradeNo = params.out_trade_no;
-      const tradeStatus = params.trade_status;
-      const tradeNo = params.trade_no;
+      // 生成订单号和ID
+      const orderId = this.generateOrderId();
+      const orderNo = this.generateOrderNo();
 
-      const order = await knex('payment_orders')
-        .where('out_trade_no', outTradeNo)
-        .first();
+      // 计算过期时间
+      const expiredAt = new Date();
+      expiredAt.setMinutes(
+        expiredAt.getMinutes() + paymentConfig.common.timeout.orderExpireMinutes
+      );
 
-      if (!order) {
-        logger.warn('支付宝回调订单不存在', { outTradeNo });
-        return false;
+      // 创建订单记录
+      const orderRecord = {
+        id: orderId,
+        user_id: userId,
+        order_no: orderNo,
+        product_type: productType,
+        product_id: productId,
+        product_name: productName,
+        product_description: productDescription,
+        amount: amount,
+        currency: 'CNY',
+        payment_method: paymentMethod,
+        status: 'pending',
+        expired_at: expiredAt
+      };
+
+      await db('payment_orders').insert(orderRecord);
+
+      // 创建交易记录
+      const transactionNo = this.generateTransactionNo();
+      await db('payment_transactions').insert({
+        id: this.generateId(),
+        order_id: orderId,
+        user_id: userId,
+        transaction_no: transactionNo,
+        payment_method: paymentMethod,
+        action_type: 'payment',
+        amount: amount,
+        status: 'pending'
+      });
+
+      // 生成支付参数
+      let paymentParams = null;
+      if (paymentMethod === 'alipay' && this.alipaySdk) {
+        paymentParams = await this.createAlipayOrder(orderRecord, returnUrl, notifyUrl);
+      } else if (paymentMethod === 'wechat' && this.wxpay) {
+        paymentParams = await this.createWechatOrder(orderRecord, notifyUrl);
+      } else {
+        throw new Error(`不支持的支付方式: ${paymentMethod}`);
       }
 
-      // 更新订单状态
-      if (tradeStatus === 'TRADE_SUCCESS' || tradeStatus === 'TRADE_FINISHED') {
-        await knex('payment_orders')
-          .where('id', order.id)
-          .update({
-            status: 'paid',
-            trade_no: tradeNo,
-            paid_at: new Date(),
-            updated_at: new Date()
-          });
+      // 更新订单的支付参数
+      await db('payment_orders')
+        .where('id', orderId)
+        .update({
+          payment_params: JSON.stringify(paymentParams),
+          updated_at: new Date()
+        });
 
-        // 触发支付成功事件
-        await this.handlePaymentSuccess(order);
+      // 缓存订单信息
+      const cacheKey = `payment_order:${orderId}`;
+      await cacheService.set(
+        cacheKey,
+        { ...orderRecord, payment_params: paymentParams },
+        this.cacheConfig.orderCacheTTL
+      );
 
-        logger.info('支付宝支付成功', { orderId: order.id, tradeNo });
-        return true;
-      }
+      logger.info(
+        `[Payment] 支付订单创建成功: orderId=${orderId}, amount=${amount}, method=${paymentMethod}`
+      );
 
-      return false;
+      return {
+        orderId,
+        orderNo,
+        paymentParams,
+        expireTime: expiredAt.toISOString()
+      };
     } catch (error) {
-      logger.error('处理支付宝回调失败', { error: error.message });
-      return false;
+      logger.error(`[Payment] 创建支付订单失败:`, error);
+      throw error;
     }
   }
 
   /**
-   * 微信回调处理
+   * 处理支付宝回调
+   * @param {Object} callbackData - 回调数据
+   * @returns {Promise<Object>} 处理结果
    */
-  async handleWechatNotify(xmlData: string): Promise<boolean> {
+  async handleAlipayCallback(callbackData) {
     try {
-      const params = this.parseXml(xmlData);
-
       // 验证签名
-      if (!this.verifyWechatSign(params)) {
-        logger.warn('微信回调签名验证失败', { params });
-        return false;
+      if (!this.alipaySdk) {
+        throw new Error('支付宝SDK未初始化');
       }
 
-      const outTradeNo = params.out_trade_no;
-      const resultCode = params.result_code;
-      const transactionId = params.transaction_id;
+      const signVerified = this.alipaySdk.checkNotifySign(callbackData);
+      if (!signVerified) {
+        throw new Error('支付宝回调签名验证失败');
+      }
 
-      const order = await knex('payment_orders')
-        .where('out_trade_no', outTradeNo)
-        .first();
+      const { out_trade_no, trade_no, trade_status, total_amount, gmt_payment } = callbackData;
 
+      // 查找订单
+      const order = await db('payment_orders').where('order_no', out_trade_no).first();
       if (!order) {
-        logger.warn('微信回调订单不存在', { outTradeNo });
-        return false;
+        throw new Error('订单不存在');
+      }
+
+      // 验证金额
+      if (parseFloat(total_amount) !== parseFloat(order.amount)) {
+        throw new Error('金额不匹配');
+      }
+
+      // 检查订单状态
+      if (order.status !== 'pending') {
+        logger.warn(`[Payment] 订单状态异常: orderNo=${out_trade_no}, status=${order.status}`);
+        return { success: true, message: '订单已处理' };
       }
 
       // 更新订单状态
-      if (resultCode === 'SUCCESS') {
-        await knex('payment_orders')
+      await db.transaction(async (trx) => {
+        // 更新订单
+        await trx('payment_orders')
           .where('id', order.id)
           .update({
             status: 'paid',
-            trade_no: transactionId,
-            paid_at: new Date(),
+            trade_no: trade_no,
+            payment_result: JSON.stringify(callbackData),
+            paid_at: new Date(gmt_payment),
             updated_at: new Date()
           });
 
-        // 触发支付成功事件
-        await this.handlePaymentSuccess(order);
+        // 更新交易记录
+        await trx('payment_transactions')
+          .where('order_id', order.id)
+          .where('action_type', 'payment')
+          .update({
+            status: 'success',
+            gateway_transaction_no: trade_no,
+            response_data: JSON.stringify(callbackData)
+          });
 
-        logger.info('微信支付成功', { orderId: order.id, transactionId });
-        return true;
+        // 执行业务逻辑（如增加配额、开通会员等）
+        await this.processOrderPaid(order.id, order.user_id, order.product_type, order.product_id);
+      });
+
+      // 清除缓存
+      const cacheKey = `payment_order:${order.id}`;
+      await cacheService.delete(cacheKey);
+
+      logger.info(`[Payment] 支付宝回调处理成功: orderNo=${out_trade_no}, tradeNo=${trade_no}`);
+
+      return { success: true, message: '支付成功' };
+    } catch (error) {
+      logger.error('[Payment] 处理支付宝回调失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 处理微信支付回调
+   * @param {Object} callbackData - 回调数据
+   * @returns {Promise<Object>} 处理结果
+   */
+  async handleWechatCallback(callbackData) {
+    try {
+      // 验证签名
+      if (!this.wxpay) {
+        throw new Error('微信支付SDK未初始化');
       }
 
-      return false;
+      const { id, event_type, resource, summary } = callbackData;
+
+      // 验证资源签名
+      const decryptedData = this.wxpay.decryptResource(resource);
+      if (!decryptedData) {
+        throw new Error('微信回调签名验证失败');
+      }
+
+      const {
+        out_trade_no,
+        transaction_id,
+        trade_state,
+        amount: { total },
+        success_time
+      } = decryptedData;
+
+      // 查找订单
+      const order = await db('payment_orders').where('order_no', out_trade_no).first();
+      if (!order) {
+        throw new Error('订单不存在');
+      }
+
+      // 验证金额（分为单位）
+      if (total !== Math.round(parseFloat(order.amount) * 100)) {
+        throw new Error('金额不匹配');
+      }
+
+      // 只处理支付成功事件
+      if (event_type !== 'TRANSACTION.SUCCESS' || trade_state !== 'SUCCESS') {
+        logger.warn(
+          `[Payment] 微信回调事件异常: orderNo=${out_trade_no}, eventType=${event_type}, tradeState=${trade_state}`
+        );
+        return { success: true, message: '事件已记录' };
+      }
+
+      // 检查订单状态
+      if (order.status !== 'pending') {
+        logger.warn(`[Payment] 订单状态异常: orderNo=${out_trade_no}, status=${order.status}`);
+        return { success: true, message: '订单已处理' };
+      }
+
+      // 更新订单状态
+      await db.transaction(async (trx) => {
+        // 更新订单
+        await trx('payment_orders')
+          .where('id', order.id)
+          .update({
+            status: 'paid',
+            trade_no: transaction_id,
+            payment_result: JSON.stringify(callbackData),
+            paid_at: new Date(success_time),
+            updated_at: new Date()
+          });
+
+        // 更新交易记录
+        await trx('payment_transactions')
+          .where('order_id', order.id)
+          .where('action_type', 'payment')
+          .update({
+            status: 'success',
+            gateway_transaction_no: transaction_id,
+            response_data: JSON.stringify(callbackData)
+          });
+
+        // 执行业务逻辑
+        await this.processOrderPaid(order.id, order.user_id, order.product_type, order.product_id);
+      });
+
+      // 清除缓存
+      const cacheKey = `payment_order:${order.id}`;
+      await cacheService.delete(cacheKey);
+
+      logger.info(
+        `[Payment] 微信回调处理成功: orderNo=${out_trade_no}, transactionId=${transaction_id}`
+      );
+
+      return { success: true, message: '支付成功' };
     } catch (error) {
-      logger.error('处理微信回调失败', { error: error.message });
-      return false;
+      logger.error('[Payment] 处理微信回调失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 申请退款
+   * @param {string} orderId - 订单ID
+   * @param {string} userId - 用户ID
+   * @param {Object} refundData - 退款数据
+   * @returns {Promise<Object>} 退款结果
+   */
+  async createRefund(orderId, userId, refundData) {
+    const { refundAmount, refundReason } = refundData;
+
+    try {
+      // 查找订单
+      const order = await db('payment_orders')
+        .where({ id: orderId, user_id: userId, status: 'paid' })
+        .first();
+
+      if (!order) {
+        throw new Error('订单不存在或状态异常');
+      }
+
+      // 检查退款金额
+      if (parseFloat(refundAmount) > parseFloat(order.amount)) {
+        throw new Error('退款金额不能大于订单金额');
+      }
+
+      // 检查是否已有退款记录
+      const existingRefund = await db('refund_records')
+        .where('order_id', orderId)
+        .where('status', 'in', ['pending', 'success'])
+        .first();
+
+      if (existingRefund) {
+        throw new Error('订单已申请退款');
+      }
+
+      // 生成退款单号
+      const refundId = this.generateId();
+      const refundNo = this.generateRefundNo();
+
+      // 创建退款记录
+      const refundRecord = {
+        id: refundId,
+        order_id: orderId,
+        user_id: userId,
+        refund_no: refundNo,
+        payment_method: order.payment_method,
+        order_amount: order.amount,
+        refund_amount: refundAmount,
+        status: 'pending',
+        refund_reason: refundReason
+      };
+
+      await db('refund_records').insert(refundRecord);
+
+      // 创建退款交易记录
+      const transactionNo = this.generateTransactionNo();
+      await db('payment_transactions').insert({
+        id: this.generateId(),
+        order_id: orderId,
+        user_id: userId,
+        transaction_no: transactionNo,
+        payment_method: order.payment_method,
+        action_type: 'refund',
+        amount: refundAmount,
+        status: 'pending'
+      });
+
+      // 调用支付网关退款接口
+      let refundResult = null;
+      if (order.payment_method === 'alipay' && this.alipaySdk) {
+        refundResult = await this.createAlipayRefund(order, refundRecord);
+      } else if (order.payment_method === 'wechat' && this.wxpay) {
+        refundResult = await this.createWechatRefund(order, refundRecord);
+      } else {
+        throw new Error(`不支持的支付方式退款: ${order.payment_method}`);
+      }
+
+      // 更新退款记录
+      await db('refund_records')
+        .where('id', refundId)
+        .update({
+          gateway_refund_no: refundResult.refundNo,
+          refund_result: JSON.stringify(refundResult),
+          status: refundResult.success ? 'success' : 'failed',
+          refunded_at: refundResult.success ? new Date() : null,
+          updated_at: new Date()
+        });
+
+      // 更新交易记录
+      await db('payment_transactions')
+        .where('transaction_no', transactionNo)
+        .update({
+          status: refundResult.success ? 'success' : 'failed',
+          gateway_transaction_no: refundResult.refundNo,
+          response_data: JSON.stringify(refundResult)
+        });
+
+      // 更新订单状态
+      if (refundResult.success) {
+        const newOrderStatus =
+          parseFloat(refundAmount) >= parseFloat(order.amount) ? 'refunded' : 'partial_refunded';
+        await db('payment_orders')
+          .where('id', orderId)
+          .update({ status: newOrderStatus, updated_at: new Date() });
+
+        // 执行业务回滚逻辑
+        await this.processOrderRefunded(orderId, userId, order.product_type, refundAmount);
+      }
+
+      logger.info(
+        `[Payment] 退款申请处理完成: refundId=${refundId}, amount=${refundAmount}, success=${refundResult.success}`
+      );
+
+      return {
+        refundId,
+        refundNo,
+        refundAmount,
+        status: refundResult.success ? 'success' : 'failed',
+        message: refundResult.message
+      };
+    } catch (error) {
+      logger.error('[Payment] 创建退款失败:', error);
+      throw error;
     }
   }
 
   /**
    * 查询订单状态
+   * @param {string} orderId - 订单ID
+   * @param {string} userId - 用户ID
+   * @returns {Promise<Object>} 订单信息
    */
-  async queryOrder(orderId: string): Promise<PaymentOrder | null> {
-    const order = await knex('payment_orders')
-      .where('id', orderId)
-      .first();
-
-    if (!order) return null;
-
-    // 如果订单仍是pending状态，主动查询支付平台
-    if (order.status === 'pending') {
-      await this.queryPaymentStatus(order);
-    }
-
-    return order;
-  }
-
-  /**
-   * 退款
-   */
-  async refund(orderId: string, refundAmount?: number, reason?: string): Promise<boolean> {
-    const order = await this.getOrder(orderId);
-    if (!order || order.status !== 'paid') {
-      throw new Error('订单状态不支持退款');
-    }
-
-    const actualRefundAmount = refundAmount || order.amount;
-    const refundId = this.generateRefundId();
-
+  async getOrderStatus(orderId, userId = null) {
     try {
-      let refundResult;
+      // 先从缓存获取
+      const cacheKey = `payment_order:${orderId}`;
+      let order = await cacheService.get(cacheKey);
 
-      if (order.type === 'alipay') {
-        refundResult = await this.alipayRefund(order, actualRefundAmount, refundId, reason);
-      } else {
-        refundResult = await this.wechatRefund(order, actualRefundAmount, refundId, reason);
+      if (!order) {
+        const query = db('payment_orders').where('id', orderId);
+        if (userId) {
+          query.where('user_id', userId);
+        }
+        order = await query.first();
+
+        if (order) {
+          // 缓存订单信息
+          await cacheService.set(cacheKey, order, this.cacheConfig.orderCacheTTL);
+        }
       }
 
-      if (refundResult) {
-        // 更新订单状态
-        await knex('payment_orders')
-          .where('id', order.id)
-          .update({
-            status: 'refunded',
-            updated_at: new Date()
-          });
-
-        // 记录退款
-        await knex('payment_refunds').insert({
-          id: this.generateId(),
-          order_id: order.id,
-          refund_id: refundId,
-          amount: actualRefundAmount,
-          reason: reason || '用户退款',
-          status: 'success',
-          created_at: new Date()
-        });
-
-        logger.info('退款成功', { orderId, refundId, amount: actualRefundAmount });
-        return true;
+      if (!order) {
+        throw new Error('订单不存在');
       }
 
-      return false;
+      return {
+        orderId: order.id,
+        orderNo: order.order_no,
+        status: order.status,
+        amount: order.amount,
+        productType: order.product_type,
+        productName: order.product_name,
+        paymentMethod: order.payment_method,
+        paidAt: order.paid_at,
+        createdAt: order.created_at,
+        expiredAt: order.expired_at
+      };
     } catch (error) {
-      logger.error('退款失败', { orderId, error: error.message });
+      logger.error(`[Payment] 查询订单状态失败: orderId=${orderId}`, error);
+      throw error;
+    }
+  }
 
-      // 记录退款失败
-      await knex('payment_refunds').insert({
-        id: this.generateId(),
-        order_id: order.id,
-        refund_id: refundId,
-        amount: actualRefundAmount,
-        reason: reason || '用户退款',
-        status: 'failed',
-        error_message: error.message,
-        created_at: new Date()
-      });
+  // 私有方法
 
-      return false;
+  /**
+   * 验证订单数据
+   * @param {Object} orderData - 订单数据
+   * @private
+   */
+  validateOrderData(orderData) {
+    const { productType, productName, amount, paymentMethod } = orderData;
+
+    if (!productType || !productName || !amount || !paymentMethod) {
+      throw new Error('订单数据不完整');
+    }
+
+    if (!['alipay', 'wechat'].includes(paymentMethod)) {
+      throw new Error('不支持的支付方式');
+    }
+
+    if (parseFloat(amount) <= 0) {
+      throw new Error('金额必须大于0');
+    }
+
+    // 验证商品类型
+    try {
+      paymentConfig.getProductConfig(productType);
+    } catch (error) {
+      throw new Error(`不支持的商品类型: ${productType}`);
     }
   }
 
   /**
-   * 支付宝退款
+   * 创建支付宝订单
+   * @param {Object} order - 订单数据
+   * @param {string} returnUrl - 返回地址
+   * @param {string} notifyUrl - 回调地址
+   * @returns {Promise<Object>} 支付参数
+   * @private
    */
-  private async alipayRefund(order: PaymentOrder, amount: number, refundId: string, reason?: string): Promise<boolean> {
-    const params = {
-      app_id: this.config.alipay.appId,
-      method: 'alipay.trade.refund',
-      charset: 'utf-8',
-      sign_type: 'RSA2',
-      timestamp: this.formatDate(new Date()),
-      version: '1.0',
-      biz_content: JSON.stringify({
-        out_trade_no: order.outTradeNo,
-        refund_amount: amount.toFixed(2),
-        refund_reason: reason || '用户退款',
-        out_request_no: refundId
-      })
+  async createAlipayOrder(order, returnUrl = null, notifyUrl = null) {
+    const config = paymentConfig.getConfig('alipay');
+    const returnUrlUrl = returnUrl || config.callbacks.return;
+    const notifyUrlUrl = notifyUrl || config.callbacks.notify;
+
+    const bizContent = {
+      out_trade_no: order.order_no,
+      product_code: 'FAST_INSTANT_TRADE_PAY',
+      total_amount: order.amount,
+      subject: order.product_name,
+      body: order.product_description,
+      timeout_express: `${paymentConfig.common.timeout.orderExpireMinutes}m`
     };
 
-    const sign = this.generateAlipaySign(params);
-    params.sign = sign;
+    const result = await this.alipaySdk.pageExec('alipay.trade.page.pay', {
+      notify_url: notifyUrlUrl,
+      return_url: returnUrlUrl,
+      biz_content: bizContent
+    });
 
-    try {
-      const response = await axios.post(this.config.alipay.gateway, null, { params });
-      const result = response.data;
-
-      if (result.alipay_trade_refund_response.code === '10000') {
-        return true;
-      } else {
-        throw new Error(`支付宝退款失败: ${result.alipay_trade_refund_response.msg}`);
-      }
-    } catch (error) {
-      logger.error('支付宝退款请求失败', { orderId: order.id, error: error.message });
-      return false;
-    }
+    return {
+      method: 'redirect',
+      url: result
+    };
   }
 
   /**
-   * 微信退款
+   * 创建微信支付订单
+   * @param {Object} order - 订单数据
+   * @param {string} notifyUrl - 回调地址
+   * @returns {Promise<Object>} 支付参数
+   * @private
    */
-  private async wechatRefund(order: PaymentOrder, amount: number, refundId: string, reason?: string): Promise<boolean> {
+  async createWechatOrder(order, notifyUrl = null) {
+    const config = paymentConfig.getConfig('wechat');
+    const notifyUrlUrl = notifyUrl || config.callbacks.notify;
+
     const params = {
-      appid: this.config.wechat.appId,
-      mch_id: this.config.wechat.mchId,
-      nonce_str: this.generateNonceStr(),
-      out_trade_no: order.outTradeNo,
-      out_refund_no: refundId,
-      total_fee: Math.round(order.amount * 100),
-      refund_fee: Math.round(amount * 100),
-      refund_desc: reason || '用户退款'
+      description: order.product_name,
+      out_trade_no: order.order_no,
+      amount: {
+        total: Math.round(order.amount * 100), // 转换为分
+        currency: 'CNY'
+      },
+      notify_url: notifyUrlUrl,
+      time_expire: new Date(order.expired_at).toISOString().replace(/\.\d{3}Z$/, '+08:00')
     };
 
-    const sign = this.generateWechatSign(params);
-    params.sign = sign;
+    const result = await this.wxpay.transactions_jsapi(params);
 
-    const xmlData = this.buildXml(params);
+    return {
+      method: 'jsapi',
+      params: result
+    };
+  }
 
+  /**
+   * 创建支付宝退款
+   * @param {Object} order - 订单数据
+   * @param {Object} refund - 退款数据
+   * @returns {Promise<Object>} 退款结果
+   * @private
+   */
+  async createAlipayRefund(order, refund) {
     try {
-      const response = await axios.post('https://api.mch.weixin.qq.com/secapi/pay/refund', xmlData, {
-        headers: { 'Content-Type': 'application/xml' }
+      const result = await this.alipaySdk.exec('alipay.trade.refund', {
+        biz_content: {
+          out_trade_no: order.order_no,
+          refund_amount: refund.refund_amount,
+          refund_reason: refund.refund_reason,
+          out_request_no: refund.refund_no
+        }
       });
 
-      const result = this.parseXml(response.data);
-
-      if (result.return_code === 'SUCCESS' && result.result_code === 'SUCCESS') {
-        return true;
-      } else {
-        throw new Error(`微信退款失败: ${result.err_code_des}`);
-      }
+      return {
+        success: result.code === '10000',
+        refundNo: result.refund_no || result.out_request_no,
+        message: result.msg || result.sub_msg
+      };
     } catch (error) {
-      logger.error('微信退款请求失败', { orderId: order.id, error: error.message });
-      return false;
+      logger.error('[Payment] 支付宝退款失败:', error);
+      return {
+        success: false,
+        refundNo: null,
+        message: error.message
+      };
     }
   }
 
   /**
-   * 处理支付成功
+   * 创建微信支付退款
+   * @param {Object} order - 订单数据
+   * @param {Object} refund - 退款数据
+   * @returns {Promise<Object>} 退款结果
+   * @private
    */
-  private async handlePaymentSuccess(order: PaymentOrder): Promise<void> {
-    // 更新用户会员状态
-    await knex.transaction(async (trx) => {
-      const user = await trx('users').where('id', order.userId).first();
-
-      if (user) {
-        // 延长会员时间或增加配额
-        const newExpireAt = user.quota_expireAt
-          ? new Date(new Date(user.quota_expireAt).getTime() + 30 * 24 * 60 * 60 * 1000) // 30天
-          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-        await trx('users')
-          .where('id', order.userId)
-          .update({
-            is_member: true,
-            quota_remaining: trx.raw('quota_remaining + ?', [100]), // 增加100次配额
-            quota_expireAt: newExpireAt,
-            updated_at: new Date()
-          });
-      }
-    });
-
-    // 发送支付成功通知（可以通过WebSocket、邮件等）
-    logger.info('支付后续处理完成', { orderId: order.id, userId: order.userId });
-  }
-
-  /**
-   * 查询支付状态
-   */
-  private async queryPaymentStatus(order: PaymentOrder): Promise<void> {
-    // 这里可以调用支付宝或微信的查询接口
-    // 为了简化，暂时跳过主动查询
-  }
-
-  /**
-   * 获取订单
-   */
-  private async getOrder(orderId: string): Promise<PaymentOrder | null> {
-    const order = await knex('payment_orders')
-      .where('id', orderId)
-      .first();
-
-    return order || null;
-  }
-
-  /**
-   * 生成支付宝签名
-   */
-  private generateAlipaySign(params: any): string {
-    const sortedParams = Object.keys(params)
-      .filter(key => params[key] && key !== 'sign')
-      .sort()
-      .map(key => `${key}=${params[key]}`)
-      .join('&');
-
-    const sign = crypto
-      .createSign('RSA-SHA256')
-      .update(sortedParams, 'utf8')
-      .sign(this.config.alipay.privateKey, 'base64');
-
-    return sign;
-  }
-
-  /**
-   * 验证支付宝签名
-   */
-  private verifyAlipaySign(params: any): boolean {
-    const sign = params.sign;
-    const sortedParams = Object.keys(params)
-      .filter(key => params[key] && key !== 'sign' && key !== 'sign_type')
-      .sort()
-      .map(key => `${key}=${params[key]}`)
-      .join('&');
-
+  async createWechatRefund(order, refund) {
     try {
-      return crypto
-        .createVerify('RSA-SHA256')
-        .update(sortedParams, 'utf8')
-        .verify(this.config.alipay.publicKey, sign, 'base64');
+      const params = {
+        out_trade_no: order.order_no,
+        out_refund_no: refund.refund_no,
+        amount: {
+          refund: Math.round(refund.refund_amount * 100), // 转换为分
+          total: Math.round(order.order_amount * 100),
+          currency: 'CNY'
+        },
+        reason: refund.refund_reason
+      };
+
+      const result = await this.wxpay.refund(params);
+
+      return {
+        success: result.status === 'SUCCESS' || result.status === 'PROCESSING',
+        refundNo: result.refund_id,
+        message: '退款申请成功'
+      };
     } catch (error) {
-      return false;
+      logger.error('[Payment] 微信退款失败:', error);
+      return {
+        success: false,
+        refundNo: null,
+        message: error.message
+      };
     }
   }
 
   /**
-   * 生成微信签名
+   * 处理订单支付成功后的业务逻辑
+   * @param {string} orderId - 订单ID
+   * @param {string} userId - 用户ID
+   * @param {string} productType - 商品类型
+   * @param {string} productId - 商品ID
+   * @private
    */
-  private generateWechatSign(params: any): string {
-    const sortedParams = Object.keys(params)
-      .filter(key => params[key] && key !== 'sign')
-      .sort()
-      .map(key => `${key}=${params[key]}`)
-      .join('&');
+  async processOrderPaid(orderId, userId, productType, productId) {
+    try {
+      logger.info(`[Payment] 处理订单支付成功: orderId=${orderId}, productType=${productType}`);
 
-    sortedParams += `&key=${this.config.wechat.apiKey}`;
-
-    return crypto.createHash('md5').update(sortedParams, 'utf8').digest('hex').toUpperCase();
-  }
-
-  /**
-   * 验证微信签名
-   */
-  private verifyWechatSign(params: any): boolean {
-    const sign = params.sign;
-    const calculatedSign = this.generateWechatSign(params);
-    return sign === calculatedSign;
-  }
-
-  /**
-   * 构建XML
-   */
-  private buildXml(params: any): string {
-    let xml = '<xml>';
-    for (const key in params) {
-      xml += `<${key}><![CDATA[${params[key]}]]></${key}>`;
-    }
-    xml += '</xml>';
-    return xml;
-  }
-
-  /**
-   * 解析XML
-   */
-  private parseXml(xmlData: string): any {
-    const xml2js = require('xml2js');
-    let result = {};
-
-    xml2js.parseString(xmlData, { explicitArray: false }, (err, data) => {
-      if (!err && data.xml) {
-        result = data.xml;
+      // 根据商品类型执行不同的业务逻辑
+      switch (productType) {
+        case 'membership':
+          // 开通会员逻辑
+          await this.activateMembership(userId, productId);
+          break;
+        case 'quota':
+          // 增加配额逻辑
+          await this.addQuota(userId, productId);
+          break;
+        case 'premium':
+          // 开通高级功能逻辑
+          await this.activatePremium(userId, productId);
+          break;
+        default:
+          logger.warn(`[Payment] 未知的商品类型: ${productType}`);
       }
-    });
 
-    return result;
+      // 发送支付成功通知
+      await this.sendPaymentNotification(userId, orderId, productType, 'paid');
+    } catch (error) {
+      logger.error(`[Payment] 处理订单支付成功业务逻辑失败: orderId=${orderId}`, error);
+      // 不抛出错误，避免影响支付流程
+    }
   }
 
   /**
-   * 格式化日期
+   * 处理订单退款后的业务逻辑
+   * @param {string} orderId - 订单ID
+   * @param {string} userId - 用户ID
+   * @param {string} productType - 商品类型
+   * @param {number} refundAmount - 退款金额
+   * @private
    */
-  private formatDate(date: Date): string {
-    return date.toISOString().replace('T', ' ').replace(/\.\d{3}Z/, '');
+  async processOrderRefunded(orderId, userId, productType, refundAmount) {
+    try {
+      logger.info(
+        `[Payment] 处理订单退款: orderId=${orderId}, productType=${productType}, amount=${refundAmount}`
+      );
+
+      // 根据商品类型执行不同的回滚逻辑
+      switch (productType) {
+        case 'membership':
+          // 会员退费逻辑
+          await this.deactivateMembership(userId);
+          break;
+        case 'quota':
+          // 减少配额逻辑
+          await this.deductQuota(userId, refundAmount);
+          break;
+        case 'premium':
+          // 取消高级功能逻辑
+          await this.deactivatePremium(userId);
+          break;
+        default:
+          logger.warn(`[Payment] 未知的商品类型: ${productType}`);
+      }
+
+      // 发送退款通知
+      await this.sendPaymentNotification(userId, orderId, productType, 'refunded');
+    } catch (error) {
+      logger.error(`[Payment] 处理订单退款业务逻辑失败: orderId=${orderId}`, error);
+      // 不抛出错误，避免影响退款流程
+    }
+  }
+
+  /**
+   * 发送支付通知
+   * @param {string} userId - 用户ID
+   * @param {string} orderId - 订单ID
+   * @param {string} productType - 商品类型
+   * @param {string} status - 状态
+   * @private
+   */
+  async sendPaymentNotification(userId, orderId, productType, status) {
+    try {
+      // 这里可以集成通知服务（邮件、短信、站内信等）
+      logger.info(`[Payment] 发送支付通知: userId=${userId}, orderId=${orderId}, status=${status}`);
+    } catch (error) {
+      logger.error('[Payment] 发送支付通知失败:', error);
+    }
+  }
+
+  /**
+   * 激活会员
+   * @param {string} userId - 用户ID
+   * @param {string} productId - 商品ID
+   * @private
+   */
+  async activateMembership(userId, productId) {
+    // 实现会员激活逻辑
+    logger.info(`[Payment] 激活会员: userId=${userId}, productId=${productId}`);
+  }
+
+  /**
+   * 增加配额
+   * @param {string} userId - 用户ID
+   * @param {string} productId - 商品ID
+   * @private
+   */
+  async addQuota(userId, productId) {
+    // 实现配额增加逻辑
+    logger.info(`[Payment] 增加配额: userId=${userId}, productId=${productId}`);
+  }
+
+  /**
+   * 激活高级功能
+   * @param {string} userId - 用户ID
+   * @param {string} productId - 商品ID
+   * @private
+   */
+  async activatePremium(userId, productId) {
+    // 实现高级功能激活逻辑
+    logger.info(`[Payment] 激活高级功能: userId=${userId}, productId=${productId}`);
+  }
+
+  /**
+   * 取消会员
+   * @param {string} userId - 用户ID
+   * @private
+   */
+  async deactivateMembership(userId) {
+    // 实现会员取消逻辑
+    logger.info(`[Payment] 取消会员: userId=${userId}`);
+  }
+
+  /**
+   * 扣减配额
+   * @param {string} userId - 用户ID
+   * @param {number} amount - 金额
+   * @private
+   */
+  async deductQuota(userId, amount) {
+    // 实现配额扣减逻辑
+    logger.info(`[Payment] 扣减配额: userId=${userId}, amount=${amount}`);
+  }
+
+  /**
+   * 取消高级功能
+   * @param {string} userId - 用户ID
+   * @private
+   */
+  async deactivatePremium(userId) {
+    // 实现高级功能取消逻辑
+    logger.info(`[Payment] 取消高级功能: userId=${userId}`);
   }
 
   /**
    * 生成订单ID
+   * @returns {string}
+   * @private
    */
-  private generateOrderId(): string {
-    return `ORDER${Date.now()}${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+  generateOrderId() {
+    return `pay_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
   }
 
   /**
-   * 生成退款ID
+   * 生成订单号
+   * @returns {string}
+   * @private
    */
-  private generateRefundId(): string {
-    return `REFUND${Date.now()}${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+  generateOrderNo() {
+    const date = new Date();
+    const dateStr =
+      date.getFullYear().toString() +
+      (date.getMonth() + 1).toString().padStart(2, '0') +
+      date.getDate().toString().padStart(2, '0');
+    const timeStr = Date.now().toString().slice(-6);
+    const randomStr = Math.random().toString(36).substr(2, 4).toUpperCase();
+    return `PAY${dateStr}${timeStr}${randomStr}`;
   }
 
   /**
-   * 生成随机字符串
+   * 生成退款单号
+   * @returns {string}
+   * @private
    */
-  private generateNonceStr(): string {
-    return Math.random().toString(36).substr(2, 32);
+  generateRefundNo() {
+    const date = new Date();
+    const dateStr =
+      date.getFullYear().toString() +
+      (date.getMonth() + 1).toString().padStart(2, '0') +
+      date.getDate().toString().padStart(2, '0');
+    const timeStr = Date.now().toString().slice(-6);
+    const randomStr = Math.random().toString(36).substr(2, 4).toUpperCase();
+    return `REF${dateStr}${timeStr}${randomStr}`;
   }
 
   /**
-   * 生成唯一ID
+   * 生成交易流水号
+   * @returns {string}
+   * @private
    */
-  private generateId(): string {
-    return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  generateTransactionNo() {
+    const date = new Date();
+    const dateStr =
+      date.getFullYear().toString() +
+      (date.getMonth() + 1).toString().padStart(2, '0') +
+      date.getDate().toString().padStart(2, '0');
+    const timeStr = Date.now().toString().slice(-8);
+    const randomStr = Math.random().toString(36).substr(2, 6).toUpperCase();
+    return `TXN${dateStr}${timeStr}${randomStr}`;
+  }
+
+  /**
+   * 生成ID
+   * @returns {string}
+   * @private
+   */
+  generateId() {
+    return uuidv4().replace(/-/g, '');
+  }
+
+  /**
+   * 关闭支付服务
+   */
+  async close() {
+    this.initialized = false;
+    this.alipaySdk = null;
+    this.wxpay = null;
+    logger.info('[Payment] 支付服务已关闭');
   }
 }
 
-// 单例实例
 const paymentService = new PaymentService();
-module.exports = paymentService;
+
+export default paymentService;

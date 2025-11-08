@@ -20,7 +20,7 @@
  */
 
 import { LRUCache } from 'lru-cache';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 
 /**
  * 缓存配置
@@ -68,7 +68,7 @@ export class CacheManager {
     l1Hits: 0,
     l1Misses: 0,
     l2Hits: 0,
-    l2Misses: 0,
+    l2Misses: 0
   };
 
   constructor(config: CacheConfig = {}) {
@@ -77,7 +77,7 @@ export class CacheManager {
       l1DefaultTtl = 5 * 60 * 1000, // 5分钟
       l2DefaultTtl = 30 * 60, // 30分钟
       redisConfig,
-      namespace = 'cache',
+      namespace = 'cache'
     } = config;
 
     this.namespace = namespace;
@@ -87,7 +87,7 @@ export class CacheManager {
     this.l1Cache = new LRUCache({
       max: l1MaxSize,
       ttl: l1DefaultTtl,
-      updateAgeOnGet: true, // 访问时更新age
+      updateAgeOnGet: true // 访问时更新age
     });
 
     // 初始化L2缓存（Redis）
@@ -105,14 +105,14 @@ export class CacheManager {
               return null; // 停止重试
             }
             return Math.min(times * 100, 2000); // 延迟100ms, 200ms, 300ms
-          },
+          }
         });
 
         this.l2Cache.on('connect', () => {
           console.log('[CACHE] Redis连接成功');
         });
 
-        this.l2Cache.on('error', (err) => {
+        this.l2Cache.on('error', (err: any) => {
           console.error('[CACHE] Redis错误:', err.message);
         });
       } catch (error: any) {
@@ -278,7 +278,7 @@ export class CacheManager {
   getStats(): CacheStats {
     return {
       ...this.stats,
-      l1Size: this.l1Cache.size,
+      l1Size: this.l1Cache.size
     };
   }
 
@@ -290,7 +290,7 @@ export class CacheManager {
       l1Hits: 0,
       l1Misses: 0,
       l2Hits: 0,
-      l2Misses: 0,
+      l2Misses: 0
     };
   }
 
@@ -306,7 +306,7 @@ export class CacheManager {
     return {
       l1: l1Total > 0 ? this.stats.l1Hits / l1Total : 0,
       l2: l2Total > 0 ? this.stats.l2Hits / l2Total : 0,
-      overall: overallTotal > 0 ? overallHits / overallTotal : 0,
+      overall: overallTotal > 0 ? overallHits / overallTotal : 0
     };
   }
 
@@ -326,5 +326,5 @@ export const globalCache = new CacheManager({
   namespace: 'cms',
   l1MaxSize: 500,
   l1DefaultTtl: 5 * 60 * 1000, // 5分钟
-  l2DefaultTtl: 30 * 60, // 30分钟
+  l2DefaultTtl: 30 * 60 // 30分钟
 });

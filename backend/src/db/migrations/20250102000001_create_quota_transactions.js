@@ -4,7 +4,7 @@
  * 用途: 记录配额操作的各个阶段状态
  * 三阶段: reserved(预留) → confirmed(确认) | cancelled(取消)
  */
-exports.up = function(knex) {
+exports.up = function (knex) {
   return knex.schema.createTable('quota_transactions', (table) => {
     // 主键 - 使用UUID
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
@@ -19,13 +19,15 @@ exports.up = function(knex) {
     table.integer('amount').notNullable().unsigned().defaultTo(1).comment('配额数量');
 
     // 阶段状态 - 枚举类型
-    table.enum('phase', ['reserved', 'confirmed', 'cancelled'])
+    table
+      .enum('phase', ['reserved', 'confirmed', 'cancelled'])
       .notNullable()
       .defaultTo('reserved')
       .comment('事务阶段: reserved-预留, confirmed-确认, cancelled-取消');
 
     // 幂等性标记 - 是否已完成处理
-    table.boolean('idempotent_done')
+    table
+      .boolean('idempotent_done')
       .notNullable()
       .defaultTo(true)
       .comment('幂等性标记，防止重复处理');
@@ -42,6 +44,6 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
+exports.down = function (knex) {
   return knex.schema.dropTableIfExists('quota_transactions');
 };

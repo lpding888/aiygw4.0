@@ -9,14 +9,17 @@
  * - 个人简介和头像管理
  */
 
-exports.up = async function(knex) {
+exports.up = async function (knex) {
   // 扩展用户主表 - 添加基础个人信息
   await knex.schema.alterTable('users', (table) => {
     // 基础信息扩展
     table.string('first_name', 50).nullable().comment('名');
     table.string('last_name', 50).nullable().comment('姓');
     table.date('birth_date').nullable().comment('出生日期');
-    table.enum('gender', ['male', 'female', 'other', 'prefer_not_to_say']).nullable().comment('性别');
+    table
+      .enum('gender', ['male', 'female', 'other', 'prefer_not_to_say'])
+      .nullable()
+      .comment('性别');
     table.string('phone', 20).nullable().comment('手机号');
     table.string('country', 50).nullable().comment('国家');
     table.string('state', 50).nullable().comment('省/州');
@@ -36,7 +39,10 @@ exports.up = async function(knex) {
     table.text('bio').nullable().comment('个人简介');
 
     // 认证和安全
-    table.enum('verification_level', ['basic', 'verified', 'premium']).defaultTo('basic').comment('认证级别');
+    table
+      .enum('verification_level', ['basic', 'verified', 'premium'])
+      .defaultTo('basic')
+      .comment('认证级别');
     table.boolean('phone_verified').defaultTo(false).comment('手机是否验证');
     table.boolean('email_verified').defaultTo(false).comment('邮箱是否验证');
     table.timestamp('phone_verified_at').nullable().comment('手机验证时间');
@@ -49,7 +55,10 @@ exports.up = async function(knex) {
     table.json('privacy_settings').nullable().comment('隐私设置JSON');
 
     // 偏好设置
-    table.enum('language', ['zh-CN', 'en-US', 'ja-JP', 'ko-KR']).defaultTo('zh-CN').comment('首选语言');
+    table
+      .enum('language', ['zh-CN', 'en-US', 'ja-JP', 'ko-KR'])
+      .defaultTo('zh-CN')
+      .comment('首选语言');
     table.string('timezone', 50).defaultTo('Asia/Shanghai').comment('时区');
     table.json('notification_preferences').nullable().comment('通知偏好设置');
     table.json('ui_preferences').nullable().comment('界面偏好设置');
@@ -68,7 +77,10 @@ exports.up = async function(knex) {
     table.string('banner_url', 500).nullable().comment('横幅图片URL');
 
     // 账户状态
-    table.enum('account_status', ['active', 'suspended', 'banned', 'deleted']).defaultTo('active').comment('账户状态');
+    table
+      .enum('account_status', ['active', 'suspended', 'banned', 'deleted'])
+      .defaultTo('active')
+      .comment('账户状态');
     table.text('suspension_reason').nullable().comment('暂停原因');
     table.timestamp('suspended_until').nullable().comment('暂停到期时间');
 
@@ -95,7 +107,21 @@ exports.up = async function(knex) {
   await knex.schema.createTable('user_social_links', (table) => {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('user_id', 36).notNullable().comment('用户ID');
-    table.enum('platform', ['wechat', 'qq', 'weibo', 'twitter', 'instagram', 'linkedin', 'github', 'facebook', 'tiktok', 'youtube']).notNullable().comment('社交平台');
+    table
+      .enum('platform', [
+        'wechat',
+        'qq',
+        'weibo',
+        'twitter',
+        'instagram',
+        'linkedin',
+        'github',
+        'facebook',
+        'tiktok',
+        'youtube'
+      ])
+      .notNullable()
+      .comment('社交平台');
     table.string('platform_user_id', 100).nullable().comment('平台用户ID');
     table.string('username', 100).nullable().comment('平台用户名');
     table.string('display_name', 100).nullable().comment('显示名称');
@@ -131,7 +157,10 @@ exports.up = async function(knex) {
     table.string('school_name', 200).notNullable().comment('学校名称');
     table.string('degree', 100).nullable().comment('学位');
     table.string('major', 100).nullable().comment('专业');
-    table.enum('education_level', ['high_school', 'bachelor', 'master', 'phd', 'other']).nullable().comment('教育水平');
+    table
+      .enum('education_level', ['high_school', 'bachelor', 'master', 'phd', 'other'])
+      .nullable()
+      .comment('教育水平');
     table.date('start_date').nullable().comment('开始日期');
     table.date('end_date').nullable().comment('结束日期');
     table.boolean('is_current').defaultTo(false).comment('是否在读');
@@ -162,7 +191,17 @@ exports.up = async function(knex) {
     table.string('company_name', 200).notNullable().comment('公司名称');
     table.string('job_title', 100).notNullable().comment('职位名称');
     table.string('department', 100).nullable().comment('部门');
-    table.enum('employment_type', ['full_time', 'part_time', 'contract', 'internship', 'freelance', 'other']).nullable().comment('雇佣类型');
+    table
+      .enum('employment_type', [
+        'full_time',
+        'part_time',
+        'contract',
+        'internship',
+        'freelance',
+        'other'
+      ])
+      .nullable()
+      .comment('雇佣类型');
     table.date('start_date').nullable().comment('开始日期');
     table.date('end_date').nullable().comment('结束日期');
     table.boolean('is_current').defaultTo(false).comment('是否在职');
@@ -195,7 +234,10 @@ exports.up = async function(knex) {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('user_id', 36).notNullable().comment('用户ID');
     table.string('skill_name', 100).notNullable().comment('技能名称');
-    table.enum('skill_level', ['beginner', 'intermediate', 'advanced', 'expert']).nullable().comment('技能水平');
+    table
+      .enum('skill_level', ['beginner', 'intermediate', 'advanced', 'expert'])
+      .nullable()
+      .comment('技能水平');
     table.integer('experience_years').defaultTo(0).comment('经验年限');
     table.text('description').nullable().comment('技能描述');
     table.json('certifications').nullable().comment('相关认证');
@@ -226,7 +268,10 @@ exports.up = async function(knex) {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('user_id', 36).notNullable().comment('用户ID');
     table.string('tag_name', 50).notNullable().comment('标签名称');
-    table.enum('category', ['hobby', 'interest', 'preference', 'other']).defaultTo('interest').comment('标签类别');
+    table
+      .enum('category', ['hobby', 'interest', 'preference', 'other'])
+      .defaultTo('interest')
+      .comment('标签类别');
     table.integer('weight').defaultTo(1).comment('权重(1-10)');
     table.text('description').nullable().comment('标签描述');
     table.boolean('is_public').defaultTo(true).comment('是否公开');
@@ -253,7 +298,10 @@ exports.up = async function(knex) {
     table.string('viewer_id', 36).nullable().comment('查看者ID');
     table.string('viewer_ip', 45).nullable().comment('查看者IP');
     table.string('user_agent').nullable().comment('用户代理');
-    table.enum('view_type', ['profile', 'full_profile', 'specific_section']).defaultTo('profile').comment('查看类型');
+    table
+      .enum('view_type', ['profile', 'full_profile', 'specific_section'])
+      .defaultTo('profile')
+      .comment('查看类型');
     table.json('view_data').nullable().comment('查看数据');
     table.timestamp('viewed_at').defaultTo(knex.fn.now()).comment('查看时间');
 
@@ -300,7 +348,7 @@ exports.up = async function(knex) {
   });
 };
 
-exports.down = async function(knex) {
+exports.down = async function (knex) {
   await knex.schema.dropTableIfExists('user_profile_completeness');
   await knex.schema.dropTableIfExists('user_profile_views');
   await knex.schema.dropTableIfExists('user_interest_tags');

@@ -34,7 +34,7 @@ export enum NodeType {
 
   // 输入输出
   INPUT = 'INPUT',
-  OUTPUT = 'OUTPUT',
+  OUTPUT = 'OUTPUT'
 }
 
 /**
@@ -45,7 +45,7 @@ export enum NodeStatus {
   RUNNING = 'running',
   SUCCESS = 'success',
   FAILED = 'failed',
-  SKIPPED = 'skipped',
+  SKIPPED = 'skipped'
 }
 
 /**
@@ -154,7 +154,7 @@ export enum NodeErrorType {
   KB_RETRIEVE_ERROR = 'KB_RETRIEVE_ERROR',
 
   // 系统错误
-  INTERNAL_ERROR = 'INTERNAL_ERROR',
+  INTERNAL_ERROR = 'INTERNAL_ERROR'
 }
 
 /**
@@ -167,10 +167,7 @@ export interface FlowExecutor {
    * @param inputs - 输入数据
    * @returns 执行结果
    */
-  execute(
-    flowConfig: FlowConfig,
-    inputs: Record<string, any>
-  ): Promise<FlowExecutionResult>;
+  execute(flowConfig: FlowConfig, inputs: Record<string, any>): Promise<FlowExecutionResult>;
 
   /**
    * 暂停流程
@@ -280,8 +277,5 @@ export interface VariableResolver {
    * @param context - 上下文数据
    * @returns 解析后的数据对象
    */
-  resolveAll(
-    data: Record<string, any>,
-    context: Record<string, any>
-  ): Record<string, any>;
+  resolveAll(data: Record<string, any>, context: Record<string, any>): Record<string, any>;
 }

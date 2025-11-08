@@ -4,10 +4,10 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { ContentTextsController } from '../../../src/controllers/contentTexts.controller';
-import * as textRepo from '../../../src/repositories/contentTexts.repo';
+import { ContentTextsController } from '../../../src/controllers/contentTexts.controller.ts';
+import * as textRepo from '../../../src/repositories/contentTexts.repo.ts';
 
-jest.mock('../../../src/repositories/contentTexts.repo');
+jest.mock('../../../src/repositories/contentTexts.repo.ts');
 
 describe('ContentTextsController - 单元测试', () => {
   let controller: ContentTextsController;
@@ -17,7 +17,7 @@ describe('ContentTextsController - 单元测试', () => {
 
   beforeEach(() => {
     controller = new ContentTextsController();
-    mockReq = { params: {}, query: {}, body: {}, user: { id: 1 } };
+    mockReq = { params: {}, query: {}, body: {}, user: { id: '1', role: 'admin' } }; // 艹，必须包含id和role！
     mockRes = { json: jest.fn().mockReturnThis(), status: jest.fn().mockReturnThis() };
     mockNext = jest.fn();
     jest.clearAllMocks();
@@ -32,7 +32,7 @@ describe('ContentTextsController - 单元测试', () => {
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
-        data: expect.objectContaining({ items: mockTexts }),
+        data: expect.objectContaining({ items: mockTexts })
       });
     });
   });
@@ -142,8 +142,8 @@ describe('ContentTextsController - 单元测试', () => {
       mockReq.body = {
         texts: [
           { page: 'home', key: 'title', value: '标题1' },
-          { page: 'home', key: 'subtitle', value: '副标题' },
-        ],
+          { page: 'home', key: 'subtitle', value: '副标题' }
+        ]
       };
 
       await controller.batchUpsertTexts(mockReq as Request, mockRes as Response, mockNext);
@@ -151,7 +151,7 @@ describe('ContentTextsController - 单元测试', () => {
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
         data: { created: 2, updated: 1 },
-        message: expect.any(String),
+        message: expect.any(String)
       });
     });
 

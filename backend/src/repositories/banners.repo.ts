@@ -3,7 +3,8 @@
  * 艹，轮播图CRUD+排序！
  */
 
-import db from '../db';
+import { db } from '../config/database.js';
+import type { Knex } from 'knex';
 
 export interface Banner {
   id: number;
@@ -35,11 +36,13 @@ export interface CreateBannerInput {
 }
 
 export async function createBanner(input: CreateBannerInput): Promise<Banner> {
-  const [id] = await db('banners').insert({
+  const inserted = (await db<Banner>('banners').insert({
     ...input,
     created_at: db.fn.now(),
-    updated_at: db.fn.now(),
-  });
+    updated_at: db.fn.now()
+  })) as number[];
+
+  const [id] = inserted;
 
   const created = await getBannerById(id);
   if (!created) throw new Error('创建轮播图后读取失败');
@@ -49,7 +52,8 @@ export async function createBanner(input: CreateBannerInput): Promise<Banner> {
 }
 
 export async function getBannerById(id: number): Promise<Banner | null> {
-  return await db('banners').where({ id }).first();
+  const result = await db<Banner>('banners').where({ id }).first();
+  return result ?? null;
 }
 
 export async function listBanners(options: {
@@ -59,14 +63,14 @@ export async function listBanners(options: {
 }): Promise<Banner[]> {
   const { status, limit = 50, offset = 0 } = options;
 
-  let query = db('banners')
+  let query = db<Banner>('banners')
     .select('*')
     .orderBy('sort_order', 'asc')
     .orderBy('created_at', 'desc')
     .limit(limit)
     .offset(offset);
 
-  if (status) query = query.where({ status });
+  if (status) query = query.where('status', status);
 
   return await query;
 }
@@ -76,12 +80,12 @@ export async function getActiveBanners(options: {
 }): Promise<Banner[]> {
   const { target_audience = 'all' } = options;
 
-  let query = db('banners')
+  let query = db<Banner>('banners')
     .where({ status: 'published' })
-    .where((builder) => {
+    .where((builder: Knex.QueryBuilder<Banner, Banner[]>) => {
       builder.whereNull('publish_at').orWhere('publish_at', '<=', db.fn.now());
     })
-    .where((builder) => {
+    .where((builder: Knex.QueryBuilder<Banner, Banner[]>) => {
       builder.whereNull('expire_at').orWhere('expire_at', '>', db.fn.now());
     })
     .orderBy('sort_order', 'asc');
@@ -97,7 +101,7 @@ export async function updateBanner(
   id: number,
   updates: Partial<CreateBannerInput>
 ): Promise<Banner> {
-  const affected = await db('banners')
+  const affected = await db<Banner>('banners')
     .where({ id })
     .update({ ...updates, updated_at: db.fn.now() });
 
@@ -133,7 +137,7 @@ export async function updateBannersSortOrder(
 }
 
 export async function deleteBanner(id: number): Promise<boolean> {
-  const affected = await db('banners').where({ id }).delete();
+  const affected = await db<Banner>('banners').where({ id }).delete();
 
   if (affected > 0) {
     console.log(`[BANNER] 轮播图删除成功: ${id}`);

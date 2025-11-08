@@ -9,19 +9,32 @@
  * - 功能使用统计
  */
 
-exports.up = async function(knex) {
+exports.up = async function (knex) {
   // 功能定义表
   await knex.schema.createTable('feature_definitions', (table) => {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('feature_key', 100).notNullable().unique().comment('功能唯一标识');
     table.string('name', 200).notNullable().comment('功能名称');
     table.text('description').comment('功能描述');
-    table.enum('category', [
-      'image_processing', 'ai_generation', 'video_processing',
-      'audio_processing', 'text_processing', 'data_analysis',
-      'file_management', 'user_management', 'payment', 'integration'
-    ]).notNullable().comment('功能分类');
-    table.enum('type', ['basic', 'premium', 'enterprise', 'beta']).defaultTo('basic').comment('功能类型');
+    table
+      .enum('category', [
+        'image_processing',
+        'ai_generation',
+        'video_processing',
+        'audio_processing',
+        'text_processing',
+        'data_analysis',
+        'file_management',
+        'user_management',
+        'payment',
+        'integration'
+      ])
+      .notNullable()
+      .comment('功能分类');
+    table
+      .enum('type', ['basic', 'premium', 'enterprise', 'beta'])
+      .defaultTo('basic')
+      .comment('功能类型');
     table.boolean('is_active').defaultTo(true).comment('是否激活');
     table.boolean('is_public').defaultTo(true).comment('是否公开');
     table.json('tags').comment('功能标签');
@@ -49,7 +62,10 @@ exports.up = async function(knex) {
     table.string('feature_id', 36).notNullable().comment('功能ID');
     table.string('config_key', 100).notNullable().comment('配置键');
     table.text('config_value').comment('配置值');
-    table.enum('data_type', ['string', 'number', 'boolean', 'json', 'array']).defaultTo('string').comment('数据类型');
+    table
+      .enum('data_type', ['string', 'number', 'boolean', 'json', 'array'])
+      .defaultTo('string')
+      .comment('数据类型');
     table.text('description').comment('配置描述');
     table.boolean('is_required').defaultTo(false).comment('是否必需');
     table.boolean('is_sensitive').defaultTo(false).comment('是否敏感信息');
@@ -74,9 +90,15 @@ exports.up = async function(knex) {
   await knex.schema.createTable('feature_permissions', (table) => {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('feature_id', 36).notNullable().comment('功能ID');
-    table.enum('permission_type', ['role', 'user', 'membership', 'custom']).notNullable().comment('权限类型');
+    table
+      .enum('permission_type', ['role', 'user', 'membership', 'custom'])
+      .notNullable()
+      .comment('权限类型');
     table.string('permission_value', 100).notNullable().comment('权限值(角色名、用户ID等)');
-    table.enum('access_level', ['none', 'read', 'write', 'admin']).defaultTo('read').comment('访问级别');
+    table
+      .enum('access_level', ['none', 'read', 'write', 'admin'])
+      .defaultTo('read')
+      .comment('访问级别');
     table.json('conditions').comment('权限条件');
     table.boolean('is_granted').defaultTo(true).comment('是否授权');
     table.timestamp('granted_at').defaultTo(knex.fn.now()).comment('授权时间');
@@ -127,7 +149,10 @@ exports.up = async function(knex) {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('feature_id', 36).notNullable().comment('功能ID');
     table.string('version', 20).notNullable().comment('版本号');
-    table.enum('release_type', ['major', 'minor', 'patch', 'beta', 'alpha']).notNullable().comment('发布类型');
+    table
+      .enum('release_type', ['major', 'minor', 'patch', 'beta', 'alpha'])
+      .notNullable()
+      .comment('发布类型');
     table.text('changelog').comment('变更日志');
     table.json('config_changes').comment('配置变更');
     table.boolean('is_current').defaultTo(false).comment('是否当前版本');
@@ -157,7 +182,10 @@ exports.up = async function(knex) {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('feature_id', 36).notNullable().comment('功能ID');
     table.string('depends_on_feature_id', 36).notNullable().comment('依赖的功能ID');
-    table.enum('dependency_type', ['required', 'optional', 'suggested']).defaultTo('required').comment('依赖类型');
+    table
+      .enum('dependency_type', ['required', 'optional', 'suggested'])
+      .defaultTo('required')
+      .comment('依赖类型');
     table.string('min_version', 20).comment('最低版本要求');
     table.string('max_version', 20).comment('最高版本限制');
     table.text('description').comment('依赖描述');
@@ -166,7 +194,11 @@ exports.up = async function(knex) {
 
     // 外键约束
     table.foreign('feature_id').references('id').inTable('feature_definitions').onDelete('CASCADE');
-    table.foreign('depends_on_feature_id').references('id').inTable('feature_definitions').onDelete('CASCADE');
+    table
+      .foreign('depends_on_feature_id')
+      .references('id')
+      .inTable('feature_definitions')
+      .onDelete('CASCADE');
 
     // 唯一约束
     table.unique(['feature_id', 'depends_on_feature_id']);
@@ -178,7 +210,7 @@ exports.up = async function(knex) {
   });
 };
 
-exports.down = async function(knex) {
+exports.down = async function (knex) {
   await knex.schema.dropTableIfExists('feature_dependencies');
   await knex.schema.dropTableIfExists('feature_versions');
   await knex.schema.dropTableIfExists('feature_usage_stats');

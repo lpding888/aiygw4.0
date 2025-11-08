@@ -1,25 +1,18 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm test:*)",
-      "Bash(mkdir:*)",
-      "Bash(ls:*)",
-      "Bash(wc:*)",
-      "Bash(cp:*)",
-      "Bash(dir /B)",
-      "Bash(find:*)",
-      "Bash(where claude)",
-      "Bash(claude --version:*)",
-      "Bash(npm show:*)",
-      "Bash(npm install:*)",
-      "Bash(awk '{print $9, \"\"\"\"(\"\"\"\" $5 \"\"\"\")\"\"\"\"}')",
-      "Bash(head:*)",
-      "Bash(\"c:\\Users\\qq100\\Desktop\\迭代目录\\新建文件夹 (4)\\docs\\GPT5-Pro战略问题集\\待提问\\P0-2-WebSocket实时通知系统.md\")",
+      "Bash(done)",
+      "Bash(for:*)",
+      "Bash(do echo \"=== $f ===\")",
+      "Bash(while read f)",
       "Bash(cat:*)",
-      "Bash(\"c:\\Users\\qq100\\Desktop\\迭代目录\\新建文件夹 (4)\\docs\\GPT5-Pro战略问题集\\待提问\\P1-1-App前端架构设计.md\")",
-      "Bash(stat:*)",
-      "Bash(tree:*)",
-      "Bash(dir /B \"后端架构问题解决回答*\")"
+      "Bash(npm run test:unit:*)",
+      "Bash(npx jest:*)",
+      "Bash(timeout 40 npm run test:unit:*)",
+      "Bash(git checkout:*)",
+      "Bash(timeout 45 npm run test:unit:*)",
+      "Bash(timeout 50 npm run test:unit:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

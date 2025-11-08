@@ -1,100 +1,27 @@
-const { hasPermission, checkRoutePermission, logPermissionAccess } = require('../utils/rbac');
-const logger = require('../utils/logger');
+import type { NextFunction, Request, Response } from 'express';
+import {
+  hasPermission,
+  checkRoutePermission,
+  logPermissionAccess,
+  type PermissionAuditLog,
+  type Resource,
+  type Action,
+  type UserRole
+} from '../utils/rbac.js';
+import logger from '../utils/logger.js';
 
-/**
- * 权限验证中间件工厂函数
- *
- * 使用方式：
- * app.use('/admin/features', authenticateToken, requirePermission({
- *   resource: 'features',
- *   actions: ['read', 'update']
- * }), featuresRoutes);
- */
-function requirePermission(options) {
-  const { resource, actions } = options;
-
-  return (req, res, next) => {
-    try {
-      // 检查用户是否已认证
-      if (!req.user) {
-        return res.status(401).json({
-          success: false,
-          error: {
-            code: 4010,
-            message: '用户未认证，请先登录'
-          },
-          requestId: req.id
-        });
-      }
-
-      const userRole = req.user.role;
-      const method = req.method;
-      const route = req.route?.path || req.path;
-
-      // 检查具体权限
-      let hasAccess = false;
-      if (resource && actions) {
-        // 检查指定的资源权限
-        hasAccess = actions.some(action => hasPermission(userRole, resource, action));
-      } else {
-        // 自动根据路由检查权限
-        hasAccess = checkRoutePermission(userRole, method, route);
-      }
-
-      // 记录审计日志
-      const auditLog = {
-        userId: req.user.id,
-        userRole,
-        resource: resource || extractResourceFromRoute(route),
-        action: extractActionFromMethod(method, route),
-        route,
-        method,
-        ip: req.ip || req.connection.remoteAddress,
-        userAgent: req.get('User-Agent'),
-        timestamp: new Date(),
-        success: hasAccess,
-        reason: hasAccess ? undefined : '权限不足'
-      };
-
-      logPermissionAccess(auditLog);
-
-      if (!hasAccess) {
-        return res.status(403).json({
-          success: false,
-          error: {
-            code: 4030,
-            message: '权限不足，无法访问该资源'
-          },
-          requestId: req.id
-        });
-      }
-
-      // 在请求对象中添加权限信息，供后续中间件使用
-      req.userPermissions = {
-        role: userRole,
-        resource: resource || extractResourceFromRoute(route),
-        actions: actions || [extractActionFromMethod(method, route)]
-      };
-
-      next();
-    } catch (error) {
-      logger.error('权限验证中间件错误:', error);
-      return res.status(500).json({
-        success: false,
-        error: {
-          code: 5000,
-          message: '权限验证失败'
-        },
-        requestId: req.id
-      });
-    }
-  };
+interface PermissionOptions {
+  resource?: Resource;
+  actions?: Action[];
 }
 
-/**
- * 从路由中提取资源名称
- */
-function extractResourceFromRoute(route) {
+interface PermissionInfo {
+  role: UserRole;
+  resource: Resource;
+  actions: Action[];
+}
+
+const routeToResource = (route: string): Resource => {
   if (route.startsWith('/admin/features')) return 'features';
   if (route.startsWith('/admin/providers')) return 'providers';
   if (route.startsWith('/admin/mcp')) return 'mcp';
@@ -104,85 +31,129 @@ function extractResourceFromRoute(route) {
   if (route.startsWith('/ui/schema')) return 'ui:schema';
   if (route.startsWith('/system')) return 'system';
   return 'unknown';
-}
+};
 
-/**
- * 从HTTP方法和路由中提取动作
- */
-function extractActionFromMethod(method, route) {
-  let action = method.toLowerCase();
+const methodToAction = (method: string, route: string): Action => {
+  const normalized = method.toLowerCase();
 
-  if (action === 'get') action = 'read';
-  else if (action === 'post') action = 'create';
-  else if (action === 'put' || action === 'patch') action = 'update';
-  else if (action === 'delete') action = 'delete';
+  if (route.includes('/publish')) return 'publish';
+  if (route.includes('/rollback')) return 'rollback';
+  if (route.includes('/test') || route.includes('/preview')) return 'test';
 
-  // 特殊动作
-  if (route.includes('/publish')) action = 'publish';
-  else if (route.includes('/rollback')) action = 'rollback';
-  else if (route.includes('/test')) action = 'test';
-  else if (route.includes('/preview')) action = 'test';
+  switch (normalized) {
+    case 'get':
+      return 'read';
+    case 'post':
+      return 'create';
+    case 'put':
+    case 'patch':
+      return 'update';
+    case 'delete':
+      return 'delete';
+    default:
+      return 'read';
+  }
+};
 
-  return action;
-}
+const buildAuditLog = (
+  req: Request,
+  resource: Resource,
+  action: Action,
+  success: boolean,
+  reason?: string
+): PermissionAuditLog => ({
+  userId: req.user?.id ?? 'anonymous',
+  userRole: req.user?.role ?? 'viewer',
+  resource,
+  action,
+  route: req.route?.path ?? req.path,
+  method: req.method,
+  ip: (req.ip ?? req.socket.remoteAddress ?? '').toString(),
+  userAgent: req.get('User-Agent') ?? '',
+  timestamp: new Date(),
+  success,
+  reason
+});
 
-/**
- * 角色验证中间件
- * 检查用户是否具有指定角色
- */
-function requireRole(allowedRoles) {
-  return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({
+export function requirePermission(options: PermissionOptions) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: { code: 4010, message: '用户未认证，请先登录' },
+          requestId: req.id
+        });
+        return;
+      }
+
+      const resource = options.resource ?? routeToResource(req.route?.path ?? req.path);
+      const methodAction = methodToAction(req.method, req.route?.path ?? req.path);
+      const actions = options.actions ?? [methodAction];
+
+      const hasAccess =
+        options.resource && options.actions
+          ? actions.some((action) => hasPermission(req.user!.role, resource, action))
+          : checkRoutePermission(req.user!.role, req.method, req.route?.path ?? req.path);
+
+      logPermissionAccess(buildAuditLog(req, resource, methodAction, hasAccess, '权限不足'));
+
+      if (!hasAccess) {
+        res.status(403).json({
+          success: false,
+          error: { code: 4030, message: '权限不足，无法访问该资源' },
+          requestId: req.id
+        });
+        return;
+      }
+
+      (req as any).userPermissions = {
+        role: req.user.role,
+        resource,
+        actions: actions ?? [methodAction]
+      };
+
+      next();
+    } catch (error) {
+      logger.error('权限验证中间件错误:', error);
+      res.status(500).json({
         success: false,
-        error: {
-          code: 4010,
-          message: '用户未认证，请先登录'
-        },
+        error: { code: 5000, message: '权限验证失败' },
         requestId: req.id
       });
     }
+  };
+}
 
-    if (!allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({
+export function requireRole(allowedRoles: UserRole[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({
         success: false,
-        error: {
-          code: 4030,
-          message: '权限不足，需要更高权限'
-        },
+        error: { code: 4010, message: '用户未认证，请先登录' },
         requestId: req.id
       });
+      return;
+    }
+
+    if (!allowedRoles.includes(req.user.role)) {
+      res.status(403).json({
+        success: false,
+        error: { code: 4030, message: '权限不足，需要更高权限' },
+        requestId: req.id
+      });
+      return;
     }
 
     next();
   };
 }
 
-/**
- * 管理员权限验证中间件
- */
-function requireAdmin(req, res, next) {
-  return requireRole(['admin'])(req, res, next);
-}
+export const requireAdmin = (req: Request, res: Response, next: NextFunction): void =>
+  requireRole(['admin'])(req, res, next);
 
-/**
- * 编辑者权限验证中间件（editor及以上）
- */
-function requireEditor(req, res, next) {
-  return requireRole(['editor', 'admin'])(req, res, next);
-}
+export const requireEditor = (req: Request, res: Response, next: NextFunction): void =>
+  requireRole(['editor', 'admin'])(req, res, next);
 
-/**
- * 只读权限验证中间件（所有角色）
- */
-function requireViewer(req, res, next) {
-  return requireRole(['viewer', 'editor', 'admin'])(req, res, next);
-}
-
-module.exports = {
-  requirePermission,
-  requireRole,
-  requireAdmin,
-  requireEditor,
-  requireViewer
-};
+export const requireViewer = (req: Request, res: Response, next: NextFunction): void =>
+  requireRole(['viewer', 'editor', 'admin'])(req, res, next);

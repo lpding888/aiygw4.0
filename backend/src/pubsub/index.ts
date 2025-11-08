@@ -9,8 +9,9 @@
  * - 自动重连与合并广播
  */
 
-import Redis from 'ioredis';
-import logger from '../utils/logger';
+import { Redis as RedisClient } from 'ioredis';
+import logger from '../utils/logger.js';
+import { redisConfig } from '../config/redis.js';
 
 /**
  * 失效消息载荷
@@ -31,8 +32,8 @@ export type InvalidationCallback = (payload: InvalidationPayload) => void | Prom
  * Pub/Sub服务类
  */
 class PubSubService {
-  private publisher: Redis | null = null;
-  private subscriber: Redis | null = null;
+  private publisher: RedisClient | null = null;
+  private subscriber: RedisClient | null = null;
   private isInitialized = false;
   private callbacks: InvalidationCallback[] = [];
   private reconnectTimer?: NodeJS.Timeout;
@@ -56,35 +57,23 @@ class PubSubService {
 
     try {
       // 创建发布者Redis连接
-      this.publisher = new Redis({
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379'),
-        password: process.env.REDIS_PASSWORD,
-        db: parseInt(process.env.REDIS_DB || '0'),
-        retryStrategy: (times) => {
-          const delay = Math.min(times * 50, 2000);
-          return delay;
-        },
+      this.publisher = new RedisClient({
+        ...redisConfig,
+        retryStrategy: (times) => Math.min(times * 50, 2000)
       });
 
       // 创建订阅者Redis连接（必须独立连接）
-      this.subscriber = new Redis({
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379'),
-        password: process.env.REDIS_PASSWORD,
-        db: parseInt(process.env.REDIS_DB || '0'),
-        retryStrategy: (times) => {
-          const delay = Math.min(times * 50, 2000);
-          return delay;
-        },
+      this.subscriber = new RedisClient({
+        ...redisConfig,
+        retryStrategy: (times) => Math.min(times * 50, 2000)
       });
 
       // 设置错误处理
-      this.publisher.on('error', (err) => {
+      this.publisher.on('error', (err: Error) => {
         logger.error('[PubSub] Publisher错误:', err);
       });
 
-      this.subscriber.on('error', (err) => {
+      this.subscriber.on('error', (err: Error) => {
         logger.error('[PubSub] Subscriber错误:', err);
       });
 
@@ -98,7 +87,7 @@ class PubSubService {
       await this.subscriber.subscribe(this.CHANNEL);
 
       // 设置消息处理器
-      this.subscriber.on('message', (channel, message) => {
+      this.subscriber.on('message', (channel: string, message: string) => {
         if (channel === this.CHANNEL) {
           this.handleInvalidationMessage(message);
         }
@@ -107,7 +96,6 @@ class PubSubService {
       this.isInitialized = true;
       this.reconnectAttempts = 0;
       logger.info('[PubSub] 服务初始化成功');
-
     } catch (error) {
       logger.error('[PubSub] 初始化失败:', error);
       throw error;
@@ -156,7 +144,7 @@ class PubSubService {
 
       logger.info(
         `[PubSub] 收到失效消息: scope=${payload.scope} ` +
-        `key=${payload.key || '*'} version=${payload.version}`
+          `key=${payload.key || '*'} version=${payload.version}`
       );
 
       // 执行所有注册的回调
@@ -172,7 +160,6 @@ class PubSubService {
           logger.error('[PubSub] 回调执行失败:', err);
         }
       }
-
     } catch (error) {
       logger.error('[PubSub] 解析失效消息失败:', error);
     }
@@ -194,9 +181,8 @@ class PubSubService {
 
       logger.info(
         `[PubSub] 发布失效消息: scope=${payload.scope} ` +
-        `key=${payload.key || '*'} subscribers=${subscribers}`
+          `key=${payload.key || '*'} subscribers=${subscribers}`
       );
-
     } catch (error) {
       logger.error('[PubSub] 发布失效消息失败:', error);
       throw error;
@@ -241,14 +227,13 @@ class PubSubService {
       const results = await pipeline.exec();
 
       const totalSubscribers = results
-        ? results.reduce((sum, [err, count]) => sum + (count as number || 0), 0)
+        ? results.reduce((sum: number, [, count]) => sum + ((count as number) || 0), 0)
         : 0;
 
       logger.info(
         `[PubSub] 批量发布失效消息: count=${payloads.length} ` +
-        `totalSubscribers=${totalSubscribers}`
+          `totalSubscribers=${totalSubscribers}`
       );
-
     } catch (error) {
       logger.error('[PubSub] 批量发布失效消息失败:', error);
       throw error;
@@ -277,7 +262,6 @@ class PubSubService {
       this.callbacks = [];
 
       logger.info('[PubSub] 服务已关闭');
-
     } catch (error) {
       logger.error('[PubSub] 关闭服务失败:', error);
       throw error;
@@ -308,24 +292,21 @@ class PubSubService {
       }
 
       const status =
-        publisherStatus === 'ready' && subscriberStatus === 'ready'
-          ? 'healthy'
-          : 'unhealthy';
+        publisherStatus === 'ready' && subscriberStatus === 'ready' ? 'healthy' : 'unhealthy';
 
       return {
         status,
         publisher: publisherStatus,
         subscriber: subscriberStatus,
-        subscribers,
+        subscribers
       };
-
     } catch (error) {
       logger.error('[PubSub] 健康检查失败:', error);
       return {
         status: 'unhealthy',
         publisher: 'error',
         subscriber: 'error',
-        subscribers: 0,
+        subscribers: 0
       };
     }
   }
@@ -349,7 +330,7 @@ export async function invalidateConfig(
     scope,
     key,
     version: version || 'latest',
-    timestamp: Date.now(),
+    timestamp: Date.now()
   });
 }
 
@@ -364,7 +345,7 @@ export async function invalidateConfigBatch(
     scope: inv.scope,
     key: inv.key,
     version: inv.version || 'latest',
-    timestamp: Date.now(),
+    timestamp: Date.now()
   }));
 
   await pubsub.publishBatch(payloads);

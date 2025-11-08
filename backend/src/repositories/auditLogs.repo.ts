@@ -3,7 +3,7 @@
  * 艹，审计日志CRUD！
  */
 
-import db from '../db';
+import { db } from '../config/database.js';
 
 export interface AuditLog {
   id: number;
@@ -35,10 +35,12 @@ export interface CreateAuditLogInput {
  * 创建审计日志
  */
 export async function createAuditLog(input: CreateAuditLogInput): Promise<AuditLog> {
-  const [id] = await db('audit_logs').insert({
+  const inserted = (await db<AuditLog>('audit_logs').insert({
     ...input,
-    created_at: db.fn.now(),
-  });
+    created_at: db.fn.now()
+  })) as number[];
+
+  const [id] = inserted;
 
   const created = await getAuditLogById(id);
   if (!created) throw new Error('创建审计日志后读取失败');
@@ -51,7 +53,8 @@ export async function createAuditLog(input: CreateAuditLogInput): Promise<AuditL
  * 根据ID获取审计日志
  */
 export async function getAuditLogById(id: number): Promise<AuditLog | null> {
-  return await db('audit_logs').where({ id }).first();
+  const result = await db<AuditLog>('audit_logs').where({ id }).first();
+  return result ?? null;
 }
 
 /**
@@ -67,19 +70,27 @@ export async function listAuditLogs(options: {
   limit?: number;
   offset?: number;
 }): Promise<AuditLog[]> {
-  const { entity_type, entity_id, user_id, action, start_date, end_date, limit = 50, offset = 0 } =
-    options;
+  const {
+    entity_type,
+    entity_id,
+    user_id,
+    action,
+    start_date,
+    end_date,
+    limit = 50,
+    offset = 0
+  } = options;
 
-  let query = db('audit_logs')
+  let query = db<AuditLog>('audit_logs')
     .select('*')
     .orderBy('created_at', 'desc')
     .limit(limit)
     .offset(offset);
 
-  if (entity_type) query = query.where({ entity_type });
-  if (entity_id) query = query.where({ entity_id });
-  if (user_id) query = query.where({ user_id });
-  if (action) query = query.where({ action });
+  if (entity_type) query = query.where('entity_type', entity_type);
+  if (entity_id) query = query.where('entity_id', entity_id);
+  if (user_id) query = query.where('user_id', user_id);
+  if (action) query = query.where('action', action);
   if (start_date) query = query.where('created_at', '>=', start_date);
   if (end_date) query = query.where('created_at', '<=', end_date);
 
@@ -93,7 +104,7 @@ export async function getEntityHistory(
   entity_type: string,
   entity_id: number
 ): Promise<AuditLog[]> {
-  return await db('audit_logs')
+  return await db<AuditLog>('audit_logs')
     .where({ entity_type, entity_id })
     .orderBy('created_at', 'desc');
 }
@@ -102,7 +113,7 @@ export async function getEntityHistory(
  * 获取用户操作历史
  */
 export async function getUserHistory(user_id: number, limit = 100): Promise<AuditLog[]> {
-  return await db('audit_logs')
+  return await db<AuditLog>('audit_logs')
     .where({ user_id })
     .orderBy('created_at', 'desc')
     .limit(limit);
@@ -120,11 +131,11 @@ export async function countAuditLogs(options: {
 }): Promise<number> {
   const { entity_type, user_id, action, start_date, end_date } = options;
 
-  let query = db('audit_logs').count('* as count');
+  let query = db<AuditLog>('audit_logs').count<{ count: string }>('* as count');
 
-  if (entity_type) query = query.where({ entity_type });
-  if (user_id) query = query.where({ user_id });
-  if (action) query = query.where({ action });
+  if (entity_type) query = query.where('entity_type', entity_type);
+  if (user_id) query = query.where('user_id', user_id);
+  if (action) query = query.where('action', action);
   if (start_date) query = query.where('created_at', '>=', start_date);
   if (end_date) query = query.where('created_at', '<=', end_date);
 

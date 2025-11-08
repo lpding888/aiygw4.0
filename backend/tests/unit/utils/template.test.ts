@@ -8,8 +8,8 @@ import {
   escapeHtml,
   replaceVariables,
   extractVariableReferences,
-  validateVariables,
-} from '../../../src/utils/template';
+  validateVariables
+} from '../../../src/utils/template.js';
 
 describe('Template Utils - 单元测试', () => {
   describe('extractValue', () => {
@@ -24,9 +24,9 @@ describe('Template Utils - 单元测试', () => {
         user: {
           profile: {
             name: '老王',
-            age: 35,
-          },
-        },
+            age: 35
+          }
+        }
       };
 
       expect(extractValue(obj, 'user.profile.name')).toBe('老王');
@@ -46,7 +46,7 @@ describe('Template Utils - 单元测试', () => {
 
     test('应该处理数组', () => {
       const obj = {
-        items: [{ name: 'item1' }, { name: 'item2' }],
+        items: [{ name: 'item1' }, { name: 'item2' }]
       };
 
       // 艹，数组索引需要用数字key
@@ -83,18 +83,14 @@ describe('Template Utils - 单元测试', () => {
       const template = '{{greeting}} {{name}}, you are {{age}} years old';
       const variables = { greeting: 'Hi', name: '老王', age: 35 };
 
-      expect(replaceVariables(template, variables)).toBe(
-        'Hi 老王, you are 35 years old'
-      );
+      expect(replaceVariables(template, variables)).toBe('Hi 老王, you are 35 years old');
     });
 
     test('应该替换嵌套变量', () => {
       const template = 'Hello {{user.name}}, age: {{user.age}}';
       const variables = { user: { name: '老王', age: 35 } };
 
-      expect(replaceVariables(template, variables)).toBe(
-        'Hello 老王, age: 35'
-      );
+      expect(replaceVariables(template, variables)).toBe('Hello 老王, age: 35');
     });
 
     test('未定义的变量应该替换为空字符串', () => {
@@ -108,9 +104,9 @@ describe('Template Utils - 单元测试', () => {
       const template = 'Hello {{name}}!';
       const variables = {};
 
-      expect(() =>
-        replaceVariables(template, variables, { throwOnMissing: true })
-      ).toThrow('变量 "name" 未定义');
+      expect(() => replaceVariables(template, variables, { throwOnMissing: true })).toThrow(
+        '变量 "name" 未定义'
+      );
     });
 
     test('escapeHtml=true时应该转义HTML', () => {
@@ -118,7 +114,7 @@ describe('Template Utils - 单元测试', () => {
       const variables = { html: '<script>alert("xss")</script>' };
 
       const result = replaceVariables(template, variables, {
-        escapeHtml: true,
+        escapeHtml: true
       });
 
       expect(result).toContain('&lt;script&gt;');
@@ -129,9 +125,7 @@ describe('Template Utils - 单元测试', () => {
       const template = 'Count: {{count}}, Active: {{active}}';
       const variables = { count: 42, active: true };
 
-      expect(replaceVariables(template, variables)).toBe(
-        'Count: 42, Active: true'
-      );
+      expect(replaceVariables(template, variables)).toBe('Count: 42, Active: true');
     });
 
     test('应该只替换合法的变量名', () => {
@@ -143,7 +137,7 @@ describe('Template Utils - 单元测试', () => {
       const variables = {
         valid_name123: 'OK',
         'invalid-name': 'BAD',
-        'invalid name': 'BAD',
+        'invalid name': 'BAD'
       };
 
       expect(replaceVariables(template1, variables)).toBe('OK');
@@ -157,7 +151,7 @@ describe('Template Utils - 单元测试', () => {
       const template = {
         name: '{{user.name}}',
         age: '{{user.age}}',
-        message: 'Hello {{user.name}}!',
+        message: 'Hello {{user.name}}!'
       };
 
       const variables = { user: { name: '老王', age: 35 } };
@@ -165,7 +159,7 @@ describe('Template Utils - 单元测试', () => {
       expect(replaceVariables(template, variables)).toEqual({
         name: '老王',
         age: '35',
-        message: 'Hello 老王!',
+        message: 'Hello 老王!'
       });
     });
 
@@ -180,20 +174,20 @@ describe('Template Utils - 单元测试', () => {
       const template = {
         users: [
           { name: '{{user1.name}}', age: '{{user1.age}}' },
-          { name: '{{user2.name}}', age: '{{user2.age}}' },
-        ],
+          { name: '{{user2.name}}', age: '{{user2.age}}' }
+        ]
       };
 
       const variables = {
         user1: { name: '老王', age: 35 },
-        user2: { name: '小李', age: 28 },
+        user2: { name: '小李', age: 28 }
       };
 
       expect(replaceVariables(template, variables)).toEqual({
         users: [
           { name: '老王', age: '35' },
-          { name: '小李', age: '28' },
-        ],
+          { name: '小李', age: '28' }
+        ]
       });
     });
 
@@ -201,7 +195,7 @@ describe('Template Utils - 单元测试', () => {
       const template = {
         name: '{{name}}',
         age: 35, // 数字，不替换
-        active: true, // 布尔，不替换
+        active: true // 布尔，不替换
       };
 
       const variables = { name: '老王' };
@@ -209,7 +203,7 @@ describe('Template Utils - 单元测试', () => {
       expect(replaceVariables(template, variables)).toEqual({
         name: '老王',
         age: 35,
-        active: true,
+        active: true
       });
     });
   });
@@ -241,7 +235,7 @@ describe('Template Utils - 单元测试', () => {
       const template = {
         name: '{{user.name}}',
         message: 'Hello {{user.name}}!',
-        age: '{{user.age}}',
+        age: '{{user.age}}'
       };
 
       const refs = extractVariableReferences(template);
@@ -290,7 +284,7 @@ describe('Template Utils - 单元测试', () => {
       const template = {
         name: '{{user.name}}',
         age: '{{user.age}}',
-        city: '{{user.city}}',
+        city: '{{user.city}}'
       };
 
       const variables = { user: { name: '老王' } };
@@ -326,9 +320,7 @@ describe('Template Utils - 单元测试', () => {
       const variables = { name: '老王' };
 
       // 只有完整的{{name}}会被替换
-      expect(replaceVariables(template, variables)).toBe(
-        '{name} or {{name or 老王'
-      );
+      expect(replaceVariables(template, variables)).toBe('{name} or {{name or 老王');
     });
   });
 });

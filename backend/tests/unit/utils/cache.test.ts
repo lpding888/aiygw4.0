@@ -3,7 +3,7 @@
  * 艹，测试两层缓存的读写逻辑！
  */
 
-import { CacheManager } from '../../../src/utils/cache';
+import { CacheManager } from '../../../src/utils/cache.js';
 
 // Mock Redis
 jest.mock('ioredis', () => {
@@ -13,7 +13,7 @@ jest.mock('ioredis', () => {
     del: jest.fn(),
     keys: jest.fn(),
     quit: jest.fn(),
-    on: jest.fn(),
+    on: jest.fn()
   }));
 });
 
@@ -26,7 +26,7 @@ describe('CacheManager - 单元测试', () => {
       namespace: 'test',
       l1MaxSize: 100,
       l1DefaultTtl: 1000, // 1秒
-      l2DefaultTtl: 60, // 60秒
+      l2DefaultTtl: 60 // 60秒
       // 不传redisConfig，不初始化Redis
     });
   });
@@ -199,9 +199,9 @@ describe('CacheManager - 单元测试', () => {
         data: 'x'.repeat(10000), // 10KB字符串
         nested: {
           deep: {
-            value: 123,
-          },
-        },
+            value: 123
+          }
+        }
       };
 
       await cache.set('large', largeObj);
@@ -216,7 +216,7 @@ describe('CacheManager - 单元测试', () => {
       // 设置TTL为100ms
       const shortCache = new CacheManager({
         namespace: 'test-ttl',
-        l1DefaultTtl: 100,
+        l1DefaultTtl: 100
       });
 
       await shortCache.set('key', 'value');
@@ -239,7 +239,7 @@ describe('CacheManager - 单元测试', () => {
       // 创建小容量缓存（最多3条）
       const smallCache = new CacheManager({
         namespace: 'test-lru',
-        l1MaxSize: 3,
+        l1MaxSize: 3
       });
 
       // 依次写入4个key

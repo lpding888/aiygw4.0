@@ -9,21 +9,27 @@
  * - 密钥生命周期管理
  */
 
-exports.up = async function(knex) {
+exports.up = async function (knex) {
   // 密钥主表
   await knex.schema.createTable('encryption_keys', (table) => {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('key_name', 100).notNullable().comment('密钥名称');
     table.string('key_alias', 100).nullable().comment('密钥别名');
     table.enum('key_type', ['AES', 'RSA', 'HMAC', 'ECDSA']).notNullable().comment('密钥类型');
-    table.enum('key_purpose', ['data_encryption', 'signing', 'verification', 'key_exchange']).notNullable().comment('密钥用途');
+    table
+      .enum('key_purpose', ['data_encryption', 'signing', 'verification', 'key_exchange'])
+      .notNullable()
+      .comment('密钥用途');
     table.integer('key_size').notNullable().comment('密钥长度');
     table.string('key_algorithm', 50).notNullable().comment('密钥算法');
     table.text('public_key').nullable().comment('公钥');
     table.text('private_key').nullable().comment('私钥（加密存储）');
     table.text('symmetric_key').nullable().comment('对称密钥（加密存储）');
     table.string('key_version', 20).defaultTo('1').comment('密钥版本');
-    table.enum('status', ['active', 'inactive', 'deprecated', 'compromised', 'destroyed']).defaultTo('active').comment('密钥状态');
+    table
+      .enum('status', ['active', 'inactive', 'deprecated', 'compromised', 'destroyed'])
+      .defaultTo('active')
+      .comment('密钥状态');
     table.boolean('is_primary').defaultTo(false).comment('是否为主密钥');
     table.json('key_metadata').nullable().comment('密钥元数据');
     table.string('encryption_kek_id', 36).nullable().comment('加密密钥ID');
@@ -120,7 +126,10 @@ exports.up = async function(knex) {
     table.string('operator_name', 100).nullable().comment('操作者名称');
     table.string('client_ip', 45).nullable().comment('客户端IP');
     table.string('user_agent').nullable().comment('用户代理');
-    table.enum('status', ['success', 'failure', 'partial']).defaultTo('success').comment('操作状态');
+    table
+      .enum('status', ['success', 'failure', 'partial'])
+      .defaultTo('success')
+      .comment('操作状态');
     table.text('error_message').nullable().comment('错误信息');
     table.json('operation_data').nullable().comment('操作数据');
     table.json('result_data').nullable().comment('结果数据');
@@ -145,7 +154,10 @@ exports.up = async function(knex) {
     table.string('key_name', 100).notNullable().comment('密钥名称');
     table.string('current_key_id', 36).nullable().comment('当前密钥ID');
     table.string('next_key_id', 36).nullable().comment('下一个密钥ID');
-    table.enum('rotation_type', ['time_based', 'usage_based', 'manual', 'event_based']).notNullable().comment('轮换类型');
+    table
+      .enum('rotation_type', ['time_based', 'usage_based', 'manual', 'event_based'])
+      .notNullable()
+      .comment('轮换类型');
     table.json('rotation_schedule').nullable().comment('轮换计划');
     table.integer('rotation_interval_days').defaultTo(365).comment('轮换间隔天数');
     table.integer('max_usage_count').nullable().comment('最大使用次数');
@@ -158,7 +170,11 @@ exports.up = async function(knex) {
     table.timestamp('updated_at').defaultTo(knex.fn.now()).comment('更新时间');
 
     // 外键约束
-    table.foreign('current_key_id').references('id').inTable('encryption_keys').onDelete('SET NULL');
+    table
+      .foreign('current_key_id')
+      .references('id')
+      .inTable('encryption_keys')
+      .onDelete('SET NULL');
     table.foreign('next_key_id').references('id').inTable('encryption_keys').onDelete('SET NULL');
 
     // 唯一约束
@@ -179,9 +195,15 @@ exports.up = async function(knex) {
     table.string('key_name', 100).notNullable().comment('密钥名称');
     table.string('old_key_id', 36).nullable().comment('旧密钥ID');
     table.string('new_key_id', 36).nullable().comment('新密钥ID');
-    table.enum('rotation_reason', ['scheduled', 'compromised', 'manual', 'policy_change']).notNullable().comment('轮换原因');
+    table
+      .enum('rotation_reason', ['scheduled', 'compromised', 'manual', 'policy_change'])
+      .notNullable()
+      .comment('轮换原因');
     table.text('rotation_description').nullable().comment('轮换描述');
-    table.enum('status', ['initiated', 'in_progress', 'completed', 'failed']).defaultTo('initiated').comment('轮换状态');
+    table
+      .enum('status', ['initiated', 'in_progress', 'completed', 'failed'])
+      .defaultTo('initiated')
+      .comment('轮换状态');
     table.integer('affected_records').defaultTo(0).comment('影响的记录数');
     table.integer('migrated_records').defaultTo(0).comment('已迁移记录数');
     table.json('rotation_metadata').nullable().comment('轮换元数据');
@@ -217,7 +239,10 @@ exports.up = async function(knex) {
     table.json('backup_metadata').nullable().comment('备份元数据');
     table.string('backup_location', 500).nullable().comment('备份位置');
     table.string('checksum', 100).notNullable().comment('数据校验和');
-    table.enum('status', ['active', 'corrupted', 'expired', 'deleted']).defaultTo('active').comment('备份状态');
+    table
+      .enum('status', ['active', 'corrupted', 'expired', 'deleted'])
+      .defaultTo('active')
+      .comment('备份状态');
     table.timestamp('backup_created_at').defaultTo(knex.fn.now()).comment('备份创建时间');
     table.timestamp('backup_expires_at').nullable().comment('备份过期时间');
     table.string('created_by', 36).nullable().comment('创建人');
@@ -226,7 +251,11 @@ exports.up = async function(knex) {
 
     // 外键约束
     table.foreign('key_id').references('id').inTable('encryption_keys').onDelete('CASCADE');
-    table.foreign('backup_encryption_key_id').references('id').inTable('encryption_keys').onDelete('SET NULL');
+    table
+      .foreign('backup_encryption_key_id')
+      .references('id')
+      .inTable('encryption_keys')
+      .onDelete('SET NULL');
 
     // 唯一约束
     table.unique(['key_id', 'backup_name']);
@@ -245,7 +274,10 @@ exports.up = async function(knex) {
     table.string('config_key', 100).notNullable().unique().comment('配置键');
     table.text('config_value').nullable().comment('配置值');
     table.text('config_description').nullable().comment('配置描述');
-    table.enum('config_type', ['string', 'number', 'boolean', 'json', 'encrypted']).notNullable().comment('配置类型');
+    table
+      .enum('config_type', ['string', 'number', 'boolean', 'json', 'encrypted'])
+      .notNullable()
+      .comment('配置类型');
     table.boolean('is_sensitive').defaultTo(false).comment('是否敏感配置');
     table.string('encryption_key_id', 36).nullable().comment('加密密钥ID');
     table.string('updated_by', 36).nullable().comment('更新人');
@@ -253,7 +285,11 @@ exports.up = async function(knex) {
     table.timestamp('updated_at').defaultTo(knex.fn.now()).comment('更新时间');
 
     // 外键约束
-    table.foreign('encryption_key_id').references('id').inTable('encryption_keys').onDelete('SET NULL');
+    table
+      .foreign('encryption_key_id')
+      .references('id')
+      .inTable('encryption_keys')
+      .onDelete('SET NULL');
 
     // 索引
     table.index(['config_key']);
@@ -301,7 +337,7 @@ exports.up = async function(knex) {
   ]);
 };
 
-exports.down = async function(knex) {
+exports.down = async function (knex) {
   await knex.schema.dropTableIfExists('kms_system_config');
   await knex.schema.dropTableIfExists('key_backups');
   await knex.schema.dropTableIfExists('key_rotation_history');

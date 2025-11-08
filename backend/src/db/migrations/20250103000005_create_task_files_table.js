@@ -2,7 +2,7 @@
  * 创建task_files表
  * 用于存储任务相关的文件记录
  */
-exports.up = function(knex) {
+exports.up = function (knex) {
   return knex.schema.createTable('task_files', (table) => {
     // 主键
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
@@ -13,7 +13,10 @@ exports.up = function(knex) {
 
     // 文件信息
     table.string('file_key', 500).notNullable().comment('文件Key');
-    table.string('category', 50).notNullable().comment('文件分类: temp, intermediate, userUpload, result, log');
+    table
+      .string('category', 50)
+      .notNullable()
+      .comment('文件分类: temp, intermediate, userUpload, result, log');
     table.string('step_type', 100).nullable().comment('处理步骤类型');
     table.integer('result_index').nullable().comment('结果文件索引');
     table.bigInteger('size').defaultTo(0).comment('文件大小(字节)');
@@ -27,7 +30,9 @@ exports.up = function(knex) {
 
     // 时间戳
     table.datetime('created_at').defaultTo(knex.raw('CURRENT_TIMESTAMP'));
-    table.datetime('updated_at').defaultTo(knex.raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'));
+    table
+      .datetime('updated_at')
+      .defaultTo(knex.raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'));
     table.datetime('deleted_at').nullable().comment('删除时间');
 
     // 索引
@@ -44,6 +49,6 @@ exports.up = function(knex) {
   });
 };
 
-exports.down = function(knex) {
+exports.down = function (knex) {
   return knex.schema.dropTableIfExists('task_files');
 };

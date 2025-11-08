@@ -3,12 +3,9 @@
  * 艹，测试覆盖参数校验/占位实现/错误处理！
  */
 
-import { TencentCiProvider } from '../../../src/providers/handlers/tencentCi.handler';
-import {
-  ExecContext,
-  ProviderErrorCode,
-} from '../../../src/providers/types';
-import { ILogger } from '../../../src/providers/base/base-provider';
+import { TencentCiProvider } from '../../../src/providers/handlers/tencentCi.handler.ts';
+import { ExecContext, ProviderErrorCode } from '../../../src/providers/types.ts';
+import { ILogger } from '../../../src/providers/base/base-provider.ts';
 
 // Mock Logger
 class MockLogger implements ILogger {
@@ -60,7 +57,7 @@ describe('TencentCI Provider - 单元测试', () => {
         bucket: 'test-bucket',
         region: 'ap-guangzhou',
         objectKey: 'test.jpg',
-        params: {},
+        params: {}
       };
       expect(provider.validate(input)).toContain('缺少或无效的action字段');
     });
@@ -71,7 +68,7 @@ describe('TencentCI Provider - 单元测试', () => {
         bucket: 'test-bucket',
         region: 'ap-guangzhou',
         objectKey: 'test.jpg',
-        params: {},
+        params: {}
       };
       expect(provider.validate(input)).toContain('缺少或无效的action字段');
     });
@@ -81,7 +78,7 @@ describe('TencentCI Provider - 单元测试', () => {
         action: 'imageProcess',
         region: 'ap-guangzhou',
         objectKey: 'test.jpg',
-        params: {},
+        params: {}
       };
       expect(provider.validate(input)).toContain('缺少或无效的bucket字段');
     });
@@ -92,7 +89,7 @@ describe('TencentCI Provider - 单元测试', () => {
         bucket: 123, // 应该是string
         region: 'ap-guangzhou',
         objectKey: 'test.jpg',
-        params: {},
+        params: {}
       };
       expect(provider.validate(input)).toContain('缺少或无效的bucket字段');
     });
@@ -102,7 +99,7 @@ describe('TencentCI Provider - 单元测试', () => {
         action: 'imageProcess',
         bucket: 'test-bucket',
         objectKey: 'test.jpg',
-        params: {},
+        params: {}
       };
       expect(provider.validate(input)).toContain('缺少或无效的region字段');
     });
@@ -113,7 +110,7 @@ describe('TencentCI Provider - 单元测试', () => {
         bucket: 'test-bucket',
         region: 'INVALID123', // 大写字母和数字，不符合格式
         objectKey: 'test.jpg',
-        params: {},
+        params: {}
       };
       expect(provider.validate(input)).toContain('region格式无效');
     });
@@ -123,7 +120,7 @@ describe('TencentCI Provider - 单元测试', () => {
         action: 'imageProcess',
         bucket: 'test-bucket',
         region: 'ap-guangzhou',
-        params: {},
+        params: {}
       };
       expect(provider.validate(input)).toContain('缺少或无效的objectKey字段');
     });
@@ -134,7 +131,7 @@ describe('TencentCI Provider - 单元测试', () => {
         bucket: 'test-bucket',
         region: 'ap-guangzhou',
         objectKey: 123, // 应该是string
-        params: {},
+        params: {}
       };
       expect(provider.validate(input)).toContain('缺少或无效的objectKey字段');
     });
@@ -144,7 +141,7 @@ describe('TencentCI Provider - 单元测试', () => {
         action: 'imageProcess',
         bucket: 'test-bucket',
         region: 'ap-guangzhou',
-        objectKey: 'test.jpg',
+        objectKey: 'test.jpg'
       };
       expect(provider.validate(input)).toContain('缺少或无效的params字段');
     });
@@ -155,7 +152,7 @@ describe('TencentCI Provider - 单元测试', () => {
         bucket: 'test-bucket',
         region: 'ap-guangzhou',
         objectKey: 'test.jpg',
-        params: 'invalid', // 应该是object
+        params: 'invalid' // 应该是object
       };
       expect(provider.validate(input)).toContain('缺少或无效的params字段');
     });
@@ -168,9 +165,9 @@ describe('TencentCI Provider - 单元测试', () => {
         objectKey: 'test.jpg',
         params: {},
         auth: {
-          secretId: 'id',
+          secretId: 'id'
           // 缺少secretKey
-        },
+        }
       };
       expect(provider.validate(input)).toContain('auth配置不完整');
     });
@@ -183,8 +180,8 @@ describe('TencentCI Provider - 单元测试', () => {
         objectKey: 'test.jpg',
         params: {
           width: 800,
-          height: 600,
-        },
+          height: 600
+        }
       };
       expect(provider.validate(input)).toBeNull();
     });
@@ -196,24 +193,19 @@ describe('TencentCI Provider - 单元测试', () => {
         region: 'ap-shanghai',
         objectKey: 'images/test.jpg',
         params: {
-          quality: 80,
+          quality: 80
         },
         auth: {
           secretId: 'test-id',
           secretKey: 'test-key',
-          token: 'test-token',
-        },
+          token: 'test-token'
+        }
       };
       expect(provider.validate(input)).toBeNull();
     });
 
     test('应该接受各种有效的region格式', () => {
-      const validRegions = [
-        'ap-guangzhou',
-        'ap-shanghai',
-        'ap-beijing-1',
-        'na-siliconvalley',
-      ];
+      const validRegions = ['ap-guangzhou', 'ap-shanghai', 'ap-beijing-1', 'na-siliconvalley'];
 
       validRegions.forEach((region) => {
         const input = {
@@ -221,7 +213,7 @@ describe('TencentCI Provider - 单元测试', () => {
           bucket: 'test-bucket',
           region,
           objectKey: 'test.jpg',
-          params: {},
+          params: {}
         };
         expect(provider.validate(input)).toBeNull();
       });
@@ -238,13 +230,13 @@ describe('TencentCI Provider - 单元测试', () => {
         params: {
           width: 800,
           height: 600,
-          mode: 'crop',
-        },
+          mode: 'crop'
+        }
       };
 
       const context: ExecContext = {
         taskId: 'task-ci-001',
-        input,
+        input
       };
 
       const result = await provider.execute(context);
@@ -268,13 +260,13 @@ describe('TencentCI Provider - 单元测试', () => {
         objectKey: 'videos/test.mp4',
         params: {
           codec: 'h264',
-          bitrate: '1000k',
-        },
+          bitrate: '1000k'
+        }
       };
 
       const context: ExecContext = {
         taskId: 'task-ci-002',
-        input,
+        input
       };
 
       const result = await provider.execute(context);
@@ -290,17 +282,17 @@ describe('TencentCI Provider - 单元测试', () => {
         region: 'ap-guangzhou',
         objectKey: 'content/test.jpg',
         params: {
-          detectType: ['porn', 'terrorism'],
+          detectType: ['porn', 'terrorism']
         },
         auth: {
           secretId: 'test-id',
-          secretKey: 'test-key',
-        },
+          secretKey: 'test-key'
+        }
       };
 
       const context: ExecContext = {
         taskId: 'task-ci-003',
-        input,
+        input
       };
 
       const result = await provider.execute(context);
@@ -315,12 +307,12 @@ describe('TencentCI Provider - 单元测试', () => {
         bucket: 'test-bucket',
         region: 'ap-guangzhou',
         objectKey: 'test.jpg',
-        params: {},
+        params: {}
       };
 
       const context: ExecContext = {
         taskId: 'task-ci-004',
-        input,
+        input
       };
 
       await provider.execute(context);
@@ -344,12 +336,12 @@ describe('TencentCI Provider - 单元测试', () => {
       const input = {
         // 缺少必填字段
         action: 'imageProcess',
-        bucket: 'test-bucket',
+        bucket: 'test-bucket'
       };
 
       const context: ExecContext = {
         taskId: 'task-ci-error-001',
-        input,
+        input
       };
 
       const result = await provider.execute(context);

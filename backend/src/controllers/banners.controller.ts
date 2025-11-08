@@ -4,9 +4,9 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import * as bannerRepo from '../repositories/banners.repo';
-import { CreateBannerInput } from '../repositories/banners.repo';
-import * as cosService from '../services/cos.service';
+import * as bannerRepo from '../repositories/banners.repo.js';
+import type { CreateBannerInput } from '../repositories/banners.repo.js';
+import * as cosService from '../services/cos.service.js';
 
 export class BannersController {
   /**
@@ -19,7 +19,7 @@ export class BannersController {
       const banners = await bannerRepo.listBanners({
         status: status as string,
         limit: parseInt(limit as string),
-        offset: parseInt(offset as string),
+        offset: parseInt(offset as string)
       });
 
       res.json({
@@ -27,8 +27,8 @@ export class BannersController {
         data: {
           items: banners,
           limit: parseInt(limit as string),
-          offset: parseInt(offset as string),
-        },
+          offset: parseInt(offset as string)
+        }
       });
     } catch (error: any) {
       console.error('[BannersController] 列出轮播图失败:', error.message);
@@ -44,12 +44,12 @@ export class BannersController {
       const { target_audience } = req.query;
 
       const banners = await bannerRepo.getActiveBanners({
-        target_audience: target_audience as any,
+        target_audience: target_audience as any
       });
 
       res.json({
         success: true,
-        data: banners,
+        data: banners
       });
     } catch (error: any) {
       console.error('[BannersController] 获取有效轮播图失败:', error.message);
@@ -68,7 +68,7 @@ export class BannersController {
       if (!banner) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: '轮播图不存在' },
+          error: { code: 'NOT_FOUND', message: '轮播图不存在' }
         });
         return;
       }
@@ -87,14 +87,14 @@ export class BannersController {
     try {
       const input: CreateBannerInput = {
         ...req.body,
-        created_by: (req as any).user?.id,
+        created_by: (req as any).user?.id
       };
 
       // 艹，基础校验
       if (!input.title?.trim()) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: '标题不能为空' },
+          error: { code: 'VALIDATION_ERROR', message: '标题不能为空' }
         });
         return;
       }
@@ -102,7 +102,7 @@ export class BannersController {
       if (!input.image_url?.trim()) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: '图片URL不能为空' },
+          error: { code: 'VALIDATION_ERROR', message: '图片URL不能为空' }
         });
         return;
       }
@@ -131,7 +131,7 @@ export class BannersController {
       if (error.message.includes('不存在')) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: error.message },
+          error: { code: 'NOT_FOUND', message: error.message }
         });
         return;
       }
@@ -151,7 +151,7 @@ export class BannersController {
       if (!Array.isArray(sortOrders) || sortOrders.length === 0) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'sortOrders必须是非空数组' },
+          error: { code: 'VALIDATION_ERROR', message: 'sortOrders必须是非空数组' }
         });
         return;
       }
@@ -161,7 +161,7 @@ export class BannersController {
         if (typeof item.id !== 'number' || typeof item.sort_order !== 'number') {
           res.status(400).json({
             success: false,
-            error: { code: 'VALIDATION_ERROR', message: 'sortOrders格式错误' },
+            error: { code: 'VALIDATION_ERROR', message: 'sortOrders格式错误' }
           });
           return;
         }
@@ -187,7 +187,7 @@ export class BannersController {
       if (!deleted) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: '轮播图不存在' },
+          error: { code: 'NOT_FOUND', message: '轮播图不存在' }
         });
         return;
       }
@@ -209,7 +209,7 @@ export class BannersController {
       if (!cosService.isCOSConfigured()) {
         res.status(503).json({
           success: false,
-          error: { code: 'COS_NOT_CONFIGURED', message: 'COS未配置' },
+          error: { code: 'COS_NOT_CONFIGURED', message: 'COS未配置' }
         });
         return;
       }
@@ -219,7 +219,7 @@ export class BannersController {
       if (!filename?.trim()) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: '文件名不能为空' },
+          error: { code: 'VALIDATION_ERROR', message: '文件名不能为空' }
         });
         return;
       }
@@ -230,12 +230,12 @@ export class BannersController {
       // 生成上传凭证
       const credentials = await cosService.getUploadCredentials({
         key,
-        expiresInSeconds: 1800, // 30分钟
+        expiresInSeconds: 1800 // 30分钟
       });
 
       res.json({
         success: true,
-        data: credentials,
+        data: credentials
       });
     } catch (error: any) {
       console.error('[BannersController] 获取上传凭证失败:', error.message);
@@ -253,7 +253,7 @@ export class BannersController {
       if (!cosService.isCOSConfigured()) {
         res.status(503).json({
           success: false,
-          error: { code: 'COS_NOT_CONFIGURED', message: 'COS未配置' },
+          error: { code: 'COS_NOT_CONFIGURED', message: 'COS未配置' }
         });
         return;
       }
@@ -265,7 +265,7 @@ export class BannersController {
       if (!file) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: '未找到上传文件' },
+          error: { code: 'VALIDATION_ERROR', message: '未找到上传文件' }
         });
         return;
       }
@@ -277,12 +277,12 @@ export class BannersController {
       const url = await cosService.uploadFile({
         key,
         body: file.buffer,
-        contentType: file.mimetype,
+        contentType: file.mimetype
       });
 
       res.json({
         success: true,
-        data: { url, key },
+        data: { url, key }
       });
     } catch (error: any) {
       console.error('[BannersController] 上传图片失败:', error.message);

@@ -118,11 +118,13 @@ class PipelineValidatorService {
       logger.error('Pipeline验证过程中发生错误:', error);
       return {
         valid: false,
-        errors: [{
-          type: 'system_error',
-          message: '验证过程中发生系统错误',
-          severity: 'error'
-        }],
+        errors: [
+          {
+            type: 'system_error',
+            message: '验证过程中发生系统错误',
+            severity: 'error'
+          }
+        ],
         warnings: []
       };
     }
@@ -131,7 +133,10 @@ class PipelineValidatorService {
   /**
    * 验证基础结构
    */
-  private validateBasicStructure(pipeline: PipelineSchema, errors: ValidationResult['errors']): void {
+  private validateBasicStructure(
+    pipeline: PipelineSchema,
+    errors: ValidationResult['errors']
+  ): void {
     // 检查必要字段
     if (!pipeline.nodes || !Array.isArray(pipeline.nodes)) {
       errors.push({
@@ -222,9 +227,12 @@ class PipelineValidatorService {
   /**
    * 验证拓扑结构（检测循环）
    */
-  private validateTopology(pipeline: PipelineSchema, errors: ValidationResult['errors']): TopologySortResult {
+  private validateTopology(
+    pipeline: PipelineSchema,
+    errors: ValidationResult['errors']
+  ): TopologySortResult {
     const { nodes, edges } = pipeline;
-    const nodeIds = new Set(nodes.map(n => n.id));
+    const nodeIds = new Set(nodes.map((n) => n.id));
     const adjacencyList = new Map<string, Set<string>>();
     const inDegree = new Map<string, number>();
 
@@ -273,7 +281,7 @@ class PipelineValidatorService {
 
     if (hasCycle) {
       // 找出循环中的节点
-      const remainingNodes = nodes.filter(n => !result.includes(n.id));
+      const remainingNodes = nodes.filter((n) => !result.includes(n.id));
       errors.push({
         type: 'cycle_detected',
         message: 'Pipeline存在循环依赖',
@@ -283,7 +291,7 @@ class PipelineValidatorService {
       return {
         sorted: result,
         hasCycle: true,
-        cycleNodes: remainingNodes.map(n => n.id)
+        cycleNodes: remainingNodes.map((n) => n.id)
       };
     }
 
@@ -356,9 +364,13 @@ class PipelineValidatorService {
   /**
    * 验证边的合法性
    */
-  private validateEdges(pipeline: PipelineSchema, topologyResult: TopologySortResult, errors: ValidationResult['errors']): void {
+  private validateEdges(
+    pipeline: PipelineSchema,
+    topologyResult: TopologySortResult,
+    errors: ValidationResult['errors']
+  ): void {
     const { nodes, edges } = pipeline;
-    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
     for (const edge of edges) {
       const sourceNode = nodeMap.get(edge.source);
@@ -382,7 +394,8 @@ class PipelineValidatorService {
         try {
           // 这里可以添加条件表达式的验证逻辑
           this.validateConditionExpression(edge.condition, edge.source, edge.target, errors);
-        } catch (error) {
+        } catch (error: any) {
+          // 艹，TypeScript的error类型是unknown，需要转换！
           errors.push({
             type: 'invalid_condition_expression',
             message: `条件表达式无效: ${error.message}`,
@@ -398,7 +411,7 @@ class PipelineValidatorService {
         const targetInputs = new Set(targetNode.inputs);
 
         // 检查是否有匹配的变量
-        const hasMatchingVariable = [...sourceOutputs].some(output => targetInputs.has(output));
+        const hasMatchingVariable = [...sourceOutputs].some((output) => targetInputs.has(output));
         if (!hasMatchingVariable) {
           errors.push({
             type: 'variable_mismatch',
@@ -412,8 +425,8 @@ class PipelineValidatorService {
     // 检查每个节点是否至少有一个输入或输出（除了START/END）
     for (const node of nodes) {
       if (node.type !== 'START' && node.type !== 'END') {
-        const hasInput = edges.some(e => e.target === node.id);
-        const hasOutput = edges.some(e => e.source === node.id);
+        const hasInput = edges.some((e) => e.target === node.id);
+        const hasOutput = edges.some((e) => e.source === node.id);
 
         if (!hasInput) {
           errors.push({
@@ -439,7 +452,11 @@ class PipelineValidatorService {
   /**
    * 验证变量可达性
    */
-  private validateVariables(pipeline: PipelineSchema, topologyResult: TopologySortResult, errors: ValidationResult['errors']): void {
+  private validateVariables(
+    pipeline: PipelineSchema,
+    topologyResult: TopologySortResult,
+    errors: ValidationResult['errors']
+  ): void {
     const { nodes, variables } = pipeline;
     const variableSources = new Map<string, string>();
 
@@ -489,13 +506,16 @@ class PipelineValidatorService {
   /**
    * 验证条件分支完整性
    */
-  private validateConditionalBranches(pipeline: PipelineSchema, errors: ValidationResult['errors']): void {
+  private validateConditionalBranches(
+    pipeline: PipelineSchema,
+    errors: ValidationResult['errors']
+  ): void {
     const { nodes, edges } = pipeline;
 
     for (const node of nodes) {
       if (node.type === 'CONDITION') {
         // 找出所有从该节点发出的边
-        const outgoingEdges = edges.filter(e => e.source === node.id);
+        const outgoingEdges = edges.filter((e) => e.source === node.id);
 
         if (outgoingEdges.length < 2) {
           errors.push({
@@ -508,7 +528,7 @@ class PipelineValidatorService {
         }
 
         // 检查是否有默认分支（无条件边）
-        const hasDefaultBranch = outgoingEdges.some(e => !e.condition);
+        const hasDefaultBranch = outgoingEdges.some((e) => !e.condition);
         if (!hasDefaultBranch) {
           errors.push({
             type: 'missing_default_branch',
@@ -519,7 +539,10 @@ class PipelineValidatorService {
         }
 
         // 检查条件的互斥性
-        const conditions = outgoingEdges.filter(e => e.condition).map(e => e.condition);
+        // 艹，过滤掉undefined的condition！
+        const conditions = outgoingEdges
+          .filter((e) => e.condition)
+          .map((e) => e.condition) as string[];
         this.validateConditionMutualExclusivity(conditions, node.id, errors);
       }
     }
@@ -528,11 +551,14 @@ class PipelineValidatorService {
   /**
    * 验证输出覆盖
    */
-  private validateOutputCoverage(pipeline: PipelineSchema, errors: ValidationResult['errors']): void {
+  private validateOutputCoverage(
+    pipeline: PipelineSchema,
+    errors: ValidationResult['errors']
+  ): void {
     const { nodes, edges } = pipeline;
 
     // 找到所有END节点
-    const endNodes = nodes.filter(n => n.type === 'END');
+    const endNodes = nodes.filter((n) => n.type === 'END');
 
     if (endNodes.length === 0) {
       errors.push({
@@ -566,7 +592,10 @@ class PipelineValidatorService {
   /**
    * 验证性能和最佳实践
    */
-  private validatePerformance(pipeline: PipelineSchema, warnings: ValidationResult['warnings']): void {
+  private validatePerformance(
+    pipeline: PipelineSchema,
+    warnings: ValidationResult['warnings']
+  ): void {
     const { nodes, edges } = pipeline;
 
     // 检查节点数量
@@ -615,7 +644,11 @@ class PipelineValidatorService {
       if (node.config) {
         const configStr = JSON.stringify(node.config).toLowerCase();
 
-        if (configStr.includes('eval(') || configStr.includes('exec(') || configStr.includes('system(')) {
+        if (
+          configStr.includes('eval(') ||
+          configStr.includes('exec(') ||
+          configStr.includes('system(')
+        ) {
           warnings.push({
             type: 'dangerous_operation',
             message: `节点配置包含潜在危险操作: ${node.name}`,
@@ -624,7 +657,11 @@ class PipelineValidatorService {
         }
 
         // 检查是否有明文密码或密钥
-        if (configStr.includes('password') || configStr.includes('secret') || configStr.includes('key')) {
+        if (
+          configStr.includes('password') ||
+          configStr.includes('secret') ||
+          configStr.includes('key')
+        ) {
           warnings.push({
             type: 'sensitive_data',
             message: `节点配置可能包含敏感数据，建议使用加密存储: ${node.name}`,
@@ -638,17 +675,23 @@ class PipelineValidatorService {
   /**
    * 验证条件表达式
    */
-  private validateConditionExpression(condition: string, sourceNodeId: string, targetNodeId: string, errors: ValidationResult['errors']): void {
+  private validateConditionExpression(
+    condition: string,
+    sourceNodeId: string,
+    targetNodeId: string,
+    errors: ValidationResult['errors']
+  ): void {
     // 简单的条件表达式验证
     // 实际实现可以根据需要扩展
     const validOperators = ['==', '!=', '>', '<', '>=', '<=', '&&', '||'];
-    const hasValidOperator = validOperators.some(op => condition.includes(op));
+    const hasValidOperator = validOperators.some((op) => condition.includes(op));
 
     if (!hasValidOperator && condition.length > 0) {
       errors.push({
         type: 'invalid_condition_syntax',
         message: '条件表达式语法无效',
-        nodeId: sourceNodeId
+        nodeId: sourceNodeId,
+        severity: 'error' // 艹，必须加上severity字段！
       });
     }
   }
@@ -656,7 +699,11 @@ class PipelineValidatorService {
   /**
    * 验证条件的互斥性
    */
-  private validateConditionMutualExclusivity(conditions: string[], nodeId: string, errors: ValidationResult['errors']): void {
+  private validateConditionMutualExclusivity(
+    conditions: string[],
+    nodeId: string,
+    errors: ValidationResult['errors']
+  ): void {
     // 简单的互斥性检查
     // 实际实现可以根据需要扩展
     if (conditions.length > 5) {
@@ -689,7 +736,7 @@ class PipelineValidatorService {
    */
   private calculateMaxDepth(pipeline: PipelineSchema): number {
     const { nodes, edges } = pipeline;
-    const startNodes = nodes.filter(n => n.type === 'START');
+    const startNodes = nodes.filter((n) => n.type === 'START');
 
     if (startNodes.length === 0) return 0;
 
@@ -701,7 +748,7 @@ class PipelineValidatorService {
       visited.add(nodeId);
       maxDepth = Math.max(maxDepth, depth);
 
-      const outgoingEdges = edges.filter(e => e.source === nodeId);
+      const outgoingEdges = edges.filter((e) => e.source === nodeId);
       for (const edge of outgoingEdges) {
         calculateDepth(edge.target, visited, depth + 1);
       }
@@ -723,7 +770,7 @@ class PipelineValidatorService {
     let maxParallel = 0;
 
     for (const node of nodes) {
-      const outgoingEdges = edges.filter(e => e.source === node.id);
+      const outgoingEdges = edges.filter((e) => e.source === node.id);
       maxParallel = Math.max(maxParallel, outgoingEdges.length);
     }
 

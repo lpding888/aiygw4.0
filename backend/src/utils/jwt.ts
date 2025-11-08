@@ -3,6 +3,7 @@
  * 艹，这个tm管理所有Token的生成和验证！
  */
 
+import type { Request } from 'express';
 import jwt from 'jsonwebtoken';
 
 // JWT配置
@@ -26,7 +27,7 @@ export interface TokenPayload {
 export function generateAccessToken(payload: TokenPayload): string {
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn: ACCESS_TOKEN_EXPIRES_IN as string,
-    issuer: 'ai-wardrobe-backend',
+    issuer: 'ai-wardrobe-backend'
   } as jwt.SignOptions);
 }
 
@@ -37,7 +38,7 @@ export function generateAccessToken(payload: TokenPayload): string {
 export function generateRefreshToken(payload: TokenPayload): string {
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn: REFRESH_TOKEN_EXPIRES_IN as string,
-    issuer: 'ai-wardrobe-backend',
+    issuer: 'ai-wardrobe-backend'
   } as jwt.SignOptions);
 }
 
@@ -48,7 +49,7 @@ export function generateRefreshToken(payload: TokenPayload): string {
 export function verifyToken(token: string): TokenPayload {
   try {
     const decoded = jwt.verify(token, JWT_SECRET, {
-      issuer: 'ai-wardrobe-backend',
+      issuer: 'ai-wardrobe-backend'
     }) as TokenPayload;
 
     return decoded;
@@ -68,7 +69,7 @@ export function verifyToken(token: string): TokenPayload {
  * 从请求头或Cookie中提取Token
  * 艹，支持两种方式：Authorization头 或 Cookie
  */
-export function extractTokenFromRequest(req: any): string | null {
+export function extractTokenFromRequest(req: Request): string | null {
   // 1. 从Authorization头提取（Bearer token）
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {

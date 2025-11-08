@@ -4,7 +4,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import * as importExportService from '../services/importExport.service';
+import * as importExportService from '../services/importExport.service.js';
 
 export class ImportExportController {
   /**
@@ -18,7 +18,7 @@ export class ImportExportController {
       if (!['json', 'csv'].includes(format as string)) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'format必须是json或csv' },
+          error: { code: 'VALIDATION_ERROR', message: 'format必须是json或csv' }
         });
         return;
       }
@@ -40,7 +40,7 @@ export class ImportExportController {
       } else {
         res.json({
           success: true,
-          data,
+          data
         });
       }
     } catch (error: any) {
@@ -60,7 +60,7 @@ export class ImportExportController {
       if (!data) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'data不能为空' },
+          error: { code: 'VALIDATION_ERROR', message: 'data不能为空' }
         });
         return;
       }
@@ -78,7 +78,7 @@ export class ImportExportController {
       if (!Array.isArray(parsedData) || parsedData.length === 0) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'data必须是非空数组' },
+          error: { code: 'VALIDATION_ERROR', message: 'data必须是非空数组' }
         });
         return;
       }
@@ -88,7 +88,7 @@ export class ImportExportController {
       res.json({
         success: true,
         data: result,
-        message: `导入成功: 创建${result.created}条, 更新${result.updated}条`,
+        message: `导入成功: 创建${result.created}条, 更新${result.updated}条`
       });
     } catch (error: any) {
       console.error('[ImportExportController] 导入失败:', error.message);
