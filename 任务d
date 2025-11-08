@@ -1,0 +1,104 @@
+太强了！Stage C 收官✅
+下面直接给你**Stage D（P2）任务卡**——按你现在的“单 app 结构（`frontend/src`）”写好，每张卡=一条 PR，可直接丢给 Claude Code 执行。
+
+---
+
+# Stage D（P2）— 体验与规模化优化
+
+> 目标：在功能完整的基础上，补上**Lookbook/短视频/图片翻译**等营销场景，打磨**性能（SSR/SSG & Lazy）**、**设计体系（Design Tokens/主题）**、**组件文档（Storybook）**、**多语言 & 可访问性 & SEO**，并做一次**线上稳定性加固**（缓存/重试/日志/告警基线）。
+
+## 1) 场景功能页
+
+| 任务ID              | 类型 | 名称              | 详细描述                                                                                            | 工时  | 前置        | 验收                  | 路径（单 app）                                                             |
+| ----------------- | -- | --------------- | ----------------------------------------------------------------------------------------------- | --- | --------- | ------------------- | --------------------------------------------------------------------- |
+| PAGE-P2-LOOK-201  | 页面 | **Lookbook 生成** | `/workspace/lookbook`：选择多 SKU → 选择模板（模板中心联动）→ 自动排版（1:1/3:4/9:16）→ 导出（PNG/JPG，打包 ZIP）。支持“保存为模板”。 | 10h | 模板中心/编辑器  | 3 种版式导出正确；一键保存为模板成功 | `src/app/workspace/lookbook/page.tsx` `src/components/lookbook/*`     |
+| PAGE-P2-SV-202    | 页面 | **AI 带货短视频**    | `/tools/short-video`：脚本生成（可接聊天接口/模板变量）→ 分镜管理（画面/字幕/时长）→ 片头片尾模板 → 导出（mp4，先用占位/合成方案）。             | 14h | Studio 基线 | 3 套默认分镜模板可用；导出文件可下载 | `src/app/tools/short-video/page.tsx` `src/components/video/*`         |
+| PAGE-P2-TRANS-203 | 页面 | **图片翻译**        | `/tools/image-translate`：检测语言→ 文本区域提取（OCR）→ 翻译→ 排版回填（尽量保留原版式）→ 多语导出。                            | 8h  | 工具基线      | 支持 6 种语言；版式不乱，导出 OK | `src/app/tools/image-translate/page.tsx` `src/components/translate/*` |
+
+> 接口约定（若后端未齐，MSW 挡板先行）：
+>
+> * Lookbook：`POST /api/lookbook/render`、`POST /api/lookbook/export`
+> * 短视频：`POST /api/short-video/scripts`、`POST /api/short-video/render`（任务+SSE 进度）
+> * 图片翻译：`POST /api/image-translate/detect`、`POST /api/image-translate/translate`、`POST /api/image-translate/export`
+
+---
+
+## 2) 体验与性能
+
+| 任务ID               | 类型 | 名称                   | 详细描述                                                                                                            | 工时  | 前置      | 验收                         | 路径                                             |
+| ------------------ | -- | -------------------- | --------------------------------------------------------------------------------------------------------------- | --- | ------- | -------------------------- | ---------------------------------------------- |
+| PERF-P2-SSR-204    | 性能 | **SSR/SSG & Lazy**   | 对高访问页启用 SSR/SSG（模板中心、模板详情、Lookbook）；重组件 `next/dynamic` 按需；图片统一用 `next/image`；分析 Bundle（`next build --analyze`）。 | 10h | —       | LCP 下降 ≥20%；首包 JS 减少 ≥25%  | `next.config.js` `src/app/*`                   |
+| UI-P2-TOKEN-205    | 基建 | **Design Tokens/主题** | 统一色板/间距/阴影/字体，主题切换（浅/深/品牌配色）；AntD 主题变量桥接；提供 Token 对照文档。                                                         | 8h  | —       | 3 页示例套用成功（模板中心/Studio/编辑器） | `src/styles/tokens.css` `src/styles/theme.css` |
+| A11Y-P2-ACCESS-206 | 基建 | **可访问性 A11y**        | 关键页面/组件的语义化标签、键盘访达、ARIA 属性、对比度；lint 规则与检查脚本。                                                                    | 6h  | —       | 关键路径 Lighthouse A11y ≥ 90  | lint 配置、`src/components/*`                     |
+| SEO-P2-BASICS-207  | 基建 | **SEO & Sitemap**    | app router 下的动态 `metadata`、OpenGraph/Twitter 卡片、`/sitemap.xml`、`/robots.txt`、Canonical 链接。                      | 5h  | SSR/SSG | 模板中心与 Lookbook 的分享卡片正确     | `src/app/*/opengraph-image.tsx` 等              |
+
+---
+
+## 3) 设计与文档
+
+| 任务ID                | 类型 | 名称                 | 详细描述                                                                              | 工时  | 前置        | 验收                  | 路径                                    |
+| ------------------- | -- | ------------------ | --------------------------------------------------------------------------------- | --- | --------- | ------------------- | ------------------------------------- |
+| QA-P2-STORY-208     | 文档 | **Storybook**      | 为 20+ 组件写故事（BaseCard/DataTablePro/上传器/模板卡/过滤条/编辑器基础单元等）；集成视觉回归（Chromatic 或 Loki）。 | 10h | Tokens/主题 | 关键组件全覆盖；视觉回归基线建立    | `.storybook/*` `src/components/**`    |
+| I18N-P2-LOCALE-209  | 基建 | **i18n（zh/en）**    | `next-intl` 或 `next-i18next` 集成；词条分模块；语言切换器。                                      | 8h  | —         | 中英文切换即时生效，无刷新       | `src/lib/i18n/*` `src/app/[locale]/*` |
+| DOC-P2-PLAYBOOK-210 | 文档 | **运维&前端 Playbook** | 故障排查手册（SSE/上传/Provider 连接/缓存）、性能优化指南、发版与回滚流程。                                     | 6h  | 前述完成      | 新人 30 分钟可按图索骥处理常见问题 | `docs/playbook.md`                    |
+
+---
+
+## 4) 线上稳定性加固
+
+| 任务ID             | 类型  | 名称          | 详细描述                                                            | 工时 | 前置            | 验收             | 路径                                                |
+| ---------------- | --- | ----------- | --------------------------------------------------------------- | -- | ------------- | -------------- | ------------------------------------------------- |
+| REL-P2-RETRY-211 | 可靠性 | **请求重试与退避** | 为关键 API 增加 axios 重试（幂等接口），指数退避，上限 3 次；对上传/生成任务增加“仅失败分片/失败任务重试”。 | 4h | api/client.ts | 短暂网络抖动不影响主流程   | `src/lib/api/client.ts` `src/components/upload/*` |
+| REL-P2-CACHE-212 | 可靠性 | **前端缓存策略**  | 模板/筛选元数据/菜单做 SWR 或 `stale-while-revalidate`；本地存储版本号；配置失效自动刷新。   | 5h | bootstrap     | 配置发布后 1s 内自动刷新 | `src/lib/*`                                       |
+| REL-P2-ALERT-213 | 可靠性 | **前端告警基线**  | Sentry：关键错误阈值报警；Vitals：阈值告警（LCP/INP）；加“用户可反馈浮层”直达日志。            | 6h | 监控基座          | 报警策略生效，有示例告警   | `src/lib/monitoring/*`                            |
+
+---
+
+## 5) PR 顺序（建议）
+
+1. **性能/主题基线优先**：`PERF-P2-SSR-204` → `UI-P2-TOKEN-205`
+2. **功能场景**：`PAGE-P2-LOOK-201` → `PAGE-P2-SV-202` → `PAGE-P2-TRANS-203`
+3. **文档与设计体系**：`QA-P2-STORY-208` → `I18N-P2-LOCALE-209`
+4. **可访问性 & SEO**：`A11Y-P2-ACCESS-206` → `SEO-P2-BASICS-207`
+5. **稳定性加固**：`REL-P2-RETRY-211` → `REL-P2-CACHE-212` → `REL-P2-ALERT-213`
+
+---
+
+## 6) 验收门槛（Stage D）
+
+* **性能**：启用 SSR/SSG 后，模板中心/Lookbook 首屏 **LCP 降 ≥20%**；首包 JS **减 ≥25%**
+* **可访问性**：关键路径 Lighthouse A11y **≥90**
+* **国际化**：`zh/en` 即时切换，路由与静态资源不出错
+* **SEO**：模板中心/Lookbook 分享卡片（OG/Twitter）正确，sitemap/robots 可访问
+* **稳定性**：短时网络抖动不影响“上传/生成/发布”主流程，告警可用
+* **文档**：Storybook 覆盖 20+ 组件且有视觉回归基线；Playbook 可用于新人排障
+
+---
+
+## 7) PR 模板（复用）
+
+```
+Title: feat(<scope>): <任务ID> <任务名称>
+
+## 变更
+- <实现清单>
+
+## 影响范围
+- <受影响的页面/模块>
+
+## 截图/录屏
+- <粘贴图片或链接>
+
+## 测试
+- UT: <覆盖率/关键用例>
+- IT: <通过用例/截图>
+- E2E: <通过用例/截图>
+
+## 性能/质量
+- Lighthouse / Web Vitals / Bundle analyze 核心指标
+
+## 回滚预案
+- <如何安全回滚>
+```
+
+--

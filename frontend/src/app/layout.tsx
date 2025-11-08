@@ -1,36 +1,64 @@
 import type { Metadata } from 'next';
-import { ConfigProvider } from 'antd';
-import zhCN from 'antd/locale/zh_CN';
 import Navigation from '@/components/Navigation';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import TokenSyncProvider from '@/components/TokenSyncProvider';
+import { AppThemeProvider } from '@/shared/providers';
+import { initWebVitals } from '@/lib/monitoring/web-vitals';
+import { MSWInitializer } from '@/components/MSWInitializer';
+import { generateMetadata } from '@/lib/seo';
+import './fonts.css';
+import '../styles/tokens.css'; // UI-P2-TOKEN-205: Design Tokens
+import '../styles/accessibility.css'; // A11Y-P2-ACCESS-206: 可访问性样式
 import './globals.css';
 import '../../sentry.client.config';
 
-export const metadata: Metadata = {
-  title: 'AI照 - 服装AI处理平台',
-  description: '专业的服装图片AI处理服务,提供基础修图和AI模特上身功能',
-};
+// SEO-P2-BASICS-207: 完整的SEO metadata
+export const metadata: Metadata = generateMetadata({
+  title: 'AI衣柜',
+  description:
+    '专业的服装图片AI处理服务，提供基础修图、AI模特上身、Lookbook生成、短视频制作、图片翻译等功能，助力服装电商提升效率',
+  keywords: [
+    'AI服装',
+    '服装AI处理',
+    'AI模特',
+    '服装修图',
+    'Lookbook生成',
+    '短视频制作',
+    '图片翻译',
+    '服装电商',
+    'AI商拍',
+  ],
+  path: '/',
+});
 
 /**
  * RootLayout - 根布局
  *
- * 艹，包含导航栏，支持青蓝玻璃拟态主题！
+ * 艹！使用GPT5工业级架构，支持主题切换和完整的状态管理！
+ * 还加了Web Vitals监控，性能必须管！
  */
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // 初始化Web Vitals监控
+  initWebVitals();
+
   return (
     <html lang="zh-CN">
-      <body className="bg-gradient-to-br from-slate-900 via-blue-950 to-emerald-950 min-h-screen">
+      <body>
+        {/* A11Y-P2-ACCESS-206: 跳过导航链接 */}
+        <a href="#main-content" className="sr-only-focusable">
+          跳过导航，直达主内容
+        </a>
         <ErrorBoundary>
-          <TokenSyncProvider />
-          <ConfigProvider locale={zhCN}>
+          <AppThemeProvider>
+            <MSWInitializer />
             <Navigation />
-            {children}
-          </ConfigProvider>
+            <main id="main-content" tabIndex={-1}>
+              {children}
+            </main>
+          </AppThemeProvider>
         </ErrorBoundary>
       </body>
     </html>

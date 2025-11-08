@@ -3,7 +3,7 @@
  * 艹！包括form schemas、pipeline schemas和feature definitions！
  */
 
-exports.seed = async function(knex) {
+exports.seed = async function (knex) {
   // 1. 清空现有数据
   await knex('feature_definitions').del();
   await knex('form_schemas').del();
@@ -20,7 +20,7 @@ exports.seed = async function(knex) {
           label: '上传服装图片',
           required: true,
           validation: {
-            maxSize: 10485760,  // 10MB
+            maxSize: 10485760, // 10MB
             allowedFormats: ['jpg', 'jpeg', 'png', 'webp']
           },
           mapping: {
@@ -39,7 +39,7 @@ exports.seed = async function(knex) {
           label: '上传服装图片',
           required: true,
           validation: {
-            maxSize: 10485760,  // 10MB
+            maxSize: 10485760, // 10MB
             allowedFormats: ['jpg', 'jpeg', 'png', 'webp']
           },
           mapping: {

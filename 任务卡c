@@ -1,0 +1,92 @@
+牛！P0 全部清盘 ✅
+我们直接进入 **Stage C（也就是之前规划里的 P1 阶段）**，开始把服饰垂类能力和协作/运维能力做全。
+
+下面是**单 app 结构**下的下一波任务清单（可直接丢给 Claude Code，一张卡=一条 PR）：
+
+---
+
+# Stage C（P1）— 功能与协作扩展
+
+## 1) 页面/工具
+
+| 任务ID               | 类型 | 名称             | 详细描述                                                                                                                                | 工时  | 前置     | 验收                            | 路径                                                            |
+| ------------------ | -- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --- | ------ | ----------------------------- | ------------------------------------------------------------- |
+| PAGE-P1-STUDIO-101 | 页面 | **AI 商拍（向导）**  | `/workspace/studio` 三步：①选工具（商品图/试衣/换色/去皱/抠图）②上传素材（复用 COSBatchUploader，支持批量）③参数（由 uiSchema 渲染）→ 提交生成；SSE 展示任务进度；生成结果瀑布流，可一键“去编辑器排版”。 | 14h | P0 壳子  | 批量生成稳定；进度实时；失败可重试；可跳转编辑器并带入素材 | `src/app/workspace/studio/page.tsx` `src/components/studio/*` |
+| PAGE-P1-PS-102     | 页面 | **商品图快速通道**    | `/tools/product-shoot`：多场景（纯色台/自然光/棚拍风）10 秒生成；批量 ZIP 导出；失败重试。                                                                       | 8h  | Studio | 单/批量成功；ZIP 正常                 | `src/app/tools/product-shoot/page.tsx`                        |
+| PAGE-P1-TRY-103    | 页面 | **AI 试衣**      | `/tools/tryon`：人物照+服装图；体型/遮挡参数；批量处理；前后对比。                                                                                           | 12h | Studio | 5 张批量通过；遮挡可调                  | `src/app/tools/tryon/page.tsx`                                |
+| PAGE-P1-RC-104     | 页面 | **服装换色**       | `/tools/recolor`：色卡/吸管/容差/保纹理；批量；前后对比。                                                                                              | 8h  | Studio | 5×5 色矩阵输出；边缘无溢色               | `src/app/tools/recolor/page.tsx`                              |
+| PAGE-P1-DW-105     | 页面 | **服装去皱**       | `/tools/dewrinkle`：强度/对比；批量。                                                                                                        | 6h  | Studio | 视觉无明显伪影                       | `src/app/tools/dewrinkle/page.tsx`                            |
+| PAGE-P1-CT-106     | 页面 | **智能抠图**       | `/tools/cutout`：羽化/边缘修复；批量。                                                                                                         | 8h  | Studio | 人/衣物边界自然                      | `src/app/tools/cutout/page.tsx`                               |
+| PAGE-P1-CANVAS-107 | 全栈 | **画版（圈选+提示词）** | `/workspace/canvas`：Fabric/Konva 圈选导出 mask → `POST /api/tools/canvas/tasks` 入队 → SSE 进度 → 结果回写 COS；支持 inpaint/recolor/dewrinkle。    | 20h | 编辑器壳   | 单张 ≤10s 出预览；批量稳定              | 前后端同名路径                                                       |
+
+## 2) Admin 扩展
+
+| 任务ID             | 类型 | 名称                      | 详细描述                                                                      | 工时  | 前置   | 验收            | 路径                                  |
+| ---------------- | -- | ----------------------- | ------------------------------------------------------------------------- | --- | ---- | ------------- | ----------------------------------- |
+| ADMIN-P1-CAT-108 | 页面 | **服饰 Catalog（SKU 元数据）** | `/admin/catalog`：Style/Colorway/Size/Fabric/Artwork 的 CRUD；为工具/编辑器提供下拉联动。 | 12h | —    | 字段校验完整；工具页可联动 | `src/app/admin/catalog/page.tsx`    |
+| ADMIN-P1-SK-109  | 页面 | **Style Kits（品牌样式包）**   | `/admin/style-kits`：品牌色/字体/水印/价签组件；编辑器“一键套用”。                             | 10h | 编辑器壳 | 套用/回滚可用       | `src/app/admin/style-kits/page.tsx` |
+| ADMIN-P1-OPS-110 | 页面 | **队列监控**                | `/admin/ops/queues`：Bull 队列长度/失败/重试/任务明细；单任务重试。                           | 6h  | —    | 可重试、可清理       | `src/app/admin/ops/queues/page.tsx` |
+
+## 3) 协作 & 指标 & 文档
+
+| 任务ID              | 类型 | 名称                | 详细描述                                                               | 工时  | 前置       | 验收             | 路径                                         |
+| ----------------- | -- | ----------------- | ------------------------------------------------------------------ | --- | -------- | -------------- | ------------------------------------------ |
+| CMS-P1-COLLAB-111 | 全栈 | **Pipeline 协同编辑** | 在现有 Pipeline 编辑器上接入 Yjs/CRDT；多人 Presence、冲突自动合并；每 500 ops 快照；版本回滚。 | 16h | 单人编辑器    | 2 人并发不卡；快照回滚成功 | `src/app/admin/pipelines/editor/*`         |
+| MON-P1-BI-112     | 监控 | **业务埋点**          | 聊天成功率/响应时长、KB 上传成功率、商拍耗时、各工具失败率；上报到 `/metrics` 或 Sentry。           | 6h  | P0 监控    | 看板 4+ 指标可视     | `src/lib/monitoring/metrics.ts`            |
+| TEST-P1-FLOW-113  | 测试 | **Admin 整链 IT**   | Provider→Prompt→Feature 发布→菜单更新→前台生效全链路集成测试（MSW）。                  | 8h  | P0 Admin | 100% 通过        | `src/tests/integration/admin-flow.spec.ts` |
+| DOC-P1-DEV-114    | 文档 | **前端开发指南**        | 目录规范、状态切片、API 封装、SSE Hook、MSW 策略、如何运行/测试/发版。                       | 6h  | —        | 新人 30 分钟可上手    | `docs/frontend-handbook.md`                |
+
+---
+
+## 对接约定（别走样）
+
+* **配置驱动原则不变**：Studio 的工具列表与每个工具参数 **从 `/api/ui/bootstrap.tools` 和 uiSchema 下发**；前端不硬编码。
+* **任务执行模型（工具页/商拍/画版）**：
+
+  * `POST /api/tools/:toolKey/tasks` → 返回 `{taskId}`
+  * 进度：SSE `GET /api/tools/tasks/:taskId/stream`（或 `POST`）
+  * 结果：`GET /api/tools/tasks/:taskId/result`（或回调写 COS + 回传 URL）
+* **画版**：圈选产出的 mask（PNG 或 RLE）随请求上传，后端在 Pipeline 里选择 inpaint/recolor/dewrinkle 分支。
+
+---
+
+## 建议的 PR 顺序（关键路径）
+
+1. **Studio 向导壳 → 商品图快速通道**：`PAGE-P1-STUDIO-101` → `PAGE-P1-PS-102`
+2. **核心服饰工具**：`TRY-103` → `RC-104` → `DW-105` → `CT-106`（可两两并行）
+3. **画版（圈选+提示词）**：`PAGE-P1-CANVAS-107`（依赖编辑器壳 & Studio 的任务模型）
+4. **Admin 扩展**：`ADMIN-P1-CAT-108` → `ADMIN-P1-SK-109` → `ADMIN-P1-OPS-110`
+5. **协作与指标**：`CMS-P1-COLLAB-111` → `MON-P1-BI-112` → `TEST-P1-FLOW-113` → `DOC-P1-DEV-114`
+
+---
+
+## 验收门槛（Stage C）
+
+* **生成体验**：Studio 单任务首张预览 < 10s；批量队列表现稳定，失败任务可单独重试
+* **工具质量**：换色无明显溢色；去皱无伪影；抠图边界自然；试衣遮挡可调
+* **协作稳定**：Pipeline 2 人并发编辑不卡顿，断线重连不丢进度，500 ops 自动快照可回滚
+* **运维可视**：队列监控可重试/可清理；各关键指标可见（仪表盘或 Sentry）
+* **配置化**：Bootstrap 修改工具/参数后，前端**无需发版**即可正确渲染
+
+---
+
+## 给 Claude Code 的启动消息（复制即用）
+
+```
+请进入 Stage C（P1），按以下顺序逐卡提交 PR（单 app 结构）：
+
+1) PAGE-P1-STUDIO-101
+2) PAGE-P1-PS-102
+3) PAGE-P1-TRY-103 → PAGE-P1-RC-104 → PAGE-P1-DW-105 → PAGE-P1-CT-106 （可并行）
+4) PAGE-P1-CANVAS-107
+5) ADMIN-P1-CAT-108 → ADMIN-P1-SK-109 → ADMIN-P1-OPS-110
+6) CMS-P1-COLLAB-111 → MON-P1-BI-112 → TEST-P1-FLOW-113 → DOC-P1-DEV-114
+
+共性要求：
+- 工具列表与参数 strictly 来源于 /api/ui/bootstrap.tools（uiSchema 渲染），前端不硬编码。
+- 任务执行模型：POST /api/tools/:toolKey/tasks → taskId，SSE 订阅进度，完成后读结果或回调。
+- 每张卡单独 PR，附实现清单/影响范围/截图或录屏/UT&IT&E2E 结果/回滚预案。
+- 后端接口未齐用 MSW mock，不阻塞。
+```
+
+--

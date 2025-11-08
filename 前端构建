@@ -1,0 +1,527 @@
+下面是一份**可直接给 Claude Code 执行**的前端规划与任务清单。内容按你给出的格式与优先级分组，覆盖功能分析、任务卡（Markdown 表格）、执行计划（含并行/关键路径）、工时评估与风险。
+为了保证与后端“缓存→快照→失效广播、统一错误体、监控/告警、RBAC”等**重构基线一致**，本方案在设计与任务卡里显式复用这些约定（如 `/ui/menus`、版本化、秒级失效等），与我们前几轮给你的 CMS/后端重构计划完全对齐。 
+
+---
+
+## 1) 功能分析报告
+
+### 1.1 前端页面 vs 后端 API 匹配度
+
+> 说明：✅ 已有/基本覆盖；🟡 有页但不完整；❌ 缺失。路由按 App Router 习惯书写。
+
+| 模块          | 后端 API（节选）                                                                                                                         | 预期前端页面/路由                                                                          | 匹配度 | 备注                              |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | --- | ------------------------------- |
+| 认证          | `POST /api/auth/login` `POST /api/auth/register` `GET /api/auth/me`                                                                | `app/login/page.tsx`（已有），补：注册/忘记密码页                                                | 🟡  | 注册/忘记密码缺。                       |
+| AI 推理       | `POST /api/ai/chat` (SSE/非流) `GET /api/ai/models`                                                                                  | **新建**：`/workspace/chat`                                                           | ❌   | 需实现 SSE Chat 与模型下拉。             |
+| 知识库         | `POST/GET /api/admin/kb/documents` `POST /api/admin/kb/query` `GET /api/admin/kb/queue-stats` `DELETE /api/admin/kb/documents/:id` | **新建**：`/admin/kb/page.tsx`、`/admin/kb/upload/page.tsx`、`/admin/kb/stats/page.tsx` | ❌   | KB 整组缺。                         |
+| 文件上传        | `POST /api/admin/uploads/sts` `POST /api/admin/uploads/callback`                                                                   | 复用通用上传组件；在 KB/内容管理内使用                                                              | 🟡  | 组件有图像上传，但需 STS/COS 直传封装。        |
+| Provider 管理 | `GET/POST/PUT/DELETE /api/admin/providers` `POST /api/admin/providers/:ref/test`                                                   | `app/admin/providers/page.tsx`                                                     | 🟡  | 有页，需补 **测试连接**、掩码与分页过滤。         |
+| 功能管理        | `GET/POST/PUT/DELETE /api/admin/features` `POST /api/admin/features/:id/toggle`                                                    | `app/admin/features/*`                                                             | ✅   | 建议接入**版本/快照发布**与菜单动态化。          |
+| Prompt 模板   | `GET/POST/PUT /api/admin/prompts` `GET /api/admin/prompts/:id/versions` `POST /api/admin/prompts/:id/render`                       | **新建**：`/admin/prompts/page.tsx`、`/admin/prompts/[id]/edit/page.tsx`、保留测试器         | 🟡  | 仅有测试器；需**列表/版本/编辑/预览**。         |
+| 用户管理        | `GET /api/admin/users` `PUT /api/admin/users/:id` `PUT /api/admin/users/:id/roles`                                                 | **新建**：`/admin/users/page.tsx`、`/admin/users/[id]/page.tsx`                        | ❌   | 完全缺失。                           |
+| 配置管理        | `GET /api/admin/configs` `PUT /api/admin/configs/:key`                                                                             | **新建**：`/admin/configs/page.tsx`                                                   | ❌   | 需对接**版本/失效广播**。                 |
+| 队列监控        | `GET /api/admin/kb/queue-stats`（示例）                                                                                                | **新建**：`/admin/ops/queues/page.tsx`                                                | ❌   | 展示 Bull 队列/失败重试。                |
+| 分销体系        | （你现有分销/提现前端页）                                                                                                                      | `app/admin/distribution/*` `app/distribution/*`                                    | 🟡  | 后端 API 未在清单出现；建议落一个**对齐表**补齐接口。 |
+
+**结论**：P0 缺口集中在**AI 聊天、知识库全套、Prompt 中心（完整）、用户与配置管理、Provider 完善**；这些与后端成熟度匹配，前端补齐后即可走通**“注册→登录→聊天/RAG→后台配置”**两条主流程。
+
+### 1.2 核心用户流程完整性
+
+* **用户**：注册/登录 → 进入 `workspace/chat` 使用 AI → 选择模型 →（可选）开启“检索增强”（RAG，选择集合）→ 会话/历史管理。
+  **缺口**：**聊天页**、会话历史、RAG 选择器。
+* **管理员**：Provider 管理（CRUD+连通性） → Prompt 模板（版本/预览） → 功能开关（发布/回滚） → 用户管理（角色/封禁） → 配置项编辑（灰度+失效）。
+  **缺口**：Prompt 列表&编辑、用户管理、配置管理；Provider 测试连接与掩码。
+* **分销商**：申请→推广→佣金→提现（页面已存在）。
+  **缺口**：需要与后台对齐 API（本轮不纳入 P0）。
+
+### 1.3 优先级评估
+
+* **P0（1 周内）**：AI 聊天（SSE）、知识库管理三页、Provider 完善、Prompt 列表/编辑/预览、用户管理、配置管理、错误/性能监控、测试基线、代码规范。
+* **P1（1 月内）**：队列监控页、聊天历史与会话管理、表单系统完善、Storybook、更多集成/端到端测试。
+* **P2**：设计系统打磨（BaseCard/DataTablePro）、i18n、可视化报表、设计优化（对标 designkit.com 的版式与图文栅格）。
+
+> 前端在与后端**快照-发布-回滚、缓存命中与失效广播**等机制配合时，应读取 `/ui/menus`/`/ui/schema` 或等价配置接口，以确保**“后端排好前端功能”**与**灰度/回滚**一致。 
+
+---
+
+## 2) 完整任务卡（Markdown 表格）
+
+> 统一字段：**任务ID / 任务类型 / 任务名称 / 详细描述 / 优先级 / 预计工时 / 前置任务 / 验收标准 / 涉及文件**
+> 说明：**工时为 AI 实现的净开发时长估算**（不含评审），你可直接逐卡交给 Claude Code。
+
+### 2.1 **P0 任务（必须 1 周内完成）**
+
+#### 页面开发
+
+| 任务ID        | 任务类型 | 任务名称                    | 详细描述                                                                                                                                 | 优先级 | 预计工时 | 前置任务        | 验收标准                                      | 涉及文件                                                                                 |
+| ----------- | ---- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --- | ---- | ----------- | ----------------------------------------- | ------------------------------------------------------------------------------------ |
+| PAGE-P0-001 | 页面开发 | **AI聊天（SSE）**           | 基于 `POST /api/ai/chat` 实现对话界面；EventSource/SSE 流式渲染；模型选择 `GET /api/ai/models`；消息持久化到本地 IndexedDB；错误码 `{code,message,requestId}` 统一展示。 | P0  | 10h  | CORE-P0-001 | 单轮/多轮会话可用；SSE 断线自动重连；错误体带 requestId 并可复制。 | `app/workspace/chat/page.tsx` `lib/api/chat.ts` `hooks/useSSE.ts`                    |
+| PAGE-P0-002 | 页面开发 | **知识库-列表/上传/检索**        | 列表分页、筛选、删除；上传页支持 COS STS 直传（后端 `/uploads/sts`），回调 `/uploads/callback`；检索测试页调用 `/api/admin/kb/query`；展示 `queue-stats`。                | P0  | 12h  | CORE-P0-002 | 能完成上传→分块/向量化→检索的闭环；展示队列统计。                | `app/admin/kb/page.tsx` `app/admin/kb/upload/page.tsx` `app/admin/kb/stats/page.tsx` |
+| PAGE-P0-003 | 页面开发 | **Provider 管理（完善）**     | 在既有 `providers/page.tsx` 中补：抽屉表单、测试连接按钮、敏感字段掩码显示；分页/搜索/排序；与后端统一错误码。                                                                  | P0  | 6h   | CORE-P0-001 | 测试连接 ≤2s 返回；掩码字段不泄露；CRUD 正常。              | `app/admin/providers/page.tsx` `components/ProviderForm.tsx`                         |
+| PAGE-P0-004 | 页面开发 | **Prompt 模板（列表+编辑+预览）** | 列表/搜索；编辑页使用 Monaco，变量校验；服务端预览 `POST /prompts/:id/render`；展示版本历史。                                                                     | P0  | 10h  | CORE-P0-003 | 可创建/编辑/预览/版本回滚；SSE 预览稳定。                  | `app/admin/prompts/page.tsx` `app/admin/prompts/[id]/edit/page.tsx`                  |
+| PAGE-P0-005 | 页面开发 | **用户管理**                | 列表/分页/筛选；详情侧抽屉；调整角色、封禁开关。                                                                                                            | P0  | 6h   | –           | 角色更新成功回显；错误码友好。                           | `app/admin/users/page.tsx`                                                           |
+| PAGE-P0-006 | 页面开发 | **配置管理**                | 通用 KV 配置编辑；版本与快照展示；保存后触发 “配置失效”提示（前端订阅或轮询版本号变化）。                                                                                     | P0  | 6h   | CORE-P0-002 | 保存后 ≤1s 菜单/schema 改变（取决于后端广播）；有回滚入口。      | `app/admin/configs/page.tsx`                                                         |
+
+> KB/配置页应遵循后端**缓存-快照-失效广播**与**只读降级**的行为，前端 UI 要有“只读模式提示”。 
+
+#### 组件开发
+
+| 任务ID        | 任务类型 | 任务名称             | 详细描述                                                             | 优先级 | 预计工时 | 前置任务 | 验收标准                      | 涉及文件                                |
+| ----------- | ---- | ---------------- | ---------------------------------------------------------------- | --- | ---- | ---- | ------------------------- | ----------------------------------- |
+| COMP-P0-001 | 组件开发 | **BaseCard**     | 抽象卡片（标题、副标题、右上角操作、状态角标），重构 FeatureCard/DistributorCard 等卡片的公共样式。 | P0  | 4h   | –    | 迁移 5+ 处旧卡片；快照一致。          | `components/base/BaseCard.tsx`      |
+| COMP-P0-002 | 组件开发 | **DataTablePro** | 基于 AntD Table 的通用封装：服务端分页/排序/筛选、列选择、密度、导出。                       | P0  | 6h   | –    | Provider/Users/Kb 列表统一套用。 | `components/base/DataTablePro.tsx`  |
+| COMP-P0-003 | 组件开发 | **COSUploader**  | STS 直传封装；支持进度/取消/重试/回调；限制类型/大小。                                  | P0  | 6h   | –    | 支持图片/文档；KB 上传可用。          | `components/upload/COSUploader.tsx` |
+
+#### 监控接入 & 代码规范
+
+| 任务ID       | 任务类型 | 任务名称                               | 详细描述                                                                                                      | 优先级 | 预计工时 | 前置任务 | 验收标准                                       | 涉及文件                                                 |
+| ---------- | ---- | ---------------------------------- | --------------------------------------------------------------------------------------------------------- | --- | ---- | ---- | ------------------------------------------ | ---------------------------------------------------- |
+| MON-P0-001 | 监控接入 | **Sentry 前端**                      | 接入 Sentry（DSN/env）；Next App Router 全局错误边界；Source Map 上传；关联后端 `requestId`（从响应头抄入 breadcrumb）。              | P0  | 4h   | –    | 404/500 捕获；事件含 user/email；可按 requestId 反查。 | `app/global-error.tsx` `lib/monitoring/sentry.ts`    |
+| MON-P0-002 | 监控接入 | **Web Vitals + 性能监控**              | 在 `app/(root)/layout.tsx` 或 `instrumentation.ts` 采集 Web Vitals（CLS/FID/LCP/INP），上报后端 `/metrics` 或 Sentry。 | P0  | 3h   | –    | 首屏指标上报率≥95%；支持环境开关。                        | `lib/monitoring/web-vitals.ts`                       |
+| STD-P0-001 | 代码规范 | **ESLint + Prettier + commitlint** | 严格规则：禁用 `any`（或限量白名单）；import 顺序；prettier；husky pre-commit；commitlint（conventional）。                       | P0  | 2h   | –    | ESLint 无报错；CI 强制执行。                        | `.eslintrc.cjs` `.prettierrc` `commitlint.config.js` |
+
+#### 测试接入（基线）
+
+| 任务ID        | 任务类型   | 任务名称             | 详细描述                                                                 | 优先级 | 预计工时 | 前置任务            | 验收标准              | 涉及文件                          |
+| ----------- | ------ | ---------------- | -------------------------------------------------------------------- | --- | ---- | --------------- | ----------------- | ----------------------------- |
+| TEST-P0-001 | 组件测试   | **基础组件 10 套 UT** | 对 BaseCard/DataTablePro/COSUploader/Monaco 包装/图片上传等写 UT（RTL + Jest）。 | P0  | 8h   | COMP-P0-*       | 通过 30+ 断言；语义覆盖。   | `__tests__/*.test.tsx`        |
+| TEST-P0-002 | 页面测试   | **Admin 三页 IT**  | Providers/Kb/Prompts 三页走通 CRUD/上传/预览的集成测试（MSW Mock）。                 | P0  | 8h   | PAGE-P0-*       | CI 可跑；无真实网络依赖。    | `tests/integration/*.spec.ts` |
+| TEST-P0-003 | E2E 流程 | **登录→聊天→检索增强**   | Playwright：登录→打开聊天→输入→SSE 流→切换模型→打开“检索增强”选择集合→返回答案。                  | P0  | 6h   | PAGE-P0-001/002 | 100% 通过；失败保留截图视频。 | `tests/e2e/chat-rag.spec.ts`  |
+
+> 错误体对齐 `{code,message,requestId}`；与后端统一的**错误码/日志/监控**基线是 P0 质量底座。 
+
+---
+
+### 2.2 **P1 任务（1 个月内）**
+
+#### 页面 & 组件
+
+| 任务ID        | 任务类型 | 任务名称            | 详细描述                              | 优先级 | 预计工时 | 前置任务        | 验收标准            | 涉及文件                              |
+| ----------- | ---- | --------------- | --------------------------------- | --- | ---- | ----------- | --------------- | --------------------------------- |
+| PAGE-P1-001 | 页面开发 | **队列监控**        | 展示 Bull 队列长度/失败/重试；可手动重试/清理。      | P1  | 6h   | –           | 实时刷新/手动重试成功。    | `app/admin/ops/queues/page.tsx`   |
+| PAGE-P1-002 | 页面开发 | **聊天历史/会话管理**   | 会话列表/归档/重命名/搜索；IndexedDB 同步策略。    | P1  | 8h   | PAGE-P0-001 | 可切换历史；5k 条内不卡顿。 | `app/workspace/chat/history/*`    |
+| COMP-P1-001 | 组件开发 | **Prompt 变量面板** | 从模板解析 `{{var}}` 自动生成表单预览；类型校验。    | P1  | 6h   | PAGE-P0-004 | 变量缺失提示准确。       | `components/prompts/VarPanel.tsx` |
+| COMP-P1-002 | 组件开发 | **安全文本渲染器**     | DOMPurify + CSP 兼容的富文本渲染（避免 XSS）。 | P1  | 4h   | STD-P0-001  | E2E 注入用例拦截。     | `components/common/SafeHTML.tsx`  |
+
+#### 监控 & 文档
+
+| 任务ID       | 任务类型 | 任务名称             | 详细描述                                         | 优先级 | 工时 | 前置          | 验收              | 文件                          |
+| ---------- | ---- | ---------------- | -------------------------------------------- | --- | -- | ----------- | --------------- | --------------------------- |
+| MON-P1-001 | 监控接入 | **前端业务指标埋点**     | 埋点：发送消息成功率、平均响应时长、KB 上传成功率；上报到后端 `/metrics`。 | P1  | 4h | MON-P0-002  | Grafana 看板展示曲线。 | `lib/monitoring/metrics.ts` |
+| DOC-P1-001 | 文档编写 | **前端开发指南**       | 含目录规范、状态管理、API 调用封装、测试规范、环境变量、运行脚本。          | P1  | 6h | –           | 新人 30min 内起跑。   | `frontend/开发指南.md`          |
+| DOC-P1-002 | 文档编写 | **API 调用与拦截器说明** | 讲明 axios 实例、鉴权、错误拦截、重试策略、SSE Hook 使用。        | P1  | 3h | CORE-P0-001 | 文档完整可跑示例。       | `docs/api-client.md`        |
+
+#### 测试
+
+| 任务ID        | 任务类型 | 任务名称              | 描述                                     | 优先级 | 工时  | 前置          | 验收                 | 文件                                     |
+| ----------- | ---- | ----------------- | -------------------------------------- | --- | --- | ----------- | ------------------ | -------------------------------------- |
+| TEST-P1-001 | 组件测试 | **Top 20 组件 UT**  | 对 20 个高复用组件补测试，用例覆盖不同 props/交互/边界。     | P1  | 16h | TEST-P0-001 | 覆盖率≥50%。           | `__tests__/*`                          |
+| TEST-P1-002 | 页面测试 | **Admin 流程 IT**   | Provider→Prompt→Feature 发布整链路 IT（MSW）。 | P1  | 8h  | PAGE-P0-*   | 通过率 100%。          | `tests/integration/admin-flow.spec.ts` |
+| TEST-P1-003 | E2E  | **Admin 发布→前台可见** | 新建 Feature → 发布 → 刷新前台菜单立现。            | P1  | 6h  | PAGE-P0-006 | 1s 内菜单变化（由后端广播触发）。 | `tests/e2e/feature-publish.spec.ts`    |
+
+> “发布→秒级生效→回滚”行为与后端的**快照/失效广播**强绑定，请沿用版本字段以避免前端本地缓存脏读。
+
+---
+
+### 2.3 **P2 任务（后续优化）**
+
+| 任务ID        | 类型    | 名称                 | 详细描述                                                       | 优先级 | 工时  | 前置        | 验收             | 文件                  |
+| ----------- | ----- | ------------------ | ---------------------------------------------------------- | --- | --- | --------- | -------------- | ------------------- |
+| UI-P2-001   | 设计/UI | **DesignKit 风格落地** | 参考 designkit.com 的**大留白/网格/大图+标题**；建立 8/12 栅格、版式与色阶 token。 | P2  | 8h  | –         | 3 个关键页统一风格。    | `styles/tokens.css` |
+| I18N-P2-001 | 基建    | **i18n 架子**        | 最小 i18n（zh/en），词条按模块拆分。                                    | P2  | 6h  | –         | Locale 切换即刻生效。 | `lib/i18n/*`        |
+| DOC-P2-001  | 文档    | **Storybook**      | 基于 CSF3 为 20+ 组件建故事，联动可视化回归。                               | P2  | 10h | COMP-P0-* | 可视化回归通过。       | `.storybook/*`      |
+
+---
+
+## 3) 执行计划（并行/关键路径）
+
+### 3.1 一周 **P0 执行顺序**（建议）
+
+**Day 1–2（并行）**
+
+* 核心基座：`CORE-P0-001`（API 客户端 + SSE Hook + 错误体对齐）；`STD-P0-001`（规范）；`MON-P0-001/002`（监控）。
+* 页面并行：`PAGE-P0-001`（聊天）↔ `PAGE-P0-003`（Provider 完善）。
+
+**Day 3–4（并行）**
+
+* `PAGE-P0-002`（知识库 3 页） + `COMP-P0-003`（COSUploader）。
+* `PAGE-P0-004`（Prompt 完整）+ `COMP-P1-001`（变量面板可延至 P1）。
+
+**Day 5**
+
+* `PAGE-P0-005`（用户管理）、`PAGE-P0-006`（配置管理）。
+* 测试基线：`TEST-P0-001/002/003` 全量跑通；修复。
+
+**关键路径**
+`CORE-P0-001 → PAGE-P0-001（SSE） → TEST-P0-003（E2E）` 与 `PAGE-P0-002（KB） → COMP-P0-003（直传） → TEST-P0-002` 两条链。
+
+### 3.2 文字版 Gantt（P0）
+
+```
+Day1  Day2  Day3  Day4  Day5
+CORE/SSE  [======]
+规范/监控  [====]
+聊天页     [==========]
+Provider   [======]
+KB三页            [========]
+COS直传           [====]
+Prompt全套        [========]
+用户/配置                [======]
+测试基线                      [========]
+```
+
+> 后续 **P1** 可按“队列监控→历史/会话→测试强化→文档”的顺序推进；与后端“监控/告警、缓存失效”机制保持一致。
+
+---
+
+## 4) 工作量评估
+
+* **P0 合计**：
+
+  * 页面：10h+12h+6h+10h+6h+6h = **50h**
+  * 组件：4h+6h+6h = **16h**
+  * 监控/规范：4h+3h+2h = **9h**
+  * 测试基线：8h+8h+6h = **22h**
+  * **P0 总计 ≈ 97h**
+
+* **P1 合计**：页面/组件/监控/文档/测试 ≈ **63h**
+
+* **P2 合计**：≈ **24h**
+
+* **总计 ≈ 184h**（AI 实现+联调口径；若多人/并行可压缩）
+
+> 前后端联动指标（来自后端基线目标）：发布后**≤1s**全进程命中新配置、列表 P95 **≤80ms**、错误体 `{code,message,requestId}` 一致；这些需在前端 E2E 中校验到位。 
+
+---
+
+## 5) 风险评估与规避
+
+| 风险                 | 影响      | 规避/缓解                                            |
+| ------------------ | ------- | ------------------------------------------------ |
+| SSE 断线/浏览器限制       | 聊天体验不稳定 | `EventSource` 包装自动重连；超时/心跳；降级为轮询。                |
+| KB 上传大文件/并发        | 卡顿/失败   | 分片/并发受控；失败重试；STS 失效刷新；配合后端队列。                    |
+| 敏感字段泄露             | 安全/合规   | 后端只回掩码；前端仅**一次性显示** Key；DTO 白名单；XSS/CSP。         |
+| 菜单/Schema 与配置版本不一致 | 页面错乱    | 版本字段 + 只读模式 + 失效广播监听；出现异常自动回退旧 ver。              |
+| 测试不稳定              | CI 红线   | MSW 全 Mock；E2E 重试&截图；用固定模型/假流降噪。                 |
+| 设计不统一              | 体验割裂    | BaseCard/DataTablePro 统一风格；P2 导入 DesignKit 风格体系。 |
+
+---
+
+## 6) 辅助底座（给 Claude Code 的补充说明）
+
+**CORE-P0-001（API 客户端/SSE/错误体统一）**
+
+* `lib/api/client.ts`: axios 实例 + 鉴权拦截器（401 重定向登录）；统一错误处理：后端 `{code,message,requestId}` → 前端 `AppError`；重试策略仅对 **幂等 GET** 开启。
+* `hooks/useSSE.ts`: `useSSE({ url, body, onDelta, onDone, onError })`；自动重连、关闭函数、超时与心跳。
+* `lib/store/*`: Zustand 切片（auth/chat/kb/admin）。
+
+> 错误体、日志、监控字段与后端完全一致，便于**跨端排障**（基于 requestId）。
+
+**COS 直传**
+
+* `COSUploader` 先请求 `/api/admin/uploads/sts` → 使用 STS 临时密钥直传 COS → 成功后调 `/uploads/callback`；显示进度、取消/重试、限类型与大小。
+
+**菜单/Schema 动态化（P1 可做）**
+
+* 由后端 `/ui/menus` `/ui/schema` 下发（或 /admin/features 拼装），**版本化与 Pub/Sub 失效**；前端保存 `version` 到 localStorage，用于判断是否需要刷新/重拉。
+
+**安全基线**
+
+* `SafeHTML`（DOMPurify）+ `next/head` 注入 CSP（img-src/media-src 指向 COS 域）；对表单/模板渲染严格变量白名单。
+* 结合后端的 **RBAC** 与 **DTO 白名单**，前端隐藏不可见操作。
+
+---
+
+## 7) 质量提升任务规划（展开）
+
+### 7.1 组件单元测试（目标：覆盖率 ≥50%）
+
+**优先组件（按风险/复用度排序）**
+
+1. COSUploader（上传/取消/重试/回调/失败）
+2. DataTablePro（分页/排序/筛选/列选择）
+3. BaseCard（变体/操作插槽/角标）
+4. Prompt 编辑器包装（变量高亮/禁用状态）
+5. NodeConfigDrawer（打开/关闭/校验）
+6. ImageUploader（单/多图/限制）
+7. JSONEditor/Monaco 包装（受控/只读/大文档）
+8. VarPicker（必填/类型/默认值）
+9. ValidationPanel（错误聚合提示）
+10. StatusBadge（颜色/状态映射）
+
+> 每个组件至少 3–5 个场景，合计 ~30–50 个用例，预计 **8h（P0）+16h（P1）**。
+
+### 7.2 页面集成测试（MSW）
+
+* Providers/Kb/Prompts 三页的 CRUD/上传/预览（P0）
+* 用户/配置管理（P0）
+* 队列监控/聊天历史（P1）
+
+### 7.3 E2E（Playwright）
+
+* **P0**：登录→聊天（SSE）→切模型→RAG 开关→返回答案
+* **P1**：Admin：Provider 新建→测试连接→Prompt 创建→Feature 发布→前台菜单变化
+* **P1**：KB：上传→队列完成→检索命中
+* **P1**：异常流：401/403/429/500 显示与恢复
+
+---
+
+## 8) 文档与规范
+
+* **前端开发指南**：目录结构、约定、状态管理、API 封装、SSE Hook、Mock 策略、测试运行、环境变量。
+* **组件文档**：优先 BaseCard/DataTablePro/COSUploader/Prompt Editor（Storybook 或 Markdown）。
+* **API 文档（前端侧）**：axios 封装与拦截器、错误处理、重试策略、SSE 使用示例。
+* **规范**：Prettier、ESLint、commitlint、Husky；CI 强制检查。
+
+---
+
+## 9) 与后端重构基线的对齐点（关键）
+
+* **错误体**：`{code,message,requestId}`（前端统一解析/展示）。
+* **缓存/快照/失效广播**：配置/菜单/Schema 改动 1 秒内生效；前端显示“只读/灰度/版本号”。
+* **监控/告警**：前端上报 Web Vitals 与业务指标，后端 Prom/OTEL/Sentry 可关联 requestId 排障。
+* **RBAC/DTO 白名单**：前端按角色隐藏字段/按钮，避免越权数据外显。
+* **队列化/限流/熔断**：队列长/失败率高时，前端给出友好降级提示（“排队中/切备份 Provider”）。
+
+---
+
+### 10) 附：可直接粘贴给 Claude Code 的“任务卡批量提示词”（示例）
+
+> **粘贴到 Claude Code：**
+> “按任务 ID 逐个完成，遇到 API 依赖不可用则使用 MSW mock；每次提交关联任务 ID 并在 PR 里附用例截图。”
+
+```
+请从 TASK 列表中执行以下序列（P0）：
+CORE-P0-001 → STD-P0-001 → MON-P0-001 → PAGE-P0-001 → PAGE-P0-003 → PAGE-P0-002 → COMP-P0-003 → PAGE-P0-004 → PAGE-P0-005 → PAGE-P0-006 → TEST-P0-001 → TEST-P0-002 → TEST-P0-003
+要求：每项提交附“涉及文件”变更、测试截图、运行说明。
+```
+
+---
+
+## 结语
+
+* 这份计划把**缺页补齐 + 质量兜底（测试/监控/规范）**作为 P0；用一周把前端从 **C 级 62 分**拉到**B 级 80+**的“上线安全线”。
+* 设计上对标 **DesignKit** 的**大图+网格+留白**，但 UI 打磨放在 P2，优先把**流程闭环**与**监控测试**补上。
+* 全文严格复用你后端的“缓存/快照/失效、统一错误体、监控与告警、RBAC/DTO 白名单”基线，保证前后端同构与可回滚。 
+
+如需，我可以把 **P0 页面的代码骨架（路由+空组件+SSE Hook+API 客户端）**与**测试模板**打包成一个 zip，直接放进仓库让 Claude Code 补全实现。
+下面把**对标网站 designkit.com（美图设计室）**的要点拆解清楚，并把你现有前端规划**补齐为“服装服饰垂类版”**的页面蓝图 + 任务卡（可直接交给 Claude Code 执行）。
+我只补**新增内容**与**改造建议**，尽量与我们已定的后端与 CMS/Feature Catalog 方案对齐（统一从配置驱动前端、SSE、缓存/快照/失效广播等）。
+
+---
+
+## 一、对标洞察（designkit.com → AI衣柜该学什么）
+
+**1) 产品矩阵与信息架构（IA）**
+
+* **AI 工具矩阵清晰可见且分组**：电商/人像/设计/文案等一级分类下直接列“AI商拍、AI商品图、人像换背景、AI模特、AI试鞋/试衣、服装换色、服装去皱、智能抠图、AI扩图、AI文案、AI海报”等，**入口极短路径**（2 次点击内到达执行页）。([designkit.com][1])
+* **模板中心**具备“**场景（电商/社媒/办公…）× 用途（营销带货/宣传/招聘…）× 行业（含鞋服箱包）× 颜色 × 风格 × 版式**”的多维过滤，并提供**综合排序/最新/最多下载**等排序；这是服饰行业大量运营素材/活动页的核心导航方式。([designkit.com][2])
+* **编辑器**（在线画布）承接从模板/工具跳转，所见即所得、左侧素材/图层、中间画布、右侧属性面板；**“一键”操作**（去底、换色、扩图）突出。([designkit.com][3])
+
+**2) 电商服饰场景的“快产图”体验基线**
+
+* **AI商品图**：主打“**10 秒内生成多场景**、批量高效”，对服饰垂类尤重要（SKU 多、场景多、上新频繁）。([designkit.com][4])
+* **AI商拍**：**一站式电商产图/后期/模板**，强调**无需摄影团队、批量产出**与后处理联动（抠图/修瑕/海报投放）。([designkit.com][5])
+
+> 结论：**“模板中心 → 场景/行业过滤 → 进入编辑器/一键工具 → 批量产出/发布”**是服饰行业高频闭环。我们的前端应围绕这条链路落页面与组件；同时保留你现有后台的**Provider/MCP/Prompt/Feature**可插拔能力，确保以后可以方便加新模型/工具。
+
+---
+
+## 二、AI衣柜（服饰垂类）前端蓝图（在你现有结构上补齐）
+
+### 2.1 信息架构（新增与改造）
+
+* **前台工作区 /workspace/**
+
+  * `/workspace/chat`（已规划）
+  * **`/workspace/studio`（AI商拍总入口）**：向导式 3 步（选择工具→上传/选择素材→参数 & 批量）→ 结果列表 → 一键海报/落版
+  * **`/workspace/templates` 模板中心**：沿用“场景/用途/行业/颜色/风格/版式/排序”过滤；行业默认选 **服饰/鞋包**；点击卡片 → 模板详情 → “用此模板打开编辑器”
+  * **`/workspace/editor` 编辑器**：画布 + 图层 + 属性；顶部“**一键换色/去皱/扩图/抠图**”快捷键；左侧“模特/场景/贴纸/文字/品牌组件”
+* **工具分组 /tools/**
+
+  * **`/tools/tryon`（AI试衣）**、`/tools/recolor`（服装换色）、`/tools/dewrinkle`（去皱）、`/tools/cutout`（智能抠图）、`/tools/product-shoot`（商品图）等**直接页**，每页保留**批量**入口。这些名称与分组对齐对标站的心智。([designkit.com][1])
+* **运营素材 /workspace/lookbook/**
+
+  * **`/workspace/lookbook` Lookbook 生成**：多商品搭配出图（网格/竖版/横版）、一键投放社媒
+* **后台 /admin/**（在你现有 CMS 上补两类）
+
+  * `.../catalog` **服饰 Catalog（款式/色卡/面料/尺码）**：SKU 维度结构化，前台工具页可直接选择
+  * `.../style-kits` **视觉样式包（品牌字色/版式组件）**：模板渲染时自动套品牌规范
+
+> 以上 IA 与对标“模板中心/编辑器/工具矩阵/AI商拍”的结构一致；“Lookbook、Catalog、Style Kits”是**服饰行业特有**增强（SKU 管理 + 品牌统一 + 搭配场景），确保我们在垂类体验上有差异化优势。
+
+---
+
+## 三、页面/模块补齐清单（映射对标能力 → 我们实现）
+
+> 下面仅列**与对标直接相关**的新增/改造项；所有 API 调用继续走你现有的**统一 AI 推理 API 或 Pipeline 执行 API**（由后端适配 BuildingAI/Provider/MCP），上传仍走 **COS STS**。
+
+### 3.1 新增页面（P0/P1/P2）
+
+* **P0**
+
+  1. **模板中心** `/workspace/templates` —— 多维过滤 + 排序 + 模板详情/预览；点击“用此模板编辑”进 `/workspace/editor`。**来源：对标模板中心的分类维度和排序**。([designkit.com][2])
+  2. **AI商拍** `/workspace/studio` —— 选择“商品图/试衣/换色/去皱”等子工具，三步向导，支持批量。**来源：一站式电商产图/批量**。([designkit.com][5])
+  3. **商品图** `/tools/product-shoot` —— 快速通道，10 秒多场景，支持模板落版继续编辑。**来源：AI商品图 10 秒产图**。([designkit.com][4])
+  4. **编辑器** `/workspace/editor` —— 画布/图层/属性；顶栏放“一键换色/抠图/扩图/去皱”快捷操作。**来源：在线编辑器“简洁易用 + 一键工具”**。([designkit.com][3])
+* **P1**
+
+  * **AI试衣** `/tools/tryon`、**服装换色** `/tools/recolor`、**服装去皱** `/tools/dewrinkle`、**智能抠图** `/tools/cutout` —— 每页一键/批量模式（表单 + 队列）。
+  * **Lookbook 生成** `/workspace/lookbook` —— 多 SKU 搭配出图，社媒比例一键导出。
+* **P2**
+
+  * **AI 带货视频** `/tools/short-video`（脚本 + 模板 + 画中画/字幕），**图片翻译** `/tools/image-translate`（跨境场景）。([designkit.com][1])
+
+### 3.2 新增后台页面（P1）
+
+* **Catalog（服饰）** `/admin/catalog`：款式（Style）/颜色（Colorway）/尺码（Size）/面料（Fabric）/印花（Artwork）
+* **Style Kits（品牌样式包）** `/admin/style-kits`：颜色/字体/按钮/品牌组件（Logo/水印/价签）
+
+---
+
+## 四、设计规范（对标风格 → 服饰垂类的 UI 语言）
+
+* **导航与落地**：对标站把“工具/模板/编辑器”一跳可达；我们采用**顶部主导航 + 二级工具页**，在“AI商拍”内提供**向导式动线**（更适合电商批量产图）。([designkit.com][1])
+* **模板卡片**：突出缩略图 + 标签（场景/行业/风格/颜色），卡片悬停即“预览/使用/收藏”。([designkit.com][2])
+* **编辑器操作**：把“**一键**”类操作放在顶栏主按钮（换色/去皱/扩图/抠图），与对标“简洁易用”的主诉求一致。([designkit.com][6])
+* **色彩与排版（建议）**：
+
+  * **品牌主色**：Black/White + **Accent：服饰行业高饱和时尚色**（如亮紫/玫红，支持主题切换）
+  * **栅格与密度**：12 列/8px 基准间距；卡片区采用 **4 列 × 行内自适应**
+
+---
+
+## 五、任务卡（新增/改造部分）
+
+> 表头统一：**任务ID｜任务类型｜任务名称｜详细描述｜优先级｜预计工时｜前置任务｜验收标准｜涉及文件**
+> 仅列**对标新增**（不重复你已落的聊天/KB/Provider/Prompt/监控/测试基线等）。
+
+### 5.1 **P0（1 周内补齐）**
+
+| 任务ID               | 任务类型  | 任务名称                     | 详细描述                                                                                        | 优先级         | 预计工时      | 前置任务                   | 验收标准                                          | 涉及文件                                                       |                     |                          |                       |
+| ------------------ | ----- | ------------------------ | ------------------------------------------------------------------------------------------- | ----------- | --------- | ---------------------- | --------------------------------------------- | ---------------------------------------------------------- | ------------------- | ------------------------ | --------------------- |
+| PAGE-P0-TPL-001    | 页面开发  | 模板中心（服饰垂类）               | 实现 `/workspace/templates`：过滤（场景/用途/行业/颜色/风格/版式/排序），卡片预览→“用此模板编辑”；默认行业=服饰/鞋包。**对标模板中心维度设计**。 | P0          | 12h       | CORE-P0-001（API/错误体规范） | 能按多维过滤与排序拉取；点击进入编辑器；空态与骨架屏；每条请求统一错误体展示。       | `app/workspace/templates/page.tsx` `components/template/*` |                     |                          |                       |
+| PAGE-P0-STUDIO-002 | 页面开发  | AI商拍（三步向导）               | `/workspace/studio`：①选工具（商品图/试衣/换色/去皱/抠图）②上传/选择素材③配置参数/批量；结果页支持“落版到模板/编辑”。**对标AI商拍一站式/批量**。 | P0          | 14h       | COMP-P0-UP-003         | 三步向导可回退；批量任务创建并显示进度；失败可重试；一键落版进入编辑器。          | `app/workspace/studio/*`                                   |                     |                          |                       |
+| PAGE-P0-PS-003     | 页面开发  | 商品图快速通道                  | `/tools/product-shoot`：10 秒多场景生成→结果瀑布流→批量导出。**对标“10 秒多场景产图”**。                              | P0          | 8h        | COMP-P0-UP-003         | 单/批量均可用；超时/失败提示；SSE 回显进度；导出 ZIP。              | `app/tools/product-shoot/page.tsx`                         |                     |                          |                       |
+| PAGE-P0-ED-004     | 页面开发  | 在线编辑器（顶栏一键工具）            | `/workspace/editor`：画布/图层/属性，顶栏提供“一键换色/去皱/扩图/抠图”；从模板/商拍/工具页可跳转带入参数。**对标“简洁易用编辑器 + 一键操作”**。  | P0          | 18h       | COMP-P0-CAN-004        | 进入即渲染模板；一键按钮触发 Pipeline 并回写画布；撤销/重做；图片占位与懒加载。 | `app/workspace/editor/*` `components/editor/*`             |                     |                          |                       |
+| COMP-P0-FLT-001    | 组件开发  | FilterBar & TemplateCard | 模板中心的过滤条 + 模板卡片（预览/使用/收藏/标签）。                                                               | P0          | 6h        | —                      | 过滤/排序联动；卡片状态（hover/loading/收藏）正确。             | `components/template/FilterBar.tsx` `TemplateCard.tsx`     |                     |                          |                       |
+| COMP-P0-UP-003     | 组件开发  | COS 批量直传器                | STS 直传封装，支持批量/进度/取消/重试/后端回调。                                                                | P0          | 8h        | —                      | 10 个文件并发上传稳定；失败重试通过。                          | `components/upload/COSBatchUploader.tsx`                   |                     |                          |                       |
+| COMP-P0-CAN-004    | 组件开发  | EditorCanvas 套件          | 画布 + 图层 + 选区 + 属性面板；暴露 `applyEffect('recolor'                                               | 'dewrinkle' | 'upscale' | 'cutout')` API。        | P0                                            | 16h                                                        | PAGE-P0-ED-004 并行开发 | 50+ 图层操作流畅；FPS 稳定；快捷键可用。 | `components/editor/*` |
+| TEST-P0-E2E-005    | E2E测试 | 模板→编辑器→一键工具→导出           | Playwright：进入模板中心→选模板→进编辑器→一键换色→导出图片。                                                       | P0          | 6h        | PAGE/COMP 完成           | 全流程通过；失败保留视频/截图。                              | `tests/e2e/template-editor.spec.ts`                        |                     |                          |                       |
+
+**对标出处**：模板中心的维度/排序（行业含“鞋服箱包”）与“用此模板编辑”的快速路径；AI 商拍“一站式/批量”；商品图 “10 秒多场景”；编辑器“简洁易用 + 一键工具”。([designkit.com][2])
+
+---
+
+### 5.2 **P1（1 个月内）**
+
+| 任务ID             | 任务类型 | 任务名称              | 详细描述                                                                 | 优先级 | 预计工时 | 前置任务               | 验收标准                | 涉及文件                                |
+| ---------------- | ---- | ----------------- | -------------------------------------------------------------------- | --- | ---- | ------------------ | ------------------- | ----------------------------------- |
+| PAGE-P1-TRY-001  | 页面开发 | AI试衣              | `/tools/tryon`：人物图 + 服装图 → 体型/姿态/遮挡参数 → 结果批量。                        | P1  | 12h  | PAGE-P0-STUDIO-002 | 5 张内批量稳定；遮挡/体型参数可调。 | `app/tools/tryon/page.tsx`          |
+| PAGE-P1-RC-002   | 页面开发 | 服装换色              | `/tools/recolor`：色卡选择/吸管；批量。                                         | P1  | 8h   | 同上                 | 5×5 颜色矩阵输出；色差<阈值。   | `app/tools/recolor/page.tsx`        |
+| PAGE-P1-DW-003   | 页面开发 | 服装去皱              | `/tools/dewrinkle`；强度滑杆；对比视图。                                        | P1  | 6h   | —                  | 前后对比预览；导出无伪影。       | `app/tools/dewrinkle/page.tsx`      |
+| PAGE-P1-CT-004   | 页面开发 | 智能抠图              | `/tools/cutout`；内置羽化/边缘修复。                                           | P1  | 8h   | —                  | 人/衣物边缘平滑；批量导出。      | `app/tools/cutout/page.tsx`         |
+| PAGE-P1-LB-005   | 页面开发 | Lookbook 生成       | `/workspace/lookbook`：多 SKU 搭配、模板套用、社媒比例导出。                          | P1  | 10h  | 模板中心完成             | 三种版式一键导出；可保存为模板。    | `app/workspace/lookbook/*`          |
+| ADMIN-P1-CAT-006 | 页面开发 | 服饰 Catalog        | `/admin/catalog`：Style/Colorway/Size/Fabric/Artwork 管理；前台工具页可直接下拉选择。 | P1  | 12h  | 后端 Catalog 表       | 与工具页联动；字段校验完善。      | `app/admin/catalog/*`               |
+| ADMIN-P1-SK-007  | 页面开发 | Style Kits（品牌样式包） | `/admin/style-kits`：品牌色/字体/价签/水印等；模板渲染自动套用。                          | P1  | 10h  | 模板中心               | 套用后模板风格统一；可回滚版本。    | `app/admin/style-kits/*`            |
+| MON-P1-UX-008    | 监控接入 | 业务埋点（服饰）          | 埋点：单任务耗时、批量成功率、换色平均色差、试衣失败率；入 Sentry/Prom。                           | P1  | 6h   | 监控基线               | 看板展示四指标曲线。          | `lib/monitoring/metrics-fashion.ts` |
+| TEST-P1-IT-009   | 页面测试 | 工具页集成测试           | 试衣/换色/去皱/抠图 4 页 MSW Mock 集成测试。                                       | P1  | 10h  | P1 页面就绪            | CI 稳定通过。            | `tests/integration/tools/*.spec.ts` |
+
+> 这些工具页与**对标的工具矩阵**一一对应，名称与心智保持一致；我们用统一 Pipeline 调用 + 队列化，前端只做表单/参数与结果展示。([designkit.com][1])
+
+---
+
+### 5.3 **P2（后续优化）**
+
+| 任务ID           | 任务类型 | 任务名称   | 详细描述                                 | 优先级 | 预计工时 | 前置任务   | 验收标准           | 涉及文件                            |
+| -------------- | ---- | ------ | ------------------------------------ | --- | ---- | ------ | -------------- | ------------------------------- |
+| PAGE-P2-SV-001 | 页面开发 | AI带货视频 | `/tools/short-video`：脚本→分镜→模板→字幕→导出。 | P2  | 14h  | 模板/编辑器 | 3 套默认模板可用。     | `app/tools/short-video/*`       |
+| PAGE-P2-TR-002 | 页面开发 | 图片翻译   | `/tools/image-translate`：检测语言→多语导出。  | P2  | 8h   | —      | 支持 6 种语种；版式不乱。 | `app/tools/image-translate/*`   |
+| DOC-P2-UI-003  | 文档   | 服饰设计规范 | 组件/色彩/空态/卡片/表单范式文档。                  | P2  | 6h   | P0 完成  | 设计审阅通过。        | `docs/fashion-ui-guidelines.md` |
+
+---
+
+## 六、接口与数据契约（前端对接）
+
+* **模板中心**：`GET /api/templates?scene=&industry=&style=&color=&layout=&order=`（返回分页 + 预览图 + 标签）；**行业默认=服饰/鞋包**。**来源：模板中心过滤维度**。([designkit.com][2])
+* **编辑器**：接收 `templateId` 或 `canvasJSON`；顶栏一键操作调用：`POST /api/pipelines/exec { toolKey, inputs }`，SSE 回写进度（沿用你们统一推理/队列化链路）。
+* **AI商拍/工具页**：统一 `POST /api/pipelines/batchExec`（批量），前端显示队列/结果；**商品图**子工具默认提供**多场景**（纯色台、自然场景、棚拍风）参数预设。**来源：AI商品图“多场景/10 秒”**。([designkit.com][4])
+* **Catalog/Style Kits**：`GET/POST /api/admin/catalog/*`、`/api/admin/style-kits/*`；编辑器载入时自动注入品牌字色/组件。
+
+---
+
+## 七、执行顺序（只含新增对标部分）
+
+**Week 1（P0）**
+
+* 模板中心（PAGE-P0-TPL-001） ↔ FilterBar/TemplateCard（COMP-P0-FLT-001）
+* AI商拍 & 商品图（PAGE-P0-STUDIO-002 / PAGE-P0-PS-003） + 批量直传器（COMP-P0-UP-003）
+* 在线编辑器（PAGE-P0-ED-004） + EditorCanvas（COMP-P0-CAN-004）
+* E2E（TEST-P0-E2E-005）
+
+**Week 2–4（P1）**
+
+* 四个工具页（试衣/换色/去皱/抠图） + Lookbook
+* 后台 Catalog/Style Kits
+* 服饰业务埋点 + 工具页集成测试
+
+**Week 5+（P2）**
+
+* 带货视频、图片翻译、设计规范文档
+
+---
+
+## 八、工作量评估（新增部分）
+
+* **P0 合计** ≈ 68h（模板中心 12 + 商拍 14 + 商品图 8 + 编辑器 18 + 三组件 30（并行） + E2E 6 → 并行后净耗时约 68h）
+* **P1 合计** ≈ 86h（四工具 34 + Lookbook 10 + Catalog 12 + Style Kits 10 + 监控 6 + 集成测试 10 + 冗余）
+* **P2 合计** ≈ 28h
+* **总计新增 ≈ 182h**（与前序已有规划相加，优先排 P0）
+
+---
+
+## 九、风险与对策（与对标体验相关）
+
+| 风险           | 表现            | 对策                                                         |
+| ------------ | ------------- | ---------------------------------------------------------- |
+| **批量产图的稳定性** | SSE 断流/并发导致失败 | 前端队列可视化 + 失败重试；后端 BullMQ + p-limit（已在你后端基线）                |
+| **一键效果期望差异** | 颜色偏差、去皱过度     | 参数预设 + 强度滑块 + 对比预览；收集用户反馈（对标方法论：快速拿反馈）([designkit.org][7]) |
+| **模板维度膨胀**   | 过滤慢、找不到       | 服饰默认行业 + 热门排序 + 关键词联想；缓存 + 游标分页（后端已具备）                     |
+| **品牌规范不统一**  | 出图风格不一致       | Style Kits 作为“品牌样式包”，编辑器载入自动套用                             |
+| **版权与合规**    | 模特/场景素材风险     | SKU 与素材分库 + 合规标签；DTO 白名单与脱敏（后端已具备）                         |
+
+---
+
+## 十、为什么这些补齐能“对标 + 超越”
+
+* **和对标一致**：清晰的**工具矩阵**、**模板中心多维过滤**、**在线编辑器一键操作**、**AI商拍批量产图**这几大“触点”我们全部补齐。([designkit.com][1])
+* **比对标更贴合服饰**：**Catalog/Style Kits/Lookbook**让 SKU 属性与品牌规范“穿透到模板与编辑器”，服饰行业上线效率更高。
+* **工程上更稳**：继续复用你后端的**统一推理 + 队列化 + SSE + 快照/失效广播**，前端只做配置与参数表单，新增功能无需重新发版（由 CMS/Feature Catalog 驱动）。
+
+---
+
+### 附：用于 Claude Code 的批量提示词（新增部分）
+
+> 「按任务 ID 顺序完成新增 P0；每次提交附：受影响文件+运行截图+测试结果」
+
+```
+请依次实现：
+PAGE-P0-TPL-001 → COMP-P0-FLT-001 → PAGE-P0-STUDIO-002 → COMP-P0-UP-003 → PAGE-P0-PS-003 → PAGE-P0-ED-004 → COMP-P0-CAN-004 → TEST-P0-E2E-005
+要求：所有 API 错误统一展示（{code,message,requestId}），SSE 断线自动重连；模板中心过滤项可从 /api/templates/meta 拉取维度配置。
+```
+
+---
+
+**备注（引用说明）**
+
+* 本文关于**工具分组/清单**、**AI商拍/商品图**、**编辑器“简洁易用 + 一键操作”**、**模板中心的多维过滤与排序**的描述与命名，均直接来源于对标站公开页面：工具与列表页（含“AI试衣/换色/去皱/抠图/商品图/带货视频/图片翻译”等）([designkit.com][1])；AI商品图“10 秒多场景”([designkit.com][4])；AI商拍“一站式/批量”([designkit.com][5])；编辑器“在线设计、简洁易用”([designkit.com][3])；模板中心的筛选维度/排序和“鞋服箱包”行业标签([designkit.com][2])。
+
+如果需要，我可以把**模板中心 + 编辑器 + AI商拍**三大模块的**路由骨架、Zustand 状态切片、SSE Hook、MSW Mock**打包为一个起步仓，直接让 Claude Code 补完交互与样式。
+
+[1]: https://www.designkit.com/tools?utm_source=chatgpt.com "AI商拍 - Design Kit"
+[2]: https://www.designkit.com/templates/design.html?utm_source=chatgpt.com "design模版_design素材_design图片-美图设计室"
+[3]: https://www.designkit.com/editor?from=aicp_func_intro&utm_source=chatgpt.com "__编辑页_美图设计室 - designkit.com"
+[4]: https://www.designkit.com/product-shoot?utm_source=chatgpt.com "AI商品图 - AI电商设计- 美图设计室 - Design Kit"
+[5]: https://www.designkit.com/aicp/?utm_source=chatgpt.com "AI商拍-电商人必备的AI设计工具-美图设计室 - Design Kit"
+[6]: https://www.designkit.com/editor/?from=home&utm_source=chatgpt.com "__编辑页_美图设计室 - designkit.com"
+[7]: https://www.designkit.org/methods/get-feedback.html?utm_source=chatgpt.com "Get Feedback - Design Kit"

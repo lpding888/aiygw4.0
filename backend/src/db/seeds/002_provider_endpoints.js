@@ -103,7 +103,7 @@ function decrypt(encryptedText) {
 /**
  * Seed 数据
  */
-exports.seed = async function(knex) {
+exports.seed = async function (knex) {
   // 检查必要的环境变量
   const requiredEnvVars = [
     'INTERNAL_CALLBACK_SECRET',
@@ -113,11 +113,11 @@ exports.seed = async function(knex) {
     'CREDENTIALS_ENCRYPTION_KEY'
   ];
 
-  const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+  const missingVars = requiredEnvVars.filter((varName) => !process.env[varName]);
 
   if (missingVars.length > 0) {
     console.warn('⚠️  警告：缺少以下环境变量，将使用占位符：');
-    missingVars.forEach(varName => console.warn(`   - ${varName}`));
+    missingVars.forEach((varName) => console.warn(`   - ${varName}`));
     console.warn('');
     console.warn('请在部署云函数后，配置这些环境变量，然后重新运行 seed');
     console.warn('');
@@ -131,7 +131,8 @@ exports.seed = async function(knex) {
     {
       provider_ref: 'internal_scf_video_compositor',
       provider_name: '内部视频合成服务',
-      endpoint_url: process.env.SCF_VIDEO_COMPOSITOR_URL || 'https://placeholder-video-compositor.example.com',
+      endpoint_url:
+        process.env.SCF_VIDEO_COMPOSITOR_URL || 'https://placeholder-video-compositor.example.com',
       credentials_encrypted: encrypt(process.env.INTERNAL_CALLBACK_SECRET || 'placeholder-secret'),
       auth_type: 'hmac',
       created_at: new Date(),
@@ -140,7 +141,8 @@ exports.seed = async function(knex) {
     {
       provider_ref: 'internal_scf_image_compositor',
       provider_name: '内部图片拼接服务',
-      endpoint_url: process.env.SCF_IMAGE_COMPOSITOR_URL || 'https://placeholder-image-compositor.example.com',
+      endpoint_url:
+        process.env.SCF_IMAGE_COMPOSITOR_URL || 'https://placeholder-image-compositor.example.com',
       credentials_encrypted: encrypt(process.env.INTERNAL_CALLBACK_SECRET || 'placeholder-secret'),
       auth_type: 'hmac',
       created_at: new Date(),
@@ -149,7 +151,8 @@ exports.seed = async function(knex) {
     {
       provider_ref: 'internal_scf_text_processor',
       provider_name: '内部文案处理服务',
-      endpoint_url: process.env.SCF_TEXT_PROCESSOR_URL || 'https://placeholder-text-processor.example.com',
+      endpoint_url:
+        process.env.SCF_TEXT_PROCESSOR_URL || 'https://placeholder-text-processor.example.com',
       credentials_encrypted: encrypt(process.env.INTERNAL_CALLBACK_SECRET || 'placeholder-secret'),
       auth_type: 'hmac',
       created_at: new Date(),
@@ -162,7 +165,7 @@ exports.seed = async function(knex) {
   console.log('✅ provider_endpoints 表数据初始化完成');
   console.log('');
   console.log('已插入的服务：');
-  endpoints.forEach(ep => {
+  endpoints.forEach((ep) => {
     const status = ep.is_active ? '✅ 激活' : '⚠️  未激活（占位符）';
     console.log(`  ${status} - ${ep.provider_name} (${ep.provider_ref})`);
   });
@@ -172,10 +175,10 @@ exports.seed = async function(knex) {
     console.log('⚠️  部分服务使用占位符URL，请在部署云函数后更新数据库：');
     console.log('');
     console.log('  UPDATE provider_endpoints SET');
-    console.log('    endpoint_url = \'<实际云函数URL>\',');
+    console.log("    endpoint_url = '<实际云函数URL>',");
     console.log('    is_active = true,');
     console.log('    updated_at = NOW()');
-    console.log('  WHERE provider_ref = \'internal_scf_xxx\';');
+    console.log("  WHERE provider_ref = 'internal_scf_xxx';");
     console.log('');
   }
 };

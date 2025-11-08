@@ -2,14 +2,14 @@
  * Extend tasks table for video generation feature
  * Add video-specific fields: coverUrl and thumbnailUrl
  */
-exports.up = async function(knex) {
+exports.up = async function (knex) {
   try {
     // Check if columns already exist to make migration idempotent
     const hasCoverUrl = await knex.schema.hasColumn('tasks', 'coverUrl');
     const hasThumbnailUrl = await knex.schema.hasColumn('tasks', 'thumbnailUrl');
 
     if (!hasCoverUrl || !hasThumbnailUrl) {
-      await knex.schema.alterTable('tasks', function(table) {
+      await knex.schema.alterTable('tasks', function (table) {
         if (!hasCoverUrl) {
           table.string('coverUrl', 2048).nullable().comment('Video cover URL');
         }
@@ -27,13 +27,13 @@ exports.up = async function(knex) {
   }
 };
 
-exports.down = async function(knex) {
+exports.down = async function (knex) {
   try {
     const hasCoverUrl = await knex.schema.hasColumn('tasks', 'coverUrl');
     const hasThumbnailUrl = await knex.schema.hasColumn('tasks', 'thumbnailUrl');
 
     if (hasCoverUrl || hasThumbnailUrl) {
-      await knex.schema.alterTable('tasks', function(table) {
+      await knex.schema.alterTable('tasks', function (table) {
         if (hasCoverUrl) {
           table.dropColumn('coverUrl');
         }

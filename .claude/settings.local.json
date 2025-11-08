@@ -1,21 +1,18 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx knex:*)",
-      "Bash(docker:*)",
-      "Bash(findstr:*)",
-      "Bash(timeout:*)",
-      "Bash(nul)",
-      "Bash(netstat:*)",
-      "Bash(tasklist:*)",
-      "Bash(taskkill /F /PID 22456)",
-      "Bash(taskkill //F //PID 22456)",
-      "Bash(dir:*)",
+      "Bash(done)",
+      "Bash(for:*)",
+      "Bash(do echo \"=== $f ===\")",
+      "Bash(while read f)",
+      "Bash(cat:*)",
+      "Bash(npm run test:unit:*)",
+      "Bash(npx jest:*)",
+      "Bash(timeout 40 npm run test:unit:*)",
       "Bash(git checkout:*)",
-      "Bash(git branch:*)",
-      "Bash(git merge:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(timeout 45 npm run test:unit:*)",
+      "Bash(timeout 50 npm run test:unit:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

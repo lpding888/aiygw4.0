@@ -1,0 +1,197 @@
+{
+  "version": 1,
+  "menus": [
+    {
+      "key": "templates",
+      "title": "模板中心",
+      "path": "/workspace/templates",
+      "icon": "layout-grid"
+    },
+    {
+      "key": "studio",
+      "title": "AI商拍",
+      "path": "/workspace/studio",
+      "icon": "wand"
+    },
+    {
+      "key": "editor",
+      "title": "在线编辑器",
+      "path": "/workspace/editor",
+      "icon": "pen-tool"
+    },
+    {
+      "key": "canvas",
+      "title": "画版",
+      "path": "/workspace/canvas",
+      "icon": "crop"
+    },
+    {
+      "key": "chat",
+      "title": "聊天",
+      "path": "/workspace/chat",
+      "icon": "message-square"
+    },
+    {
+      "key": "models",
+      "title": "模型管理",
+      "path": "/workspace/models",
+      "icon": "cpu"
+    }
+  ],
+  "tools": [
+    {
+      "key": "product_shoot",
+      "group": "电商·服饰",
+      "title": "商品图",
+      "icon": "camera",
+      "pipeline": "pipelines/product_shoot",
+      "uiSchema": {
+        "type": "form",
+        "fields": [
+          {
+            "name": "scene",
+            "label": "场景",
+            "type": "select",
+            "options": ["纯色台", "自然光", "棚拍风"],
+            "default": "纯色台",
+            "required": true
+          },
+          {
+            "name": "size",
+            "label": "输出尺寸",
+            "type": "select",
+            "options": ["1024x1024", "1536x1024", "2048x2048"],
+            "default": "1024x1024"
+          },
+          {
+            "name": "count",
+            "label": "数量",
+            "type": "number",
+            "min": 1,
+            "max": 12,
+            "default": 4
+          }
+        ]
+      }
+    },
+    {
+      "key": "recolor",
+      "group": "电商·服饰",
+      "title": "服装换色",
+      "icon": "droplet",
+      "pipeline": "pipelines/recolor",
+      "uiSchema": {
+        "type": "form",
+        "fields": [
+          {
+            "name": "color",
+            "label": "目标色",
+            "type": "color",
+            "default": "#1E3A8A",
+            "required": true
+          },
+          {
+            "name": "tolerance",
+            "label": "容差",
+            "type": "slider",
+            "min": 0,
+            "max": 1,
+            "step": 0.05,
+            "default": 0.4
+          },
+          {
+            "name": "preserve_texture",
+            "label": "保留纹理",
+            "type": "switch",
+            "default": true
+          }
+        ]
+      }
+    },
+    {
+      "key": "ai_tryon",
+      "group": "电商·服饰",
+      "title": "AI试衣",
+      "icon": "user",
+      "pipeline": "pipelines/ai_tryon",
+      "uiSchema": {
+        "type": "form",
+        "fields": [
+          {
+            "name": "body_type",
+            "label": "体型类型",
+            "type": "select",
+            "options": ["纤细", "标准", "健美", "丰满"],
+            "default": "标准",
+            "required": true
+          },
+          {
+            "name": "height",
+            "label": "身高(cm)",
+            "type": "number",
+            "min": 140,
+            "max": 200,
+            "default": 170
+          },
+          {
+            "name": "weight",
+            "label": "体重(kg)",
+            "type": "number",
+            "min": 35,
+            "max": 120,
+            "default": 60
+          },
+          {
+            "name": "occlusion_level",
+            "label": "遮挡级别",
+            "type": "select",
+            "options": ["无遮挡", "轻微遮挡", "中度遮挡", "重度遮挡"],
+            "default": "轻微遮挡"
+          },
+          {
+            "name": "preserve_face",
+            "label": "保留面部特征",
+            "type": "switch",
+            "default": true
+          },
+          {
+            "name": "preserve_hair",
+            "label": "保留发型",
+            "type": "switch",
+            "default": true
+          }
+        ]
+      }
+    }
+  ],
+  "editor": {
+    "quickActions": [
+      {
+        "key": "recolor",
+        "title": "一键换色",
+        "pipeline": "pipelines/recolor"
+      },
+      {
+        "key": "dewrinkle",
+        "title": "一键去皱",
+        "pipeline": "pipelines/dewrinkle"
+      },
+      {
+        "key": "cutout",
+        "title": "智能抠图",
+        "pipeline": "pipelines/cutout"
+      }
+    ]
+  },
+  "templates": {
+    "filters": {
+      "scene": ["电商主图", "详情图", "海报"],
+      "industry": ["服饰", "鞋包", "美妆"],
+      "style": ["极简", "杂志", "复古"],
+      "color": ["黑白", "高饱和", "莫兰迪"],
+      "layout": ["1:1", "3:4", "9:16"],
+      "order": ["最新", "热门", "评分"]
+    },
+    "cardsEndpoint": "/api/templates"
+  }
+}

@@ -149,22 +149,21 @@ export default function LoginPage() {
   };
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        padding: '20px',
-      }}
-    >
+    <div style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '100vh',
+      background: '#F9FAFB',
+      padding: '20px'
+    }}>
       <Card
         style={{
           width: '100%',
-          maxWidth: 460,
-          borderRadius: 16,
-          boxShadow: '0 12px 36px rgba(0,0,0,0.2)',
+          maxWidth: '400px',
+          border: '1px solid var(--border-primary)',
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.08)',
+          borderRadius: '12px'
         }}
         bodyStyle={{ padding: 32 }}
       >
@@ -340,11 +339,87 @@ export default function LoginPage() {
             borderRadius: 12,
           }}
         >
-          <Text type="secondary" style={{ fontSize: 13 }}>
-            <strong>提示：</strong>
-            <br />• 验证码1分钟内最多发送5次
-            <br />• 首次登录将自动注册账号
-            <br />• 首次登录建议设置密码，之后可直接密码登录
+          <Form.Item
+            name="phone"
+            rules={[
+              { required: true, message: '请输入手机号' },
+              { 
+                pattern: /^1[3-9]\d{9}$/, 
+                message: '请输入正确的手机号' 
+              }
+            ]}
+          >
+            <Input
+              prefix={<MobileOutlined />}
+              placeholder="请输入手机号"
+              maxLength={11}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="code"
+            rules={[
+              { required: true, message: '请输入验证码' },
+              { 
+                pattern: /^\d{6}$/, 
+                message: '验证码为6位数字' 
+              }
+            ]}
+          >
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <Input
+                prefix={<SafetyOutlined />}
+                placeholder="请输入6位验证码"
+                maxLength={6}
+                style={{ flex: 1 }}
+              />
+              <Button
+                onClick={handleSendCode}
+                disabled={countdown > 0}
+                loading={sendingCode}
+                style={{ width: '120px' }}
+              >
+                {countdown > 0 ? `${countdown}秒后重试` : '获取验证码'}
+              </Button>
+            </div>
+          </Form.Item>
+
+          <Form.Item style={{ marginBottom: '16px' }}>
+            <Button
+              type="primary"
+              htmlType="submit"
+              loading={loading}
+              block
+              style={{ height: '44px' }}
+            >
+              登录 / 注册
+            </Button>
+          </Form.Item>
+
+          <div style={{ textAlign: 'center' }}>
+            <Text type="secondary" style={{ fontSize: '12px' }}>
+              登录即代表同意
+              <a href="#" style={{ color: '#92400E' }}> 用户协议 </a>
+              和
+              <a href="#" style={{ color: '#92400E' }}> 隐私政策</a>
+            </Text>
+          </div>
+        </Form>
+
+        <div style={{
+          marginTop: '24px',
+          padding: '16px',
+          background: '#F9FAFB',
+          borderRadius: '8px'
+        }}>
+          <Text type="secondary" style={{ fontSize: '13px' }}>
+            <strong>提示:</strong>
+            <br />
+            • 验证码1分钟内最多发送5次
+            <br />
+            • 首次登录将自动注册账号
+            <br />
+            • 新用户赠送3次免费体验
           </Text>
         </div>
       </Card>

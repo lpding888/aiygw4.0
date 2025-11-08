@@ -40,17 +40,19 @@ nul
 # 可能的临时输出
 tmp/
 
-# ========== Docker相关 ==========
-# 艹！Docker数据卷和日志，别tm提交到Git
-docker/nginx/logs/
-docker/mysql/logs/
-backend/logs/
+# 空文件
+nul
 
-# 艹！SSL证书，绝对不能提交！
-docker/nginx/ssl/*.pem
-docker/nginx/ssl/*.key
-docker/nginx/ssl/*.crt
+# 测试结果
+test-results/
+frontend/test-results/
+playwright-report/
 
-# 艹！Docker数据持久化目录（如果有）
-mysql_data/
-redis_data/
+# 临时开发目录
+apps/
+
+# Claude/Serena缓存
+.claude/settings.local.json
+.serena/cache/
+.backups/
+

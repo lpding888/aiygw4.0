@@ -1,0 +1,179 @@
+import cron from 'node-cron';
+import { db } from '../config/database.js';
+import videoGenerateService from './videoGenerate.service.js';
+import taskService from './task.service.js';
+import quotaService from './quota.service.js';
+import logger from '../utils/logger.js';
+
+class VideoPollingService {
+  private isRunning = false;
+  private pollingTask: any = null;
+
+  start(): void {
+    if (this.isRunning) {
+      logger.warn('[VideoPollingService] 轮询服务已在运行');
+      return;
+    }
+
+    logger.info('[VideoPollingService] 启动视频任务轮询服务');
+    this.pollingTask = cron.schedule('*/5 * * * *', async () => {
+      await this.pollVideoTasks();
+    });
+    this.pollingTask.start?.();
+    this.isRunning = true;
+    logger.info('[VideoPollingService] 轮询服务启动成功，每5分钟执行一次');
+  }
+
+  stop(): void {
+    if (!this.isRunning) {
+      logger.warn('[VideoPollingService] 轮询服务未在运行');
+      return;
+    }
+    if (this.pollingTask) {
+      this.pollingTask.stop();
+      this.pollingTask = null;
+    }
+    this.isRunning = false;
+    logger.info('[VideoPollingService] 轮询服务已停止');
+  }
+
+  async pollVideoTasks(): Promise<void> {
+    try {
+      logger.info('[VideoPollingService] 开始轮询视频任务');
+      const processingTasks = await db('tasks')
+        .where('type', 'video_generate')
+        .where('status', 'processing')
+        .whereNotNull('vendorTaskId')
+        .select('*');
+      logger.info(`[VideoPollingService] 找到${processingTasks.length}个processing状态的视频任务`);
+      for (const task of processingTasks) {
+        await this.processVideoTask(task);
+      }
+      logger.info('[VideoPollingService] 视频任务轮询完成');
+    } catch (error: any) {
+      logger.error('[VideoPollingService] 轮询视频任务失败', { error: error.message });
+    }
+  }
+
+  private async processVideoTask(task: any): Promise<void> {
+    try {
+      logger.info(
+        `[VideoPollingService] 处理视频任务 taskId=${task.id} vendorTaskId=${task.vendorTaskId}`
+      );
+      if (videoGenerateService.isTimeout(task.created_at)) {
+        await this.handleTimeoutTask(task);
+        return;
+      }
+      const statusResult = await videoGenerateService.pollVideoStatus(task.vendorTaskId);
+      switch (statusResult.status) {
+        case 'success':
+          await this.handleSuccessTask(task, statusResult);
+          break;
+        case 'failed':
+          await this.handleFailedTask(task, statusResult);
+          break;
+        case 'pending':
+        case 'processing':
+          logger.info(
+            `[VideoPollingService] 任务仍在处理中 taskId=${task.id} status=${statusResult.status}`
+          );
+          break;
+        default:
+          logger.warn(
+            `[VideoPollingService] 未知任务状态 taskId=${task.id} status=${statusResult.status}`
+          );
+      }
+    } catch (error: any) {
+      logger.error(`[VideoPollingService] 处理视频任务失败 taskId=${task.id}`, {
+        error: error.message
+      });
+    }
+  }
+
+  private async handleSuccessTask(task: any, statusResult: any): Promise<void> {
+    try {
+      logger.info(
+        `[VideoPollingService] 处理成功任务 taskId=${task.id} videoUrl=${statusResult.videoUrl}`
+      );
+      const cosResult = await this.downloadVideoToCOS(task, statusResult.videoUrl);
+      await db('tasks')
+        .where('id', task.id)
+        .update({
+          status: 'success',
+          resultUrls: JSON.stringify(cosResult.resultUrls),
+          coverUrl: cosResult.coverUrl,
+          thumbnailUrl: cosResult.thumbnailUrl,
+          completedAt: new Date(),
+          updated_at: new Date()
+        });
+      logger.info(`[VideoPollingService] 任务成功处理完成 taskId=${task.id}`);
+      await quotaService.confirm(task.id).catch(() => {});
+    } catch (error: any) {
+      logger.error(`[VideoPollingService] 处理成功任务失败 taskId=${task.id}`, {
+        error: error.message
+      });
+      await this.handleFailedTask(task, { errorMessage: `视频下载失败: ${error.message}` });
+    }
+  }
+
+  private async handleFailedTask(task: any, statusResult: any): Promise<void> {
+    try {
+      const errorMessage = statusResult.errorMessage || '视频生成失败';
+      logger.info(`[VideoPollingService] 处理失败任务 taskId=${task.id} error=${errorMessage}`);
+      await db('tasks').where('id', task.id).update({
+        status: 'failed',
+        errorReason: errorMessage,
+        completedAt: new Date(),
+        updated_at: new Date()
+      });
+      await quotaService.cancel(task.id).catch(() => {});
+      logger.info(`[VideoPollingService] 失败任务处理完成 taskId=${task.id} 已退还配额`);
+    } catch (error: any) {
+      logger.error(`[VideoPollingService] 处理失败任务异常 taskId=${task.id}`, {
+        error: error.message
+      });
+    }
+  }
+
+  private async handleTimeoutTask(task: any): Promise<void> {
+    try {
+      logger.info(`[VideoPollingService] 处理超时任务 taskId=${task.id}`);
+      await db('tasks').where('id', task.id).update({
+        status: 'failed',
+        errorReason: 'TIMEOUT',
+        completedAt: new Date(),
+        updated_at: new Date()
+      });
+      await quotaService.cancel(task.id).catch(() => {});
+      logger.info(`[VideoPollingService] 超时任务处理完成 taskId=${task.id} 已退还配额`);
+    } catch (error: any) {
+      logger.error(`[VideoPollingService] 处理超时任务异常 taskId=${task.id}`, {
+        error: error.message
+      });
+    }
+  }
+
+  private async downloadVideoToCOS(
+    task: any,
+    videoUrl: string
+  ): Promise<{ resultUrls: string[]; coverUrl: string; thumbnailUrl: string }> {
+    logger.info(`[VideoPollingService] 下载视频到COS taskId=${task.id} videoUrl=${videoUrl}`);
+    // TODO: 实现COS下载逻辑；先返回模拟
+    const result = {
+      resultUrls: [
+        `https://cdn.example.com/output/${task.userId}/${task.id}/720p.mp4`,
+        `https://cdn.example.com/output/${task.userId}/${task.id}/480p.mp4`,
+        `https://cdn.example.com/output/${task.userId}/${task.id}/playlist.m3u8`
+      ],
+      coverUrl: `https://cdn.example.com/output/${task.userId}/${task.id}/cover.jpg`,
+      thumbnailUrl: `https://cdn.example.com/output/${task.userId}/${task.id}/preview.gif`
+    };
+    return result;
+  }
+
+  getStatus() {
+    return { isRunning: this.isRunning, pollingInterval: '5 minutes' };
+  }
+}
+
+export default new VideoPollingService();

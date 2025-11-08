@@ -47,7 +47,7 @@ function safeCapture(error: any, extra?: Record<string, any>) {
 }
 
 class APIClient {
-  private client: AxiosInstance;
+  public client: AxiosInstance; // 艹，改成public让外部服务层可以用！
 
   constructor(baseURL: string = API_BASE) {
     this.client = axios.create({
@@ -344,8 +344,27 @@ class APIClient {
     createFeature: (data: any) =>
       this.client.post<APIResponse>('/admin/features', data),
 
-    updateFeature: (id: string, data: any) =>
-      this.client.put<APIResponse>(`/admin/features/${id}`, data),
+    // Feature Wizard创建（CMS-208）- 艹！专用于向导页面！
+    createFeatureFromWizard: (data: {
+      feature_id: string;
+      display_name: string;
+      description: string;
+      category?: string;
+      icon?: string;
+      plan_required?: string;
+      access_scope?: string;
+      quota_cost?: number;
+      rate_limit_policy?: string;
+      form_schema_id?: string;
+      pipeline_schema_id: string;
+      pipeline_schema_data: {
+        nodes: any[];
+        edges: any[];
+      };
+    }) => this.client.post<APIResponse>('/admin/features/wizard', data),
+
+    updateFeature: (featureId: string, data: any) =>
+      this.client.put<APIResponse>(`/admin/features/${featureId}`, data),
 
     toggleFeature: (id: string, data: { is_enabled: boolean }) =>
       this.client.patch<APIResponse>(`/admin/features/${id}`, data),

@@ -2,7 +2,7 @@
  * 系统配置种子数据
  */
 
-exports.seed = async function(knex) {
+exports.seed = async function (knex) {
   // 清空现有配置
   await knex('system_configs').del();
 

@@ -1,0 +1,577 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "version": "1.0.0",
+  "description": "UI Schema配置示例 - 后端驱动前端渲染",
+  "lastUpdated": "2025-11-03",
+  "author": "老王",
+
+  "comment_instructions": "艹，这个JSON文件定义了完整的UI Schema结构，前端根据这个配置动态渲染界面！",
+
+  "menus": {
+    "admin": [
+      {
+        "id": "dashboard",
+        "label": "仪表盘",
+        "icon": "DashboardOutlined",
+        "path": "/admin/dashboard",
+        "order": 1,
+        "visible": true,
+        "permissions": ["admin", "operator"],
+        "description": "系统概览和关键指标"
+      },
+      {
+        "id": "content",
+        "label": "内容管理",
+        "icon": "FileTextOutlined",
+        "order": 2,
+        "visible": true,
+        "permissions": ["admin", "editor"],
+        "children": [
+          {
+            "id": "announcements",
+            "label": "公告管理",
+            "path": "/admin/announcements",
+            "visible": true,
+            "permissions": ["admin", "editor"],
+            "badge": {
+              "type": "count",
+              "source": "/api/admin/announcements/count?status=pending"
+            }
+          },
+          {
+            "id": "banners",
+            "label": "轮播图管理",
+            "path": "/admin/banners",
+            "visible": true,
+            "permissions": ["admin", "editor"]
+          }
+        ]
+      },
+      {
+        "id": "features",
+        "label": "功能管理",
+        "icon": "AppstoreOutlined",
+        "order": 3,
+        "visible": true,
+        "permissions": ["admin"],
+        "children": [
+          {
+            "id": "feature-catalog",
+            "label": "功能目录",
+            "path": "/admin/features",
+            "visible": true,
+            "permissions": ["admin"]
+          },
+          {
+            "id": "feature-new",
+            "label": "新建功能",
+            "path": "/admin/features/new",
+            "visible": true,
+            "permissions": ["admin"],
+            "highlight": true
+          }
+        ]
+      },
+      {
+        "id": "ai",
+        "label": "AI配置",
+        "icon": "RobotOutlined",
+        "order": 4,
+        "visible": true,
+        "permissions": ["admin"],
+        "children": [
+          {
+            "id": "providers",
+            "label": "Provider管理",
+            "path": "/admin/providers",
+            "visible": true,
+            "permissions": ["admin"]
+          },
+          {
+            "id": "mcp-endpoints",
+            "label": "MCP端点",
+            "path": "/admin/mcp-endpoints",
+            "visible": true,
+            "permissions": ["admin"]
+          },
+          {
+            "id": "prompt-templates",
+            "label": "Prompt模板",
+            "path": "/admin/prompt-templates",
+            "visible": true,
+            "permissions": ["admin"]
+          }
+        ]
+      },
+      {
+        "id": "users",
+        "label": "用户管理",
+        "icon": "UserOutlined",
+        "path": "/admin/users",
+        "order": 5,
+        "visible": true,
+        "permissions": ["admin"]
+      },
+      {
+        "id": "system",
+        "label": "系统设置",
+        "icon": "SettingOutlined",
+        "order": 6,
+        "visible": true,
+        "permissions": ["admin"],
+        "children": [
+          {
+            "id": "configs",
+            "label": "配置管理",
+            "path": "/admin/configs",
+            "visible": true,
+            "permissions": ["admin"]
+          },
+          {
+            "id": "logs",
+            "label": "操作日志",
+            "path": "/admin/logs",
+            "visible": true,
+            "permissions": ["admin"]
+          },
+          {
+            "id": "security",
+            "label": "安全设置",
+            "path": "/admin/security",
+            "visible": true,
+            "permissions": ["admin"]
+          }
+        ]
+      }
+    ],
+
+    "user": [
+      {
+        "id": "home",
+        "label": "首页",
+        "icon": "HomeOutlined",
+        "path": "/",
+        "order": 1,
+        "visible": true,
+        "permissions": ["*"]
+      },
+      {
+        "id": "my-tasks",
+        "label": "我的任务",
+        "icon": "UnorderedListOutlined",
+        "path": "/tasks",
+        "order": 2,
+        "visible": true,
+        "permissions": ["user", "vip"]
+      },
+      {
+        "id": "profile",
+        "label": "个人中心",
+        "icon": "UserOutlined",
+        "path": "/profile",
+        "order": 3,
+        "visible": true,
+        "permissions": ["user", "vip"]
+      }
+    ]
+  },
+
+  "pages": {
+    "announcements": {
+      "title": "公告管理",
+      "description": "管理系统公告和通知",
+      "layout": "table",
+      "permissions": ["admin", "editor"],
+
+      "fields": {
+        "list": [
+          {
+            "key": "id",
+            "label": "ID",
+            "type": "text",
+            "width": 80,
+            "sortable": true,
+            "visible": true
+          },
+          {
+            "key": "title",
+            "label": "标题",
+            "type": "text",
+            "width": 200,
+            "sortable": true,
+            "visible": true,
+            "link": "/admin/announcements/{id}"
+          },
+          {
+            "key": "content",
+            "label": "内容",
+            "type": "richtext",
+            "width": 300,
+            "visible": true,
+            "ellipsis": true
+          },
+          {
+            "key": "type",
+            "label": "类型",
+            "type": "tag",
+            "width": 100,
+            "visible": true,
+            "options": [
+              { "value": "system", "label": "系统", "color": "blue" },
+              { "value": "maintenance", "label": "维护", "color": "orange" },
+              { "value": "promotion", "label": "推广", "color": "green" }
+            ]
+          },
+          {
+            "key": "status",
+            "label": "状态",
+            "type": "tag",
+            "width": 100,
+            "visible": true,
+            "options": [
+              { "value": "draft", "label": "草稿", "color": "default" },
+              { "value": "published", "label": "已发布", "color": "success" },
+              { "value": "archived", "label": "已归档", "color": "default" }
+            ]
+          },
+          {
+            "key": "priority",
+            "label": "优先级",
+            "type": "number",
+            "width": 100,
+            "visible": true,
+            "sortable": true
+          },
+          {
+            "key": "created_at",
+            "label": "创建时间",
+            "type": "datetime",
+            "width": 180,
+            "visible": true,
+            "sortable": true,
+            "format": "YYYY-MM-DD HH:mm:ss"
+          },
+          {
+            "key": "actions",
+            "label": "操作",
+            "type": "actions",
+            "width": 200,
+            "fixed": "right",
+            "visible": true,
+            "buttons": [
+              {
+                "label": "编辑",
+                "type": "primary",
+                "size": "small",
+                "permissions": ["admin", "editor"],
+                "action": "edit"
+              },
+              {
+                "label": "删除",
+                "type": "danger",
+                "size": "small",
+                "permissions": ["admin"],
+                "action": "delete",
+                "confirm": "确定删除这条公告吗？"
+              }
+            ]
+          }
+        ],
+
+        "form": [
+          {
+            "key": "title",
+            "label": "标题",
+            "type": "text",
+            "required": true,
+            "placeholder": "请输入公告标题",
+            "maxLength": 100,
+            "rules": [
+              { "required": true, "message": "请输入标题" },
+              { "max": 100, "message": "标题不能超过100字" }
+            ]
+          },
+          {
+            "key": "content",
+            "label": "内容",
+            "type": "richtext",
+            "required": true,
+            "placeholder": "请输入公告内容",
+            "rows": 6,
+            "rules": [
+              { "required": true, "message": "请输入内容" }
+            ]
+          },
+          {
+            "key": "type",
+            "label": "类型",
+            "type": "select",
+            "required": true,
+            "options": [
+              { "value": "system", "label": "系统" },
+              { "value": "maintenance", "label": "维护" },
+              { "value": "promotion", "label": "推广" }
+            ],
+            "rules": [
+              { "required": true, "message": "请选择类型" }
+            ]
+          },
+          {
+            "key": "priority",
+            "label": "优先级",
+            "type": "number",
+            "required": true,
+            "default": 0,
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "rules": [
+              { "required": true, "message": "请输入优先级" }
+            ]
+          },
+          {
+            "key": "status",
+            "label": "状态",
+            "type": "radio",
+            "required": true,
+            "default": "draft",
+            "options": [
+              { "value": "draft", "label": "草稿" },
+              { "value": "published", "label": "发布" }
+            ]
+          },
+          {
+            "key": "published_at",
+            "label": "发布时间",
+            "type": "datetime",
+            "required": false,
+            "placeholder": "选择发布时间（留空则立即发布）",
+            "dependencies": [
+              {
+                "field": "status",
+                "value": "published",
+                "visible": true
+              }
+            ]
+          }
+        ],
+
+        "filters": [
+          {
+            "key": "type",
+            "label": "类型",
+            "type": "select",
+            "options": [
+              { "value": "", "label": "全部" },
+              { "value": "system", "label": "系统" },
+              { "value": "maintenance", "label": "维护" },
+              { "value": "promotion", "label": "推广" }
+            ]
+          },
+          {
+            "key": "status",
+            "label": "状态",
+            "type": "select",
+            "options": [
+              { "value": "", "label": "全部" },
+              { "value": "draft", "label": "草稿" },
+              { "value": "published", "label": "已发布" },
+              { "value": "archived", "label": "已归档" }
+            ]
+          },
+          {
+            "key": "keyword",
+            "label": "关键词",
+            "type": "text",
+            "placeholder": "搜索标题或内容"
+          }
+        ]
+      },
+
+      "actions": {
+        "create": {
+          "label": "新建公告",
+          "type": "primary",
+          "icon": "PlusOutlined",
+          "permissions": ["admin", "editor"],
+          "api": "POST /admin/announcements"
+        },
+        "bulkDelete": {
+          "label": "批量删除",
+          "type": "danger",
+          "icon": "DeleteOutlined",
+          "permissions": ["admin"],
+          "confirm": "确定删除选中的公告吗？",
+          "api": "DELETE /admin/announcements/bulk"
+        }
+      },
+
+      "api": {
+        "list": "GET /admin/announcements",
+        "detail": "GET /admin/announcements/:id",
+        "create": "POST /admin/announcements",
+        "update": "PUT /admin/announcements/:id",
+        "delete": "DELETE /admin/announcements/:id"
+      }
+    },
+
+    "providers": {
+      "title": "Provider管理",
+      "description": "管理AI模型供应商配置",
+      "layout": "table",
+      "permissions": ["admin"],
+
+      "fields": {
+        "list": [
+          {
+            "key": "name",
+            "label": "名称",
+            "type": "text",
+            "width": 150,
+            "visible": true
+          },
+          {
+            "key": "kind",
+            "label": "类型",
+            "type": "tag",
+            "width": 120,
+            "visible": true,
+            "options": [
+              { "value": "openai", "label": "OpenAI", "color": "green" },
+              { "value": "anthropic", "label": "Anthropic", "color": "purple" },
+              { "value": "buildingai", "label": "BuildingAI", "color": "blue" }
+            ]
+          },
+          {
+            "key": "base_url",
+            "label": "API地址",
+            "type": "text",
+            "width": 250,
+            "visible": true,
+            "ellipsis": true
+          },
+          {
+            "key": "weight",
+            "label": "权重",
+            "type": "number",
+            "width": 80,
+            "visible": true
+          },
+          {
+            "key": "status",
+            "label": "状态",
+            "type": "tag",
+            "width": 100,
+            "visible": true,
+            "options": [
+              { "value": "active", "label": "正常", "color": "success" },
+              { "value": "inactive", "label": "禁用", "color": "default" },
+              { "value": "error", "label": "异常", "color": "error" }
+            ]
+          },
+          {
+            "key": "actions",
+            "label": "操作",
+            "type": "actions",
+            "width": 200,
+            "fixed": "right",
+            "visible": true,
+            "buttons": [
+              {
+                "label": "测试",
+                "type": "default",
+                "size": "small",
+                "action": "test"
+              },
+              {
+                "label": "编辑",
+                "type": "primary",
+                "size": "small",
+                "action": "edit"
+              },
+              {
+                "label": "删除",
+                "type": "danger",
+                "size": "small",
+                "action": "delete",
+                "confirm": "确定删除这个Provider吗？"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+
+  "widgets": {
+    "dashboard": [
+      {
+        "id": "stats-overview",
+        "type": "stat-cards",
+        "title": "概览统计",
+        "layout": { "span": 24 },
+        "permissions": ["admin", "operator"],
+        "cards": [
+          {
+            "title": "总用户数",
+            "value": { "api": "/admin/stats/users/count" },
+            "icon": "UserOutlined",
+            "color": "blue",
+            "trend": { "api": "/admin/stats/users/trend" }
+          },
+          {
+            "title": "今日订单",
+            "value": { "api": "/admin/stats/orders/today" },
+            "icon": "ShoppingOutlined",
+            "color": "green",
+            "trend": { "api": "/admin/stats/orders/trend" }
+          },
+          {
+            "title": "任务处理中",
+            "value": { "api": "/admin/stats/tasks/processing" },
+            "icon": "ClockCircleOutlined",
+            "color": "orange"
+          },
+          {
+            "title": "系统负载",
+            "value": { "api": "/admin/stats/system/load" },
+            "icon": "DashboardOutlined",
+            "color": "red",
+            "format": "percentage"
+          }
+        ]
+      },
+      {
+        "id": "recent-tasks",
+        "type": "table",
+        "title": "最近任务",
+        "layout": { "span": 16 },
+        "permissions": ["admin", "operator"],
+        "api": "GET /admin/tasks?limit=10&order=created_at:desc",
+        "height": 400
+      },
+      {
+        "id": "system-alerts",
+        "type": "list",
+        "title": "系统告警",
+        "layout": { "span": 8 },
+        "permissions": ["admin"],
+        "api": "GET /admin/alerts?status=active",
+        "height": 400
+      }
+    ]
+  },
+
+  "theme": {
+    "primaryColor": "#1890ff",
+    "borderRadius": 4,
+    "componentSize": "middle",
+    "dateFormat": "YYYY-MM-DD",
+    "timeFormat": "HH:mm:ss"
+  },
+
+  "i18n": {
+    "defaultLocale": "zh-CN",
+    "supportedLocales": ["zh-CN", "en-US"]
+  }
+}
