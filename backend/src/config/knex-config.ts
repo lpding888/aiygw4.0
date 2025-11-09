@@ -23,15 +23,16 @@ export const knexConfig: Record<Environment, Knex.Config> = {
       database: process.env.DB_NAME ?? 'ai_photo'
     },
     pool: {
-      min: parseIntWithFallback(process.env.DATABASE_POOL_MIN, 2),
-      max: parseIntWithFallback(process.env.DATABASE_POOL_MAX, 10),
-      acquireTimeoutMillis: 60_000,
-      createTimeoutMillis: 30_000,
+      // P0-003优化: 提高连接池大小,避免冷启动和高并发时的连接等待
+      min: parseIntWithFallback(process.env.DATABASE_POOL_MIN, 10), // 避免冷启动,保持至少10个连接
+      max: parseIntWithFallback(process.env.DATABASE_POOL_MAX, 100), // 支持高并发,最多100个连接
+      acquireTimeoutMillis: 10_000, // 获取连接超时10秒(原60秒太长)
+      createTimeoutMillis: 5_000, // 创建连接超时5秒(原30秒太长)
       destroyTimeoutMillis: 5_000,
-      idleTimeoutMillis: 30_000,
-      reapIntervalMillis: 1_000,
+      idleTimeoutMillis: 30_000, // 空闲连接30秒后回收
+      reapIntervalMillis: 1_000, // 每秒检查一次过期连接
       createRetryIntervalMillis: 200,
-      propagateCreateError: false
+      propagateCreateError: false // 不传播创建错误(允许重试)
     },
     migrations: {
       directory: './src/db/migrations',
@@ -66,15 +67,16 @@ export const knexConfig: Record<Environment, Knex.Config> = {
       database: process.env.DB_NAME ?? 'ai_photo'
     },
     pool: {
-      min: parseIntWithFallback(process.env.DATABASE_POOL_MIN, 5),
-      max: parseIntWithFallback(process.env.DATABASE_POOL_MAX, 20),
-      acquireTimeoutMillis: 60_000,
-      createTimeoutMillis: 30_000,
+      // P0-003优化: 提高生产环境连接池大小,支持高并发
+      min: parseIntWithFallback(process.env.DATABASE_POOL_MIN, 10), // 避免冷启动,保持至少10个连接
+      max: parseIntWithFallback(process.env.DATABASE_POOL_MAX, 100), // 支持高并发,最多100个连接
+      acquireTimeoutMillis: 10_000, // 获取连接超时10秒(原60秒太长)
+      createTimeoutMillis: 5_000, // 创建连接超时5秒(原30秒太长)
       destroyTimeoutMillis: 5_000,
-      idleTimeoutMillis: 300_000,
-      reapIntervalMillis: 1_000,
-      createRetryIntervalMillis: 100,
-      propagateCreateError: false
+      idleTimeoutMillis: 30_000, // 空闲连接30秒后回收(原5分钟太长)
+      reapIntervalMillis: 1_000, // 每秒检查一次过期连接
+      createRetryIntervalMillis: 200, // 创建连接失败后重试间隔(原100ms改200ms)
+      propagateCreateError: false // 不传播创建错误(允许重试)
     },
     migrations: {
       directory: './src/db/migrations',
