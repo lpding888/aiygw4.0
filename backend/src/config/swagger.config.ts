@@ -1,8 +1,11 @@
 /**
- * Swagger API文档配置
+ * Swagger API文档配置 - TypeScript ESM版本 (P1-013)
+ * 艹！为所有API生成OpenAPI 3.0文档，自动扫描TS文件的JSDoc注释
  */
 
-export const swaggerDefinition = {
+import swaggerJsdoc from 'swagger-jsdoc';
+
+const swaggerDefinition = {
   openapi: '3.0.0',
   info: {
     title: 'AI照片处理后端API',
@@ -674,4 +677,23 @@ export const swaggerDefinition = {
   ]
 } as const;
 
-export default swaggerDefinition;
+// Swagger JSDoc配置 - 艹！扫描所有TS文件的Swagger注释
+const swaggerOptions = {
+  definition: swaggerDefinition,
+  // 艹！所有routes和controllers都已迁移到TypeScript，扫描.ts文件
+  apis: [
+    './src/routes/*.ts', // 扫描所有路由文件中的Swagger注释
+    './src/routes/admin/*.ts', // 扫描admin子路由
+    './src/controllers/*.ts', // 扫描所有控制器文件中的Swagger注释
+    './src/controllers/admin/*.ts' // 扫描admin控制器
+  ]
+};
+
+// 生成Swagger文档规范
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+
+// 导出Swagger规范（app.ts中使用）
+export default swaggerSpec;
+
+// 同时导出定义对象（兼容旧代码）
+export { swaggerDefinition };
