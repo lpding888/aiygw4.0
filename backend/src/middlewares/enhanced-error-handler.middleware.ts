@@ -47,12 +47,12 @@ export function enhancedErrorMiddleware(
 ) {
   try {
     const appErr = AppError.fromError(err);
-    store.record(appErr.code, (appErr as any).category, (appErr as any).severity);
+    store.record(appErr.code, appErr.metadata.category, appErr.metadata.severity);
   } catch {
     // 非 AppError 也做简单统计
     store.record(5000);
   }
-  next(err as any);
+  next(err);
 }
 
 const enhancedErrorHandler = {

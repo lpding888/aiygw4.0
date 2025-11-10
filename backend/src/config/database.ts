@@ -11,9 +11,13 @@ const environment = (process.env.NODE_ENV ?? 'development') as KnexEnvironment;
 const config = knexConfig[environment] ?? knexConfig.development;
 
 // P0-003: 添加连接池配置(健康检查)
+interface PoolConnection {
+  query: (sql: string, callback: (err: Error | null) => void) => void;
+}
+
 const poolConfig = {
   ...config.pool,
-  afterCreate: (conn: any, done: (err: Error | null, conn?: any) => void) => {
+  afterCreate: (conn: PoolConnection, done: (err: Error | null, conn?: PoolConnection) => void) => {
     // 健康检查: 执行SELECT 1确保连接可用
     conn.query('SELECT 1', (err: Error | null) => {
       if (err) {
@@ -40,7 +44,15 @@ if (process.env.NODE_ENV !== 'test') {
   // 测试环境不启用监控(避免干扰测试输出)
   monitorInterval = setInterval(() => {
     try {
-      const pool = (db.client as any).pool;
+      interface PoolStats {
+        numUsed?: () => number;
+        numFree?: () => number;
+        numPendingAcquires?: () => number;
+        min?: number;
+        max?: number;
+      }
+
+      const pool = (db.client as unknown as { pool?: PoolStats }).pool;
       if (pool) {
         logger.info('[DATABASE POOL] 📊 连接池状态:', {
           used: pool.numUsed?.() ?? 0, // 正在使用的连接数
@@ -50,8 +62,9 @@ if (process.env.NODE_ENV !== 'test') {
           max: pool.max ?? 0 // 最大连接数
         });
       }
-    } catch (error: any) {
-      logger.warn(`[DATABASE POOL] 获取连接池状态失败: ${error.message}`);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.warn(`[DATABASE POOL] 获取连接池状态失败: ${err.message}`);
     }
   }, 30000); // 30秒
 
@@ -66,8 +79,9 @@ process.on('SIGINT', async () => {
     await db.destroy();
     logger.info('[DATABASE] ✅ 数据库连接池已关闭');
     process.exit(0);
-  } catch (error: any) {
-    logger.error(`[DATABASE] ❌ 关闭数据库连接池失败: ${error.message}`);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    logger.error(`[DATABASE] ❌ 关闭数据库连接池失败: ${err.message}`);
     process.exit(1);
   }
 });
@@ -79,8 +93,9 @@ process.on('SIGTERM', async () => {
     await db.destroy();
     logger.info('[DATABASE] ✅ 数据库连接池已关闭');
     process.exit(0);
-  } catch (error: any) {
-    logger.error(`[DATABASE] ❌ 关闭数据库连接池失败: ${error.message}`);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    logger.error(`[DATABASE] ❌ 关闭数据库连接池失败: ${err.message}`);
     process.exit(1);
   }
 });

@@ -53,11 +53,12 @@ export function verifyToken(token: string): TokenPayload {
     }) as TokenPayload;
 
     return decoded;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 艹，Token验证失败！
-    if (error.name === 'TokenExpiredError') {
+    const err = error instanceof Error ? error : new Error(String(error));
+    if (err.name === 'TokenExpiredError') {
       throw new Error('Token已过期');
-    } else if (error.name === 'JsonWebTokenError') {
+    } else if (err.name === 'JsonWebTokenError') {
       throw new Error('Token无效');
     } else {
       throw new Error('Token验证失败');

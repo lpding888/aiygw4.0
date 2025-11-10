@@ -4,15 +4,66 @@ import logger from '../utils/logger.js';
 import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
 
+interface CreateExecutionBody {
+  schema_id: string;
+  input_data?: Record<string, unknown>;
+  mode?: string;
+}
+
+interface GetExecutionOptionsQuery {
+  schema_id?: string;
+  status?: string;
+  mode?: string;
+  page?: string;
+  limit?: string;
+  offset?: string;
+}
+
+interface ExecutionEventData {
+  execution_id: string;
+  event: string;
+  [key: string]: unknown;
+}
+
+interface BatchOperateBody {
+  execution_ids: string[];
+  operation: 'cancel' | 'start' | string;
+}
+
+interface BatchOperateResult {
+  execution_id: string;
+  success: boolean;
+  operation?: string;
+  error?: string;
+}
+
+interface ExecutionItem {
+  status: string;
+  execution_mode: string;
+  duration_ms?: number;
+}
+
+interface ExecutionStats {
+  total_executions: number;
+  by_status: Record<string, number>;
+  by_mode: Record<string, number>;
+  average_duration: number;
+  success_rate: number;
+}
+
+interface CleanupBody {
+  max_age?: string | number;
+}
+
 class PipelineExecutionController {
   async createExecution(req: Request, res: Response, next: NextFunction) {
     try {
-      const { schema_id, input_data, mode = 'mock' } = req.body as any;
+      const { schema_id, input_data, mode = 'mock' } = req.body as unknown as CreateExecutionBody;
       const userId = req.user?.id as string;
       if (!schema_id) {
         throw AppError.custom(ERROR_CODES.MISSING_PARAMETERS, '缺少流程模板ID');
       }
-      const execution = await (pipelineExecutionService as any).createExecution(
+      const execution = await pipelineExecutionService.createExecution(
         schema_id,
         input_data || {},
         mode,
@@ -34,7 +85,7 @@ class PipelineExecutionController {
     try {
       const { id } = req.params as { id: string };
       // 异步启动
-      (pipelineExecutionService as any).startExecution(id).catch((error: any) => {
+      pipelineExecutionService.startExecution(id).catch((error: unknown) => {
         logger.error('[PipelineExecutionController] Async start execution failed:', error);
       });
       res.json({
@@ -51,18 +102,18 @@ class PipelineExecutionController {
 
   async createAndStartExecution(req: Request, res: Response, next: NextFunction) {
     try {
-      const { schema_id, input_data, mode = 'mock' } = req.body as any;
+      const { schema_id, input_data, mode = 'mock' } = req.body as unknown as CreateExecutionBody;
       const userId = req.user?.id as string;
       if (!schema_id) {
-        throw new (AppError as any)('缺少流程模板ID', 400);
+        throw AppError.custom(ERROR_CODES.MISSING_PARAMETERS, '缺少流程模板ID');
       }
-      const execution = await (pipelineExecutionService as any).createExecution(
+      const execution = await pipelineExecutionService.createExecution(
         schema_id,
         input_data || {},
         mode,
         userId
       );
-      (pipelineExecutionService as any).startExecution(execution.id).catch((error: any) => {
+      pipelineExecutionService.startExecution(execution.id).catch((error: unknown) => {
         logger.error('[PipelineExecutionController] Async start execution failed:', error);
       });
       res.status(201).json({
@@ -80,7 +131,7 @@ class PipelineExecutionController {
   async getExecution(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params as { id: string };
-      const execution = (pipelineExecutionService as any).getExecution(id);
+      const execution = pipelineExecutionService.getExecution(id);
       res.json({ success: true, data: execution, requestId: req.id });
     } catch (error) {
       logger.error('[PipelineExecutionController] Get execution failed:', error);
@@ -97,15 +148,15 @@ class PipelineExecutionController {
         page = '1',
         limit = '20',
         offset = '0'
-      } = req.query as Record<string, string>;
+      } = req.query as unknown as GetExecutionOptionsQuery;
       const options = {
         schema_id,
         status,
         mode,
         limit: parseInt(String(limit)),
         offset: parseInt(String(offset))
-      } as any;
-      const result = (pipelineExecutionService as any).getExecutions(options);
+      };
+      const result = pipelineExecutionService.getExecutions(options);
       res.json({ success: true, data: result, requestId: req.id });
     } catch (error) {
       logger.error('[PipelineExecutionController] Get executions failed:', error);
@@ -117,7 +168,7 @@ class PipelineExecutionController {
     try {
       const { id } = req.params as { id: string };
       const { reason } = req.body as { reason?: string };
-      await (pipelineExecutionService as any).cancelExecution(id, reason || '用户取消');
+      await pipelineExecutionService.cancelExecution(id, reason || '用户取消');
       res.json({ success: true, message: '执行已取消', requestId: req.id });
     } catch (error) {
       logger.error('[PipelineExecutionController] Cancel execution failed:', error);
@@ -129,7 +180,7 @@ class PipelineExecutionController {
     try {
       const { id } = req.params as { id: string };
       try {
-        (pipelineExecutionService as any).getExecution(id);
+        pipelineExecutionService.getExecution(id);
       } catch (error) {
         throw AppError.custom(ERROR_CODES.TASK_NOT_FOUND, '执行任务不存在');
       }
@@ -147,21 +198,23 @@ class PipelineExecutionController {
           timestamp: new Date().toISOString()
         })}\n\n`
       );
-      const onEvent = (data: any) => {
+      const onEvent = (data: ExecutionEventData) => {
         if (!data || data.execution_id !== id) return;
         res.write(`event: ${data.event}\n`);
         res.write(`data: ${JSON.stringify(data)}\n\n`);
       };
-      (pipelineExecutionService as any).on('execution:event', onEvent);
+      pipelineExecutionService.on('execution:event', onEvent);
       req.on('close', () => {
-        (pipelineExecutionService as any).off('execution:event', onEvent);
+        pipelineExecutionService.off('execution:event', onEvent);
       });
-    } catch (error: any) {
-      if (error?.statusCode === 404) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      const appError = error as { statusCode?: number; message?: string };
+      if (appError?.statusCode === 404) {
         res.write(
           `event: error\ndata: ${JSON.stringify({
             type: 'error',
-            error: error.message,
+            error: appError.message || err.message,
             timestamp: new Date().toISOString()
           })}\n\n`
         );
@@ -174,10 +227,7 @@ class PipelineExecutionController {
 
   async batchOperateExecutions(req: Request, res: Response, next: NextFunction) {
     try {
-      const { execution_ids, operation } = req.body as {
-        execution_ids: string[];
-        operation: 'cancel' | 'start' | string;
-      };
+      const { execution_ids, operation } = req.body as unknown as BatchOperateBody;
       const userId = req.user?.id as string; // reserved
       if (!execution_ids || !Array.isArray(execution_ids)) {
         throw AppError.custom(ERROR_CODES.MISSING_PARAMETERS, '请提供执行ID列表');
@@ -185,19 +235,19 @@ class PipelineExecutionController {
       if (!operation) {
         throw AppError.custom(ERROR_CODES.MISSING_PARAMETERS, '请指定操作类型');
       }
-      const results: any[] = [];
+      const results: BatchOperateResult[] = [];
       let success_count = 0;
       let failed_count = 0;
       for (const executionId of execution_ids) {
         try {
           switch (operation) {
             case 'cancel':
-              await (pipelineExecutionService as any).cancelExecution(executionId);
+              await pipelineExecutionService.cancelExecution(executionId);
               results.push({ execution_id: executionId, success: true, operation: 'cancelled' });
               success_count++;
               break;
             case 'start':
-              await (pipelineExecutionService as any).startExecution(executionId);
+              await pipelineExecutionService.startExecution(executionId);
               results.push({ execution_id: executionId, success: true, operation: 'started' });
               success_count++;
               break;
@@ -209,8 +259,9 @@ class PipelineExecutionController {
               });
               failed_count++;
           }
-        } catch (e: any) {
-          results.push({ execution_id: executionId, success: false, error: e?.message });
+        } catch (e: unknown) {
+          const error = e instanceof Error ? e : new Error(String(e));
+          results.push({ execution_id: executionId, success: false, error: error.message });
           failed_count++;
         }
       }
@@ -231,14 +282,14 @@ class PipelineExecutionController {
 
   async getExecutionStats(req: Request, res: Response, next: NextFunction) {
     try {
-      const { schema_id } = req.query as Record<string, string>;
-      const options = { schema_id } as any;
-      const executions = (pipelineExecutionService as any).getExecutions({
+      const { schema_id } = req.query as unknown as { schema_id?: string };
+      const options = { schema_id };
+      const executions = pipelineExecutionService.getExecutions({
         ...options,
         limit: 1000
       });
-      const stats: any = {
-        total_executions: executions.executions.length,
+      const stats: ExecutionStats = {
+        total_executions: (executions.executions as ExecutionItem[]).length,
         by_status: {},
         by_mode: {},
         average_duration: 0,
@@ -246,7 +297,7 @@ class PipelineExecutionController {
       };
       let total_duration = 0;
       let completed_count = 0;
-      for (const execution of executions.executions) {
+      for (const execution of executions.executions as ExecutionItem[]) {
         stats.by_status[execution.status] = (stats.by_status[execution.status] || 0) + 1;
         stats.by_mode[execution.execution_mode] =
           (stats.by_mode[execution.execution_mode] || 0) + 1;
@@ -273,9 +324,9 @@ class PipelineExecutionController {
 
   async cleanupExecutions(req: Request, res: Response, next: NextFunction) {
     try {
-      const { max_age } = req.body as { max_age?: string | number };
+      const { max_age } = req.body as unknown as CleanupBody;
       const maxAgeMs = max_age ? parseInt(String(max_age)) * 1000 : 24 * 60 * 60 * 1000;
-      const cleanedCount = (pipelineExecutionService as any).cleanupExpiredExecutions(maxAgeMs);
+      const cleanedCount = pipelineExecutionService.cleanupExpiredExecutions(maxAgeMs);
       res.json({
         success: true,
         data: { cleaned_count: cleanedCount },
@@ -294,7 +345,7 @@ class PipelineExecutionController {
         status: 'healthy',
         timestamp: new Date().toISOString(),
         service: 'pipeline-execution',
-        active_executions: (pipelineExecutionService as any).executions.size,
+        active_executions: pipelineExecutionService.executions.size,
         memory_usage: process.memoryUsage(),
         uptime: process.uptime()
       };

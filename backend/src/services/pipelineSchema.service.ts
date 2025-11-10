@@ -59,6 +59,14 @@ interface SchemaStatsResult {
   category_distribution: Array<{ category: string; count: number }>;
 }
 
+interface ValidateSchemaResult {
+  schema_id: string | number;
+  overall_status: ValidationStatus;
+  validation_results: Record<string, ValidationResult>;
+  execution_time_ms: number;
+  is_valid: boolean;
+}
+
 class PipelineSchemaService {
   private readonly CACHE_SCOPE = 'pipeline-schemas';
   private readonly VALIDATION_TYPES: Record<
@@ -96,7 +104,15 @@ class PipelineSchemaService {
     }
   }
 
-  async getSchemas(options: SchemaQueryOptions = {}) {
+  async getSchemas(options: SchemaQueryOptions = {}): Promise<{
+    schemas: PipelineSchema[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+    };
+  }> {
     try {
       const {
         page = 1,
@@ -213,7 +229,7 @@ class PipelineSchemaService {
     id: string | number,
     validationTypes: ValidationType[] | null = null,
     userId: string | null = null
-  ) {
+  ): Promise<ValidateSchemaResult> {
     try {
       const startTime = Date.now();
       const schema = await this.getSchemaById(id);
@@ -534,8 +550,11 @@ class PipelineSchemaService {
   ): { errors: string[]; warnings: string[] } {
     const errors: string[] = [];
     const warnings: string[] = [];
-    const { max_nodes: maxNodes, max_edges: maxEdges, allowed_node_types: allowedNodeTypes } =
-      constraints;
+    const {
+      max_nodes: maxNodes,
+      max_edges: maxEdges,
+      allowed_node_types: allowedNodeTypes
+    } = constraints;
 
     if (typeof maxNodes === 'number' && schema.node_definitions.length > maxNodes) {
       errors.push(`节点数量(${schema.node_definitions.length})超过限制(${maxNodes})`);
@@ -587,7 +606,18 @@ class PipelineSchemaService {
     }
   }
 
-  async getValidationHistory(schemaId: string | number, options: ValidationOptions = {}) {
+  async getValidationHistory(
+    schemaId: string | number,
+    options: ValidationOptions = {}
+  ): Promise<{
+    validations: ValidationHistoryResult[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+    };
+  }> {
     try {
       const { page = 1, limit = 20 } = options;
       const offset = (page - 1) * limit;

@@ -18,7 +18,8 @@ import { ERROR_CODES } from '../config/error-codes.js';
  */
 class UserProfileController {
   private getCurrentUserId(req: Request): string {
-    const userId = (req as any).user?.id;
+    const user = req.user as { id?: string } | undefined;
+    const userId = user?.id;
     if (!userId) {
       throw AppError.create(ERROR_CODES.UNAUTHORIZED, { message: '用户未登录' });
     }
@@ -271,8 +272,8 @@ class UserProfileController {
       const updateData = req.body;
 
       // 需要先检查工作经历是否存在且属于当前用户
-      const workExperience = (await userProfileService.getUserWorkExperience(userId)) as any[];
-      const existingWork = workExperience.find((work: any) => work.id === workId);
+      const workExperience = (await userProfileService.getUserWorkExperience(userId)) as Array<{ id: string }>;
+      const existingWork = workExperience.find((work: { id: string }) => work.id === workId);
 
       if (!existingWork) {
         throw AppError.create(ERROR_CODES.TASK_NOT_FOUND, {
@@ -324,8 +325,8 @@ class UserProfileController {
       const { workId } = req.params;
 
       // 需要先检查工作经历是否存在且属于当前用户
-      const workExperience = (await userProfileService.getUserWorkExperience(userId)) as any[];
-      const existingWork = workExperience.find((work: any) => work.id === workId);
+      const workExperience = (await userProfileService.getUserWorkExperience(userId)) as Array<{ id: string }>;
+      const existingWork = workExperience.find((work: { id: string }) => work.id === workId);
 
       if (!existingWork) {
         throw AppError.create(ERROR_CODES.TASK_NOT_FOUND, {
@@ -374,7 +375,7 @@ class UserProfileController {
       const skills = (await userProfileService.getUserSkills(
         targetUserId,
         this.getCurrentUserId(req)
-      )) as any[];
+      )) as Array<Record<string, unknown>>;
 
       res.json({
         success: true,
@@ -427,8 +428,8 @@ class UserProfileController {
       const updateData = req.body;
 
       // 需要先检查技能是否存在且属于当前用户
-      const skills = (await userProfileService.getUserSkills(userId)) as any[];
-      const existingSkill = skills.find((skill: any) => skill.id === skillId);
+      const skills = (await userProfileService.getUserSkills(userId)) as Array<{ id: string }>;
+      const existingSkill = skills.find((skill: { id: string }) => skill.id === skillId);
 
       if (!existingSkill) {
         throw AppError.create(ERROR_CODES.TASK_NOT_FOUND, {
@@ -628,16 +629,16 @@ class UserProfileController {
     try {
       const userId = this.getCurrentUserId(req);
       const { basicInfo, education, workExperience, skills } = req.body as {
-        basicInfo?: Record<string, any>;
-        education?: any[];
-        workExperience?: any[];
-        skills?: any[];
+        basicInfo?: Record<string, unknown>;
+        education?: Array<Record<string, unknown>>;
+        workExperience?: Array<Record<string, unknown>>;
+        skills?: Array<Record<string, unknown>>;
       };
 
       const trx = await db.transaction();
 
       try {
-        const results: Record<string, any> = {};
+        const results: Record<string, unknown> = {};
 
         // 更新基础信息
         if (basicInfo) {
@@ -647,31 +648,31 @@ class UserProfileController {
         // 批量添加教育经历
         if (education && Array.isArray(education)) {
           results.education = [];
-          for (const edu of education as any[]) {
+          for (const edu of education) {
             const addedEdu = await userProfileService.addEducation(userId, edu);
-            results.education.push(addedEdu);
+            (results.education as Array<unknown>).push(addedEdu);
           }
         }
 
         // 批量添加工作经历
         if (workExperience && Array.isArray(workExperience)) {
           results.workExperience = [];
-          for (const work of workExperience as any[]) {
+          for (const work of workExperience) {
             const addedWork = await userProfileService.addWorkExperience(userId, work);
-            results.workExperience.push(addedWork);
+            (results.workExperience as Array<unknown>).push(addedWork);
           }
         }
 
         // 批量添加技能
         if (skills && Array.isArray(skills)) {
           results.skills = [];
-          for (const skill of skills as any[]) {
+          for (const skill of skills) {
             try {
               const addedSkill = await userProfileService.addSkill(userId, skill);
-              results.skills.push(addedSkill);
-            } catch (error) {
+              (results.skills as Array<unknown>).push(addedSkill);
+            } catch (error: unknown) {
               // 忽略重复技能错误
-              const err = error as any;
+              const err = error as { code?: string };
               if (err?.code !== 'DUPLICATE_RESOURCE') {
                 throw err;
               }
@@ -711,7 +712,7 @@ class UserProfileController {
     try {
       const userId = this.getCurrentUserId(req);
 
-      const file = (req as any).file;
+      const file = (req as unknown as { file?: unknown }).file;
       if (!file) {
         throw AppError.create(ERROR_CODES.INVALID_PARAMETERS, {
           message: '请选择要上传的头像文件'
@@ -747,7 +748,7 @@ class UserProfileController {
     try {
       const userId = this.getCurrentUserId(req);
 
-      const file = (req as any).file;
+      const file = (req as unknown as { file?: unknown }).file;
       if (!file) {
         throw AppError.create(ERROR_CODES.INVALID_PARAMETERS, {
           message: '请选择要上传的横幅图片文件'

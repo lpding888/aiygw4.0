@@ -3,12 +3,30 @@ import { redis } from '../config/redis.js';
 import queueService from './queue.service.js';
 import cronJobsService, { type CronJobMetric } from './cronJobs.service.js';
 
+export interface GlobalQueueStats {
+  totalQueued: number;
+  totalProcessed: number;
+  totalFailed: number;
+  totalCompleted: number;
+  activeJobs: number;
+  waitingJobs: number;
+}
+
+export interface QueuesHealthReport {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  activeQueues?: number;
+  totalJobs?: number;
+  globalStats?: GlobalQueueStats;
+  timestamp?: string;
+  error?: string;
+}
+
 export interface HealthReport {
   status: 'healthy' | 'degraded' | 'unhealthy';
   components: {
     db: { ok: boolean; error?: string };
     redis: { ok: boolean; latencyMs?: number; error?: string };
-    queues: any;
+    queues: QueuesHealthReport;
     cron: CronStatus;
     timestamp: string;
   };
@@ -26,8 +44,9 @@ async function checkDB(): Promise<{ ok: boolean; error?: string }> {
   try {
     await db.raw('SELECT 1');
     return { ok: true };
-  } catch (e: any) {
-    return { ok: false, error: e?.message };
+  } catch (e: unknown) {
+    const err = e as Error;
+    return { ok: false, error: err?.message };
   }
 }
 
@@ -37,8 +56,9 @@ async function checkRedis(): Promise<{ ok: boolean; latencyMs?: number; error?: 
     const pong = await redis.ping();
     const latency = Date.now() - start;
     return { ok: pong === 'PONG', latencyMs: latency };
-  } catch (e: any) {
-    return { ok: false, error: e?.message };
+  } catch (e: unknown) {
+    const err = e as Error;
+    return { ok: false, error: err?.message };
   }
 }
 

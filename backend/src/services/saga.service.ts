@@ -9,24 +9,52 @@ import { db as knex } from '../db/index.js';
 const logger = require('../utils/logger');
 const { EventEmitter } = require('events');
 
+/**
+ * Saga步骤执行结果类型
+ */
+export interface StepResult {
+  [key: string]: unknown;
+}
+
+/**
+ * Saga补偿数据类型
+ */
+export interface CompensationData {
+  [key: string]: unknown;
+}
+
+/**
+ * Saga步骤接口
+ */
 export interface SagaStep {
   id: string;
   name: string;
-  execute: () => Promise<any>;
-  compensate: (data: any) => Promise<void>;
+  execute: () => Promise<StepResult>;
+  compensate: (data: CompensationData) => Promise<void>;
   timeout?: number;
 }
 
+/**
+ * Saga事务接口
+ */
 export interface SagaTransaction {
   id: string;
   sagaId: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'compensating';
   steps: SagaStep[];
   currentStep: number;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   startTime: Date;
   endTime?: Date;
   error?: Error;
+}
+
+/**
+ * 统计数据行类型
+ */
+interface StatsRow {
+  status: string;
+  count: string | number;
 }
 
 export class SagaService extends EventEmitter {
@@ -107,12 +135,13 @@ export class SagaService extends EventEmitter {
       this.emit('sagaCompleted', { transactionId, data: transaction.data });
 
       return true;
-    } catch (error: any) {
-      transaction.error = error as Error;
+    } catch (error: unknown) {
+      const err = error as Error;
+      transaction.error = err;
       transaction.status = 'failed';
       await this.updateSagaTransaction(transaction);
 
-      logger.error('Saga事务执行失败，开始补偿', { transactionId, error: error.message });
+      logger.error('Saga事务执行失败，开始补偿', { transactionId, error: err.message });
 
       // 执行补偿操作
       await this.compensate(transactionId);
@@ -141,13 +170,14 @@ export class SagaService extends EventEmitter {
           logger.debug(`执行补偿操作: ${step.name}`, { transactionId, stepId: step.id });
 
           try {
-            await step.compensate(stepData);
+            await step.compensate(stepData as CompensationData);
             this.emit('stepCompensated', { transactionId, stepId: step.id });
-          } catch (compensateError: any) {
+          } catch (compensateError: unknown) {
+            const compensateErr = compensateError as Error;
             logger.error(`补偿操作失败: ${step.name}`, {
               transactionId,
               stepId: step.id,
-              error: compensateError.message
+              error: compensateErr.message
             });
             // 补偿失败不影响其他补偿操作
           }
@@ -160,9 +190,10 @@ export class SagaService extends EventEmitter {
 
       logger.info('Saga补偿完成', { transactionId });
       this.emit('sagaCompensated', { transactionId });
-    } catch (error: any) {
-      logger.error('Saga补偿过程失败', { transactionId, error: error.message });
-      throw error;
+    } catch (error: unknown) {
+      const err = error as Error;
+      logger.error('Saga补偿过程失败', { transactionId, error: err.message });
+      throw err;
     }
   }
 
@@ -321,13 +352,13 @@ export class SagaService extends EventEmitter {
   /**
    * 获取Saga统计信息
    */
-  async getStats() {
+  async getStats(): Promise<Record<string, number>> {
     const stats = await knex('saga_transactions')
       .select('status')
       .count('* as count')
       .groupBy('status');
 
-    return stats.reduce((acc: any, row: any) => {
+    return stats.reduce((acc: Record<string, number>, row: StatsRow) => {
       acc[row.status] = parseInt(String(row.count));
       return acc;
     }, {});

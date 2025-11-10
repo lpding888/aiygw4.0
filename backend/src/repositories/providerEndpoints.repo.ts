@@ -17,7 +17,7 @@ export interface ProviderEndpoint {
   provider_ref: string;
   provider_name: string;
   endpoint_url: string;
-  credentials_encrypted: any; // 加密后的凭证（存储时是字符串，读取后是对象）
+  credentials_encrypted: unknown; // 加密后的凭证（存储时是字符串，读取后是对象）
   auth_type: string;
   created_at?: Date;
   updated_at?: Date;
@@ -30,7 +30,7 @@ export interface ProviderEndpointInput {
   provider_ref: string;
   provider_name: string;
   endpoint_url: string;
-  credentials: any; // 明文凭证（会被自动加密）
+  credentials: unknown; // 明文凭证（会被自动加密）
   auth_type: string;
 }
 
@@ -189,7 +189,7 @@ export async function listProviderEndpoints(options: {
   const rows = await query;
 
   // 艹，批量解密（性能考虑，不使用缓存）
-  return rows.map((row: any) => decryptFields(row, SENSITIVE_FIELDS)) as ProviderEndpoint[];
+  return rows.map((row: unknown) => decryptFields(row, SENSITIVE_FIELDS)) as ProviderEndpoint[];
 }
 
 /**
@@ -202,7 +202,12 @@ export async function updateProviderEndpoint(
   providerRef: string,
   updates: Partial<ProviderEndpointInput>
 ): Promise<ProviderEndpoint> {
-  const updateData: any = {
+  interface UpdateData {
+    [key: string]: unknown;
+    updated_at: unknown;
+  }
+
+  const updateData: UpdateData = {
     updated_at: db.fn.now()
   };
 

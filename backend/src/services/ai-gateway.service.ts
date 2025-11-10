@@ -40,6 +40,19 @@ export interface ToolCall {
 }
 
 /**
+ * Tool定义接口
+ */
+export interface ToolDefinition {
+  type: string;
+  function?: {
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+  };
+  [key: string]: unknown;
+}
+
+/**
  * Chat请求接口
  */
 export interface ChatRequest {
@@ -49,7 +62,7 @@ export interface ChatRequest {
   max_tokens?: number; // 最大生成token数
   top_p?: number; // 0-1, 默认1
   stream?: boolean; // 是否流式输出
-  tools?: any[]; // 工具定义
+  tools?: ToolDefinition[]; // 工具定义
   tool_choice?: string | object; // 工具选择策略
   user?: string; // 用户ID
 }
@@ -79,8 +92,8 @@ export interface ChatResponse {
  * Provider适配器接口
  */
 interface ProviderAdapter {
-  adaptRequest(request: ChatRequest): any;
-  adaptResponse(response: any): ChatResponse;
+  adaptRequest(request: ChatRequest): Record<string, unknown>;
+  adaptResponse(response: Record<string, unknown>): ChatResponse;
   adaptStreamChunk(chunk: string): ChatResponse | null;
 }
 
@@ -143,7 +156,7 @@ class AIGatewayService {
       });
 
       // 适配响应
-      const adaptedResponse = adapter.adaptResponse(response.data);
+      const adaptedResponse = adapter.adaptResponse(response.data as Record<string, unknown>);
 
       logger.info(
         `[AIGateway] Chat响应成功: provider=${provider.provider_ref} ` +
@@ -151,9 +164,10 @@ class AIGatewayService {
       );
 
       return adaptedResponse;
-    } catch (error: any) {
-      logger.error('[AIGateway] Chat请求失败:', error);
-      throw new Error(`Chat failed: ${error.message}`);
+    } catch (error: unknown) {
+      const err = error as Error & { message: string };
+      logger.error('[AIGateway] Chat请求失败:', err);
+      throw new Error(`Chat failed: ${err.message}`);
     }
   }
 
@@ -222,7 +236,7 @@ class AIGatewayService {
                 if (adaptedChunk) {
                   emitter.emit('data', adaptedChunk);
                 }
-              } catch (err) {
+              } catch (err: unknown) {
                 logger.error('[AIGateway] 解析流式chunk失败:', err);
               }
             }
@@ -238,9 +252,10 @@ class AIGatewayService {
           logger.error('[AIGateway] Chat流式响应错误:', err);
           emitter.emit('error', err);
         });
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('[AIGateway] Chat流式请求失败:', error);
-        emitter.emit('error', error);
+        const err = error instanceof Error ? error : new Error(String(error));
+        emitter.emit('error', err);
       }
     })();
 
@@ -251,7 +266,7 @@ class AIGatewayService {
    * 选择Provider（负载均衡）
    * @private
    */
-  private async selectProvider(model: string): Promise<any> {
+  private async selectProvider(model: string): Promise<Record<string, unknown>> {
     // 简化实现：选择第一个可用的Provider
     // 实际项目中应该实现负载均衡、权重选择等策略
 
@@ -262,17 +277,20 @@ class AIGatewayService {
     }
 
     // 按权重选择
-    const totalWeight = providers.reduce((sum: number, p: any) => sum + (p.weight || 100), 0);
+    const totalWeight = providers.reduce(
+      (sum: number, p: Record<string, unknown>) => sum + ((p.weight as number) || 100),
+      0
+    );
     let random = Math.random() * totalWeight;
 
     for (const provider of providers) {
-      random -= (provider as any).weight || 100;
+      random -= ((provider as Record<string, unknown>).weight as number) || 100;
       if (random <= 0) {
-        return provider;
+        return provider as Record<string, unknown>;
       }
     }
 
-    return providers[0];
+    return providers[0] as Record<string, unknown>;
   }
 
   /**
@@ -299,11 +317,14 @@ class AIGatewayService {
    * 获取认证头
    * @private
    */
-  private getAuthHeaders(provider: any): Record<string, string> {
+  private getAuthHeaders(provider: Record<string, unknown>): Record<string, string> {
     const headers: Record<string, string> = {};
 
-    if (provider.auth_type === 'bearer' && provider.credentials_encrypted?.api_key) {
-      headers['Authorization'] = `Bearer ${provider.credentials_encrypted.api_key}`;
+    const authType = provider.auth_type as string | undefined;
+    const credentials = provider.credentials_encrypted as Record<string, unknown> | undefined;
+
+    if (authType === 'bearer' && credentials?.api_key) {
+      headers['Authorization'] = `Bearer ${credentials.api_key as string}`;
     }
 
     return headers;
@@ -314,7 +335,7 @@ class AIGatewayService {
  * OpenAI适配器
  */
 class OpenAIAdapter implements ProviderAdapter {
-  adaptRequest(request: ChatRequest): any {
+  adaptRequest(request: ChatRequest): Record<string, unknown> {
     return {
       model: request.model,
       messages: request.messages,
@@ -328,8 +349,8 @@ class OpenAIAdapter implements ProviderAdapter {
     };
   }
 
-  adaptResponse(response: any): ChatResponse {
-    return response; // OpenAI格式即标准格式
+  adaptResponse(response: Record<string, unknown>): ChatResponse {
+    return response as ChatResponse; // OpenAI格式即标准格式
   }
 
   adaptStreamChunk(chunk: string): ChatResponse | null {
@@ -345,7 +366,7 @@ class OpenAIAdapter implements ProviderAdapter {
  * Anthropic适配器
  */
 class AnthropicAdapter implements ProviderAdapter {
-  adaptRequest(request: ChatRequest): any {
+  adaptRequest(request: ChatRequest): Record<string, unknown> {
     // 转换为Anthropic格式
     return {
       model: request.model,
@@ -360,27 +381,33 @@ class AnthropicAdapter implements ProviderAdapter {
     };
   }
 
-  adaptResponse(response: any): ChatResponse {
+  adaptResponse(response: Record<string, unknown>): ChatResponse {
     // 转换为标准格式
+    const responseId = response.id as string;
+    const responseModel = response.model as string;
+    const content = response.content as Array<{ text: string }> | undefined;
+    const stopReason = response.stop_reason as string | undefined;
+    const usage = response.usage as { input_tokens?: number; output_tokens?: number } | undefined;
+
     return {
-      id: response.id,
+      id: responseId,
       object: 'chat.completion',
       created: Math.floor(Date.now() / 1000),
-      model: response.model,
+      model: responseModel,
       choices: [
         {
           index: 0,
           message: {
             role: 'assistant',
-            content: response.content[0]?.text || ''
+            content: content?.[0]?.text || ''
           },
-          finish_reason: response.stop_reason
+          finish_reason: stopReason || null
         }
       ],
       usage: {
-        prompt_tokens: response.usage?.input_tokens || 0,
-        completion_tokens: response.usage?.output_tokens || 0,
-        total_tokens: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0)
+        prompt_tokens: usage?.input_tokens || 0,
+        completion_tokens: usage?.output_tokens || 0,
+        total_tokens: (usage?.input_tokens || 0) + (usage?.output_tokens || 0)
       }
     };
   }
@@ -417,7 +444,7 @@ class AnthropicAdapter implements ProviderAdapter {
  * BuildingAI适配器
  */
 class BuildingAIAdapter implements ProviderAdapter {
-  adaptRequest(request: ChatRequest): any {
+  adaptRequest(request: ChatRequest): Record<string, unknown> {
     // BuildingAI使用OpenAI兼容格式
     return {
       model: request.model,
@@ -428,8 +455,8 @@ class BuildingAIAdapter implements ProviderAdapter {
     };
   }
 
-  adaptResponse(response: any): ChatResponse {
-    return response; // BuildingAI返回标准格式
+  adaptResponse(response: Record<string, unknown>): ChatResponse {
+    return response as ChatResponse; // BuildingAI返回标准格式
   }
 
   adaptStreamChunk(chunk: string): ChatResponse | null {

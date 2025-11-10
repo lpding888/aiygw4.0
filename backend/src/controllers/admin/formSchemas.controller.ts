@@ -132,7 +132,10 @@ export const getFormSchemaVersions = async (req: Request, res: Response): Promis
 
 export const createFormSchema = async (req: Request, res: Response): Promise<void> => {
   const { schema_id, fields, version_description } = req.body ?? {};
-  const userId = (req.user as any)?.user_id ?? 'system';
+  interface UserRequest {
+    user_id?: string | number;
+  }
+  const userId = (req.user as unknown as UserRequest)?.user_id ?? 'system';
 
   if (!schema_id || !fields) {
     res.status(400).json({
@@ -176,7 +179,10 @@ export const createFormSchema = async (req: Request, res: Response): Promise<voi
 export const createFormSchemaVersion = async (req: Request, res: Response): Promise<void> => {
   const { schemaId } = req.params;
   const { fields, version_description } = req.body ?? {};
-  const userId = (req.user as any)?.user_id ?? 'system';
+  interface UserRequest {
+    user_id?: string | number;
+  }
+  const userId = (req.user as unknown as UserRequest)?.user_id ?? 'system';
 
   if (!fields) {
     res.status(400).json({

@@ -17,6 +17,16 @@ import {
 } from '../services/configSnapshot.service.js'; // 艹，加上.js扩展名！
 import { db } from '../config/database.js'; // 艹，使用TS版本的database配置！
 
+interface ConfigSnapshot {
+  id: number;
+  snapshot_name: string;
+  config_type: string;
+  config_ref?: string;
+  description?: string;
+  created_at: string;
+  is_rollback: boolean;
+}
+
 /**
  * 解析命令行参数
  */
@@ -56,8 +66,7 @@ async function listSnapshotsCommand(args: Record<string, string>): Promise<void>
 
   console.log(`找到 ${snapshots.length} 个快照:\n`);
 
-  snapshots.forEach((snapshot: any) => {
-    // 艹，这个snapshot类型从service来，暂时用any！
+  snapshots.forEach((snapshot: ConfigSnapshot) => {
     console.log(`ID: ${snapshot.id}`);
     console.log(`名称: ${snapshot.snapshot_name}`);
     console.log(`类型: ${snapshot.config_type}`);
@@ -113,8 +122,9 @@ async function rollbackCommand(args: Record<string, string>): Promise<void> {
     console.log('\n艹，回滚成功！\n');
     console.log('回滚后的配置:');
     console.log(JSON.stringify(result, null, 2));
-  } catch (error: any) {
-    console.error('\n艹，回滚失败:', error.message);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error('\n艹，回滚失败:', err.message);
     process.exit(1);
   }
 }
@@ -135,7 +145,7 @@ async function createSnapshotCommand(args: Record<string, string>): Promise<void
   console.log('\n艹，正在创建快照...\n');
 
   // 根据类型读取当前配置
-  let config_data: any;
+  let config_data: unknown;
 
   switch (type) {
     case 'provider':
@@ -230,9 +240,12 @@ async function main(): Promise<void> {
     } else {
       showHelp();
     }
-  } catch (error: any) {
-    console.error('\n艹，执行失败:', error.message);
-    console.error(error.stack);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error('\n艹，执行失败:', err.message);
+    if (error instanceof Error && error.stack) {
+      console.error(error.stack);
+    }
     process.exit(1);
   } finally {
     // 关闭数据库连接

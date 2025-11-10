@@ -1,4 +1,3 @@
-// @ts-nocheck
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../utils/logger.js';
@@ -6,6 +5,95 @@ import { db } from '../config/database.js';
 import tokenService from './token.service.js';
 import wechatLoginService from './wechat-login.service.js';
 import cacheService from './cache.service.js';
+
+// Type definitions
+interface LoginMethodConfig {
+  name: string;
+  enabled: boolean;
+  requiresPassword?: boolean;
+  requiresVerification?: boolean;
+  thirdParty?: boolean;
+  fields: string[];
+}
+
+interface LoginMethods {
+  email: LoginMethodConfig;
+  phone: LoginMethodConfig;
+  wechat: LoginMethodConfig;
+}
+
+interface VerificationCacheData {
+  code: string;
+  timestamp: number;
+  attempts: number;
+}
+
+interface LoginAttemptData {
+  count: number;
+  lastAttempt: number;
+  lockedUntil?: number;
+}
+
+interface LoginStats {
+  totalLogins: number;
+  successfulLogins: number;
+  failedLogins: number;
+  newUsers: number;
+  existingUsers: number;
+  loginMethods: {
+    email: number;
+    phone: number;
+    wechat: number;
+  };
+  lastReset: number;
+}
+
+interface User {
+  id: string;
+  email?: string;
+  phone?: string;
+  password?: string;
+  username?: string;
+  status?: string;
+  created_at?: Date;
+  updated_at?: Date;
+  last_login_at?: Date;
+  last_login_platform?: string;
+  wechat_openid?: string;
+  wechat_unionid?: string;
+  wechat_nickname?: string;
+  email_verified?: boolean;
+  phone_verified?: boolean;
+  auth_type?: string;
+  [key: string]: unknown;
+}
+
+interface LoginResult {
+  success: boolean;
+  user: User;
+  tokens: {
+    accessToken: string;
+    refreshToken: string;
+  };
+  loginMethod: string;
+  platform?: string;
+  isNewUser?: boolean;
+}
+
+interface UserLoginMethod {
+  type: string;
+  value: string;
+  verified?: boolean;
+  isPrimary?: boolean;
+  nickname?: string;
+  platform?: string;
+}
+
+interface BindingData {
+  type: string;
+  value: string;
+  password?: string;
+}
 
 /**
  * 统一登录服务类
@@ -18,6 +106,12 @@ import cacheService from './cache.service.js';
  * - 统一的用户认证流程
  */
 class UnifiedLoginService {
+  private initialized: boolean;
+  private loginMethods: LoginMethods;
+  private verificationCache: Map<string, VerificationCacheData>;
+  private loginAttempts: Map<string, LoginAttemptData>;
+  private stats: LoginStats;
+
   constructor() {
     this.initialized = false;
 
@@ -44,10 +138,10 @@ class UnifiedLoginService {
     };
 
     // 验证码缓存
-    this.verificationCache = new Map(); // phone -> { code, timestamp, attempts }
+    this.verificationCache = new Map<string, VerificationCacheData>();
 
     // 登录尝试限制
-    this.loginAttempts = new Map(); // identifier -> { count, lastAttempt, lockedUntil }
+    this.loginAttempts = new Map<string, LoginAttemptData>();
 
     // 统计信息
     this.stats = {
@@ -68,7 +162,7 @@ class UnifiedLoginService {
   /**
    * 初始化统一登录服务
    */
-  async initialize() {
+  async initialize(): Promise<void> {
     if (this.initialized) {
       logger.warn('[UnifiedLogin] 统一登录服务已初始化');
       return;
@@ -90,7 +184,14 @@ class UnifiedLoginService {
    * 获取可用的登录方式
    * @returns {Array} 登录方式列表
    */
-  getAvailableLoginMethods() {
+  getAvailableLoginMethods(): Array<{
+    key: string;
+    name: string;
+    requiresPassword?: boolean;
+    requiresVerification?: boolean;
+    thirdParty?: boolean;
+    fields: string[];
+  }> {
     return Object.entries(this.loginMethods)
       .filter(([_, config]) => config.enabled)
       .map(([key, config]) => ({
@@ -107,9 +208,9 @@ class UnifiedLoginService {
    * 邮箱密码登录
    * @param {string} email - 邮箱
    * @param {string} password - 密码
-   * @returns {Promise<Object>} 登录结果
+   * @returns {Promise<LoginResult>} 登录结果
    */
-  async loginWithEmail(email, password) {
+  async loginWithEmail(email: string, password: string): Promise<LoginResult> {
     try {
       // 检查登录限制
       await this.checkLoginAttempts(email);
@@ -164,9 +265,9 @@ class UnifiedLoginService {
    * 手机号验证码登录
    * @param {string} phone - 手机号
    * @param {string} verificationCode - 验证码
-   * @returns {Promise<Object>} 登录结果
+   * @returns {Promise<LoginResult>} 登录结果
    */
-  async loginWithPhone(phone, verificationCode) {
+  async loginWithPhone(phone: string, verificationCode: string): Promise<LoginResult> {
     try {
       // 检查登录限制
       await this.checkLoginAttempts(phone);
@@ -229,29 +330,32 @@ class UnifiedLoginService {
    * 微信登录（统一入口）
    * @param {string} platform - 微信平台
    * @param {Object} loginData - 登录数据
-   * @returns {Promise<Object>} 登录结果
+   * @returns {Promise<LoginResult>} 登录结果
    */
-  async loginWithWechat(platform, loginData) {
+  async loginWithWechat(
+    platform: string,
+    loginData: Record<string, unknown>
+  ): Promise<LoginResult> {
     try {
       let result;
 
       switch (platform) {
         case 'officialAccount':
           result = await wechatLoginService.handleOfficialOAuthCallback(
-            loginData.code,
-            loginData.state
+            loginData.code as string,
+            loginData.state as string
           );
           break;
         case 'miniProgram':
           result = await wechatLoginService.handleMiniProgramLogin(
-            loginData.code,
-            loginData.userInfo
+            loginData.code as string,
+            loginData.userInfo as Record<string, unknown>
           );
           break;
         case 'openPlatform':
           result = await wechatLoginService.handleOpenPlatformCallback(
-            loginData.code,
-            loginData.state
+            loginData.code as string,
+            loginData.state as string
           );
           break;
         default:
@@ -259,18 +363,22 @@ class UnifiedLoginService {
       }
 
       // 更新统计
-      this.updateStats('wechat', result.isNewUser);
+      this.updateStats('wechat', (result as LoginResult).isNewUser === true);
 
-      logger.info(`[UnifiedLogin] 微信登录成功: platform=${platform}, userId=${result.user.id}`);
+      logger.info(
+        `[UnifiedLogin] 微信登录成功: platform=${platform}, userId=${
+          (result as LoginResult).user.id
+        }`
+      );
 
       return {
         success: true,
-        user: result.user,
-        tokens: result.tokens,
+        user: (result as LoginResult).user,
+        tokens: (result as LoginResult).tokens,
         loginMethod: 'wechat',
         platform,
-        isNewUser: result.isNewUser
-      };
+        isNewUser: (result as LoginResult).isNewUser
+      } as LoginResult;
     } catch (error) {
       logger.error('[UnifiedLogin] 微信登录失败:', error);
       this.stats.failedLogins++;
@@ -283,7 +391,9 @@ class UnifiedLoginService {
    * @param {string} phone - 手机号
    * @returns {Promise<Object>} 发送结果
    */
-  async sendPhoneVerificationCode(phone) {
+  async sendPhoneVerificationCode(
+    phone: string
+  ): Promise<{ success: boolean; message: string; expiresIn: number }> {
     try {
       // 验证手机号格式
       if (!/^1[3-9]\d{9}$/.test(phone)) {
@@ -328,9 +438,9 @@ class UnifiedLoginService {
    * 用户注册
    * @param {Object} userData - 用户数据
    * @param {string} loginMethod - 登录方式
-   * @returns {Promise<Object>} 注册结果
+   * @returns {Promise<LoginResult>} 注册结果
    */
-  async registerUser(userData, loginMethod) {
+  async registerUser(userData: Record<string, unknown>, loginMethod: string): Promise<LoginResult> {
     try {
       const { email, phone, password, username } = userData;
 
@@ -416,7 +526,10 @@ class UnifiedLoginService {
    * @param {Object} bindingData - 绑定数据
    * @returns {Promise<Object>} 绑定结果
    */
-  async bindLoginMethod(userId, bindingData) {
+  async bindLoginMethod(
+    userId: string,
+    bindingData: BindingData
+  ): Promise<{ success: boolean; message: string }> {
     try {
       const { type, value, password } = bindingData;
 
@@ -447,7 +560,7 @@ class UnifiedLoginService {
       }
 
       // 更新用户信息
-      const updateData = { updated_at: new Date() };
+      const updateData: Record<string, unknown> = { updated_at: new Date() };
       if (type === 'email') {
         updateData.email = value;
         updateData.email_verified = true;
@@ -478,7 +591,10 @@ class UnifiedLoginService {
    * @param {string} type - 绑定类型
    * @returns {Promise<Object>} 解除结果
    */
-  async unbindLoginMethod(userId, type) {
+  async unbindLoginMethod(
+    userId: string,
+    type: string
+  ): Promise<{ success: boolean; message: string }> {
     try {
       // 验证用户是否存在
       const user = await db('users').where('id', userId).first();
@@ -492,7 +608,7 @@ class UnifiedLoginService {
       }
 
       // 更新用户信息
-      const updateData = { updated_at: new Date() };
+      const updateData: Record<string, unknown> = { updated_at: new Date() };
       if (type === 'email') {
         updateData.email = `user_${userId}@placeholder.com`;
         updateData.email_verified = false;
@@ -520,7 +636,12 @@ class UnifiedLoginService {
    * @param {string} userId - 用户ID
    * @returns {Promise<Object>} 登录方式信息
    */
-  async getUserLoginMethods(userId) {
+  async getUserLoginMethods(userId: string): Promise<{
+    userId: string;
+    methods: UserLoginMethod[];
+    primaryMethod: string | undefined;
+    lastLoginPlatform: string | undefined;
+  }> {
     try {
       const user = await db('users')
         .where('id', userId)
@@ -593,7 +714,7 @@ class UnifiedLoginService {
    * @param {string} identifier - 登录标识
    * @private
    */
-  async checkLoginAttempts(identifier) {
+  private async checkLoginAttempts(identifier: string): Promise<void> {
     const attempts = this.loginAttempts.get(identifier);
 
     if (attempts && attempts.lockedUntil && Date.now() < attempts.lockedUntil) {
@@ -619,8 +740,8 @@ class UnifiedLoginService {
    * @param {string} identifier - 登录标识
    * @private
    */
-  async recordFailedLogin(identifier) {
-    const attempts = this.loginAttempts.get(identifier) || { count: 0 };
+  private async recordFailedLogin(identifier: string): Promise<void> {
+    const attempts = this.loginAttempts.get(identifier) || { count: 0, lastAttempt: Date.now() };
 
     this.loginAttempts.set(identifier, {
       count: attempts.count + 1,
@@ -632,10 +753,10 @@ class UnifiedLoginService {
   /**
    * 创建手机号用户
    * @param {string} phone - 手机号
-   * @returns {Promise<Object>} 用户信息
+   * @returns {Promise<User>} 用户信息
    * @private
    */
-  async createUserWithPhone(phone) {
+  private async createUserWithPhone(phone: string): Promise<User> {
     const userId = uuidv4().replace(/-/g, '');
     const now = new Date();
 
@@ -677,7 +798,7 @@ class UnifiedLoginService {
    * @param {string} loginMethod - 登录方式
    * @private
    */
-  async updateLoginInfo(userId, loginMethod) {
+  private async updateLoginInfo(userId: string, loginMethod: string): Promise<void> {
     await db('users').where('id', userId).update({
       last_login_at: new Date(),
       last_login_platform: loginMethod,
@@ -702,10 +823,11 @@ class UnifiedLoginService {
    * @param {boolean} isNewUser - 是否新用户
    * @private
    */
-  updateStats(loginMethod, isNewUser) {
+  private updateStats(loginMethod: string, isNewUser: boolean): void {
     this.stats.totalLogins++;
     this.stats.successfulLogins++;
-    this.stats.loginMethods[loginMethod] = (this.stats.loginMethods[loginMethod] || 0) + 1;
+    this.stats.loginMethods[loginMethod as keyof LoginStats['loginMethods']] =
+      (this.stats.loginMethods[loginMethod as keyof LoginStats['loginMethods']] || 0) + 1;
 
     if (isNewUser) {
       this.stats.newUsers++;
@@ -720,9 +842,9 @@ class UnifiedLoginService {
    * @returns {Object} 清理后的用户对象
    * @private
    */
-  sanitizeUser(user) {
+  private sanitizeUser(user: User): User {
     const { password, ...sanitizedUser } = user;
-    return sanitizedUser;
+    return sanitizedUser as User;
   }
 
   /**
@@ -731,8 +853,11 @@ class UnifiedLoginService {
    * @returns {string} 脱敏后的邮箱
    * @private
    */
-  maskEmail(email) {
+  private maskEmail(email: string): string {
     const [username, domain] = email.split('@');
+    if (!username || !domain) {
+      return email;
+    }
     if (username.length <= 3) {
       return `${username[0]}***@${domain}`;
     }
@@ -745,7 +870,7 @@ class UnifiedLoginService {
    * @returns {string} 脱敏后的手机号
    * @private
    */
-  maskPhone(phone) {
+  private maskPhone(phone: string): string {
     return `${phone.substring(0, 3)}****${phone.substring(7)}`;
   }
 
@@ -753,7 +878,7 @@ class UnifiedLoginService {
    * 启动清理任务
    * @private
    */
-  startCleanupJob() {
+  private startCleanupJob(): void {
     // 每10分钟清理一次过期数据
     setInterval(
       () => {
@@ -769,7 +894,7 @@ class UnifiedLoginService {
    * 清理过期数据
    * @private
    */
-  cleanupExpiredData() {
+  private cleanupExpiredData(): void {
     try {
       const now = Date.now();
       let cleanedCount = 0;
@@ -804,7 +929,20 @@ class UnifiedLoginService {
    * 获取统计信息
    * @returns {Object} 统计数据
    */
-  getStats() {
+  getStats(): LoginStats & {
+    uptime: number;
+    activeVerifications: number;
+    activeLoginAttempts: number;
+    availableMethods: Array<{
+      key: string;
+      name: string;
+      requiresPassword?: boolean;
+      requiresVerification?: boolean;
+      thirdParty?: boolean;
+      fields: string[];
+    }>;
+    timestamp: string;
+  } {
     const now = Date.now();
     const uptime = now - this.stats.lastReset;
 
@@ -821,7 +959,7 @@ class UnifiedLoginService {
   /**
    * 关闭统一登录服务
    */
-  async close() {
+  async close(): Promise<void> {
     try {
       this.verificationCache.clear();
       this.loginAttempts.clear();

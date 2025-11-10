@@ -1,29 +1,142 @@
 import { db } from '../config/database.js';
 import logger from '../utils/logger.js';
+import type { Knex } from 'knex';
 
-type OrderSpec = { column: string; direction?: 'asc' | 'desc' };
-type JoinSpec = {
+/**
+ * 排序规则
+ */
+export interface OrderSpec {
+  column: string;
+  direction?: 'asc' | 'desc';
+}
+
+/**
+ * JOIN规则
+ */
+export interface JoinSpec {
   type: 'inner' | 'left';
   table: string;
   first: string;
   operator: string;
   second: string;
-};
+}
+
+/**
+ * WHERE条件类型(对象形式或函数形式)
+ */
+export type WhereCondition = Record<string, unknown> | ((this: Knex.QueryBuilder) => void);
+
+/**
+ * 游标分页选项
+ */
+export interface CursorPaginateOptions {
+  table: string;
+  columns?: string[];
+  where?: WhereCondition;
+  orderBy?: OrderSpec[];
+  cursor?: string | null;
+  limit?: number;
+  joins?: JoinSpec[];
+}
+
+/**
+ * OFFSET分页选项
+ */
+export interface OffsetPaginateOptions {
+  table: string;
+  columns?: string[];
+  where?: WhereCondition;
+  orderBy?: OrderSpec[];
+  page?: number;
+  limit?: number;
+  joins?: JoinSpec[];
+}
+
+/**
+ * 游标分页元信息
+ */
+export interface CursorPageInfo {
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+  startCursor: string | null;
+  endCursor: string | null;
+  nextCursor: string | null;
+  limit: number;
+  totalCount: number;
+}
+
+/**
+ * OFFSET分页元信息
+ */
+export interface OffsetPageInfo {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+  limit: number;
+  offset: number;
+  itemCount: number;
+}
+
+/**
+ * 游标分页结果
+ */
+export interface CursorPaginateResult<T = Record<string, unknown>> {
+  data: T[];
+  pageInfo: CursorPageInfo;
+  paginationType: 'cursor';
+}
+
+/**
+ * OFFSET分页结果
+ */
+export interface OffsetPaginateResult<T = Record<string, unknown>> {
+  data: T[];
+  pageInfo: OffsetPageInfo;
+  paginationType: 'offset';
+}
+
+/**
+ * 查询分析结果
+ */
+export interface QueryAnalysis {
+  sql: string;
+  bindings: unknown[];
+  explain: unknown[];
+}
+
+/**
+ * 游标数据
+ */
+export interface CursorData {
+  [columnName: string]: unknown;
+}
+
+/**
+ * 任务过滤器
+ */
+export interface TaskFilters {
+  status?: string;
+  type?: string;
+  userId?: string;
+}
+
+/**
+ * 配额交易过滤器
+ */
+export interface QuotaTransactionFilters {
+  phase?: string;
+}
 
 class PaginationService {
   private readonly defaultLimit = 20;
   private readonly maxLimit = 100;
   private readonly defaultOrder: 'asc' | 'desc' = 'desc';
 
-  async cursorPaginate(options: {
-    table: string;
-    columns?: string[];
-    where?: Record<string, any> | ((this: any) => void);
-    orderBy?: OrderSpec[];
-    cursor?: string | null;
-    limit?: number;
-    joins?: JoinSpec[];
-  }): Promise<{ data: any[]; pageInfo: any; paginationType: 'cursor' }> {
+  async cursorPaginate<T = Record<string, unknown>>(
+    options: CursorPaginateOptions
+  ): Promise<CursorPaginateResult<T>> {
     const {
       table,
       columns = ['*'],
@@ -38,7 +151,7 @@ class PaginationService {
     } = options;
     try {
       const validatedLimit = Math.min(Math.max(limit, 1), this.maxLimit);
-      let query: any = db(table).select(columns);
+      let query: Knex.QueryBuilder = db(table).select(columns);
       joins.forEach((join) => {
         query =
           join.type === 'inner'
@@ -49,7 +162,7 @@ class PaginationService {
         query = query.where(where);
       } else {
         Object.keys(where).forEach((key) => {
-          const val = (where as any)[key];
+          const val = (where as Record<string, unknown>)[key];
           if (val !== null && val !== undefined) {
             Array.isArray(val)
               ? (query = query.whereIn(key, val))
@@ -63,19 +176,19 @@ class PaginationService {
       });
       query = query.limit(validatedLimit + 1);
       const startTime = Date.now();
-      const results: any[] = await query;
+      const results = (await query) as T[];
       const queryTime = Date.now() - startTime;
       const hasNextPage = results.length > validatedLimit;
       if (hasNextPage) results.pop();
       let nextCursor: string | null = null;
       if (hasNextPage && results.length > 0)
-        nextCursor = this.buildCursor(results[results.length - 1], orderBy);
-      const pageInfo = {
+        nextCursor = this.buildCursor(results[results.length - 1] as Record<string, unknown>, orderBy);
+      const pageInfo: CursorPageInfo = {
         hasNextPage,
         hasPreviousPage: !!cursor,
-        startCursor: results.length > 0 ? this.buildCursor(results[0], orderBy) : null,
+        startCursor: results.length > 0 ? this.buildCursor(results[0] as Record<string, unknown>, orderBy) : null,
         endCursor:
-          results.length > 0 ? this.buildCursor(results[results.length - 1], orderBy) : null,
+          results.length > 0 ? this.buildCursor(results[results.length - 1] as Record<string, unknown>, orderBy) : null,
         nextCursor,
         limit: validatedLimit,
         totalCount: results.length
@@ -89,25 +202,19 @@ class PaginationService {
         hasCursor: !!cursor
       });
       return { data: results, pageInfo, paginationType: 'cursor' };
-    } catch (error: any) {
+    } catch (error) {
       logger.error('[PaginationService] 游标分页查询失败', {
         table,
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
         options
       });
       throw error;
     }
   }
 
-  async offsetPaginate(options: {
-    table: string;
-    columns?: string[];
-    where?: Record<string, any> | ((this: any) => void);
-    orderBy?: OrderSpec[];
-    page?: number;
-    limit?: number;
-    joins?: JoinSpec[];
-  }): Promise<{ data: any[]; pageInfo: any; paginationType: 'offset' }> {
+  async offsetPaginate<T = Record<string, unknown>>(
+    options: OffsetPaginateOptions
+  ): Promise<OffsetPaginateResult<T>> {
     const {
       table,
       columns = ['*'],
@@ -121,7 +228,7 @@ class PaginationService {
       const validatedPage = Math.max(page, 1);
       const validatedLimit = Math.min(Math.max(limit, 1), this.maxLimit);
       const offset = (validatedPage - 1) * validatedLimit;
-      let countQuery: any = db(table);
+      let countQuery: Knex.QueryBuilder = db(table);
       joins.forEach((join) => {
         countQuery =
           join.type === 'inner'
@@ -129,10 +236,10 @@ class PaginationService {
             : countQuery.leftJoin(join.table, join.first, join.operator, join.second);
       });
       if (typeof where === 'function') {
-        countQuery = countQuery.where(where as any);
+        countQuery = countQuery.where(where);
       } else {
         Object.keys(where).forEach((key) => {
-          const val = (where as any)[key];
+          const val = (where as Record<string, unknown>)[key];
           if (val !== null && val !== undefined) {
             Array.isArray(val)
               ? (countQuery = countQuery.whereIn(key, val))
@@ -140,8 +247,8 @@ class PaginationService {
           }
         });
       }
-      const totalCountRow: any = await countQuery.count('* as total').first();
-      let dataQuery: any = db(table).select(columns);
+      const totalCountRow = (await countQuery.count('* as total').first()) as { total: number };
+      let dataQuery: Knex.QueryBuilder = db(table).select(columns);
       joins.forEach((join) => {
         dataQuery =
           join.type === 'inner'
@@ -149,10 +256,10 @@ class PaginationService {
             : dataQuery.leftJoin(join.table, join.first, join.operator, join.second);
       });
       if (typeof where === 'function') {
-        dataQuery = dataQuery.where(where as any);
+        dataQuery = dataQuery.where(where);
       } else {
         Object.keys(where).forEach((key) => {
-          const val = (where as any)[key];
+          const val = (where as Record<string, unknown>)[key];
           if (val !== null && val !== undefined) {
             Array.isArray(val)
               ? (dataQuery = dataQuery.whereIn(key, val))
@@ -165,13 +272,13 @@ class PaginationService {
       });
       dataQuery = dataQuery.limit(validatedLimit).offset(offset);
       const startTime = Date.now();
-      const results: any[] = await dataQuery;
+      const results = (await dataQuery) as T[];
       const queryTime = Date.now() - startTime;
       const totalItems = parseInt(String(totalCountRow?.total ?? '0')) || 0;
       const totalPages = Math.ceil(totalItems / validatedLimit);
       const hasNextPage = validatedPage < totalPages;
       const hasPreviousPage = validatedPage > 1;
-      const pageInfo = {
+      const pageInfo: OffsetPageInfo = {
         currentPage: validatedPage,
         totalPages,
         totalItems,
@@ -190,24 +297,28 @@ class PaginationService {
         queryTime: `${queryTime}ms`
       });
       return { data: results, pageInfo, paginationType: 'offset' };
-    } catch (error: any) {
+    } catch (error) {
       logger.error('[PaginationService] OFFSET分页查询失败', {
         table,
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
         options
       });
       throw error;
     }
   }
 
-  private buildCursorCondition(query: any, orderBy: OrderSpec[], cursor: string) {
-    const cursorData = this.parseCursor(cursor) as Record<string, any> | null;
+  private buildCursorCondition(
+    query: Knex.QueryBuilder,
+    orderBy: OrderSpec[],
+    cursor: string
+  ): Knex.QueryBuilder {
+    const cursorData = this.parseCursor(cursor);
     if (!cursorData || orderBy.length === 0) return query;
     const conditions: string[] = [];
-    const bindings: any[] = [];
+    const bindings: unknown[] = [];
     for (let i = 0; i < orderBy.length; i++) {
       const { column, direction } = orderBy[i];
-      const value = (cursorData as any)[column];
+      const value = cursorData[column];
       if (value === undefined) continue;
       const operator = (direction || this.defaultOrder) === 'desc' ? '<' : '>';
       if (i === 0) {
@@ -215,10 +326,10 @@ class PaginationService {
         bindings.push(value);
       } else {
         let prevConditions = '';
-        const prevBindings: any[] = [];
+        const prevBindings: unknown[] = [];
         for (let j = 0; j < i; j++) {
           const prevColumn = orderBy[j].column;
-          const prevValue = (cursorData as any)[prevColumn];
+          const prevValue = cursorData[prevColumn];
           if (prevValue !== undefined) {
             prevConditions += prevConditions ? ' AND ' : '';
             prevConditions += `${prevColumn} = ?`;
@@ -238,26 +349,26 @@ class PaginationService {
     return query;
   }
 
-  private buildCursor(row: Record<string, any>, orderBy: OrderSpec[]): string {
-    const cursorData: Record<string, any> = {};
+  private buildCursor(row: Record<string, unknown>, orderBy: OrderSpec[]): string {
+    const cursorData: CursorData = {};
     orderBy.forEach((o) => {
       const col = o.column;
-      const v = (row as any)[col];
+      const v = row[col];
       if (v !== undefined && v !== null) cursorData[col] = v;
     });
     return Buffer.from(JSON.stringify(cursorData)).toString('base64');
   }
 
-  private parseCursor(cursor: string): Record<string, any> | null {
+  private parseCursor(cursor: string): CursorData | null {
     try {
-      return JSON.parse(Buffer.from(cursor, 'base64').toString('utf8'));
-    } catch (error: any) {
+      return JSON.parse(Buffer.from(cursor, 'base64').toString('utf8')) as CursorData;
+    } catch (error) {
       logger.warn('[PaginationService] 游标解析失败', { cursor, error });
       return null;
     }
   }
 
-  async getUserTasks(userId: string, options: Record<string, any> = {}) {
+  async getUserTasks(userId: string, options: Partial<CursorPaginateOptions> = {}) {
     return this.cursorPaginate({
       table: 'tasks',
       columns: ['id', 'userId', 'type', 'status', 'created_at', 'completed_at', 'resultUrls'],
@@ -270,8 +381,8 @@ class PaginationService {
     });
   }
 
-  async getTaskList(filters: Record<string, any> = {}, options: Record<string, any> = {}) {
-    const where: Record<string, any> = {};
+  async getTaskList(filters: TaskFilters = {}, options: Partial<OffsetPaginateOptions> = {}) {
+    const where: Record<string, unknown> = {};
     if (filters.status) where.status = filters.status;
     if (filters.type) where.type = filters.type;
     if (filters.userId) where.userId = filters.userId;
@@ -289,10 +400,10 @@ class PaginationService {
 
   async getQuotaTransactions(
     userId: string | null = null,
-    filters: Record<string, any> = {},
-    options: Record<string, any> = {}
+    filters: QuotaTransactionFilters = {},
+    options: Partial<OffsetPaginateOptions> = {}
   ) {
-    const where: Record<string, any> = {};
+    const where: Record<string, unknown> = {};
     if (userId) where.user_id = userId;
     if (filters.phase) where.phase = filters.phase;
     return this.offsetPaginate({
@@ -307,9 +418,9 @@ class PaginationService {
     });
   }
 
-  async searchTasks(searchTerm: string, options: Record<string, any> = {}) {
+  async searchTasks(searchTerm: string, options: Partial<OffsetPaginateOptions> = {}) {
     if (!searchTerm || searchTerm.trim().length === 0) return this.getTaskList({}, options);
-    const whereFn = function (this: any) {
+    const whereFn = function (this: Knex.QueryBuilder) {
       this.where('tasks.type', 'like', `%${searchTerm}%`)
         .orWhere('tasks.status', 'like', `%${searchTerm}%`)
         .orWhere('tasks.errorReason', 'like', `%${searchTerm}%`);
@@ -317,7 +428,7 @@ class PaginationService {
     return this.offsetPaginate({
       table: 'tasks',
       columns: ['id', 'userId', 'type', 'status', 'created_at', 'errorReason'],
-      where: whereFn as any,
+      where: whereFn,
       orderBy: [
         { column: 'created_at', direction: 'desc' },
         { column: 'id', direction: 'desc' }
@@ -326,21 +437,25 @@ class PaginationService {
     });
   }
 
-  async getIndexUsageStats(): Promise<any[]> {
+  async getIndexUsageStats(): Promise<unknown[]> {
     try {
-      const stats: any = await (db as any).raw('SELECT * FROM v_index_usage');
-      return stats?.[0] || [];
-    } catch (error: any) {
+      const stats = await (db as Knex).raw('SELECT * FROM v_index_usage');
+      return (stats?.[0] as unknown[]) || [];
+    } catch (error) {
       logger.error('[PaginationService] 获取索引统计失败', error);
       return [];
     }
   }
 
-  async analyzeQuery(table: string, where: Record<string, any> = {}, orderBy: OrderSpec[] = []) {
+  async analyzeQuery(
+    table: string,
+    where: Record<string, unknown> = {},
+    orderBy: OrderSpec[] = []
+  ): Promise<QueryAnalysis> {
     try {
-      let query: any = db(table).select('*');
+      let query: Knex.QueryBuilder = db(table).select('*');
       Object.keys(where).forEach((k) => {
-        const v = (where as any)[k];
+        const v = where[k];
         if (v !== null && v !== undefined) {
           query = query.where(k, v);
         }
@@ -350,20 +465,24 @@ class PaginationService {
       });
       const sql = query.toSQL();
       const explainSql = `EXPLAIN ${sql.sql}`;
-      const explainResult: any = await (db as any).raw(explainSql, sql.bindings);
+      const explainResult = await (db as Knex).raw(explainSql, sql.bindings);
       logger.debug('[PaginationService] 查询分析完成', {
         table,
         where,
         orderBy,
         explainPlan: explainResult?.[0]
       });
-      return { sql: sql.sql, bindings: sql.bindings, explain: explainResult?.[0] };
-    } catch (error: any) {
+      return {
+        sql: sql.sql,
+        bindings: sql.bindings as unknown[],
+        explain: (explainResult?.[0] as unknown[]) || []
+      };
+    } catch (error) {
       logger.error('[PaginationService] 查询分析失败', {
         table,
         where,
         orderBy,
-        error: error.message
+        error: error instanceof Error ? error.message : String(error)
       });
       throw error;
     }

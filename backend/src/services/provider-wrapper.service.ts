@@ -2,7 +2,7 @@ import logger from '../utils/logger.js';
 import circuitBreakerService from './circuit-breaker.service.js';
 import cacheService from './cache.service.js';
 
-type Provider = Record<string, any>;
+type Provider = Record<string, unknown>;
 
 interface ProviderConfig {
   circuitBreaker: {
@@ -25,12 +25,43 @@ interface ProviderConfig {
   };
 }
 
+interface CircuitBreakerState {
+  getState?: () => string;
+}
+
+interface ProviderExecuteOptions {
+  [key: string]: unknown;
+}
+
+interface ProviderStats {
+  totalRequests: number;
+  totalSuccesses: number;
+  totalFailures: number;
+  totalTimeouts: number;
+  totalCaches: number;
+  averageResponseTime: number;
+  totalResponseTime: number;
+  lastRequestTime: null | number;
+  lastSuccessTime: null | number;
+  lastFailureTime: null | number;
+  circuitBreaker?: unknown;
+}
+
+interface HealthCheckResponse {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  providers?: Record<string, unknown>;
+  totalProviders?: number;
+  activeProviders?: number;
+  timestamp: string;
+  error?: string;
+}
+
 class ProviderWrapper {
   constructor(
     public readonly name: string,
     public readonly provider: Provider,
     public readonly config: ProviderConfig,
-    public readonly circuitBreaker: any
+    public readonly circuitBreaker: CircuitBreakerState
   ) {}
 
   private stats = {
@@ -69,9 +100,9 @@ class ProviderWrapper {
 
   async execute(
     methodName: string,
-    args: any[] = [],
-    _options: Record<string, any> = {}
-  ): Promise<any> {
+    args: unknown[] = [],
+    _options: ProviderExecuteOptions = {}
+  ): Promise<unknown> {
     const opName = `provider:${this.name}:${methodName}`;
     const doCall = async () => {
       const start = Date.now();
@@ -89,15 +120,16 @@ class ProviderWrapper {
           this.stats.totalResponseTime / Math.max(1, this.stats.totalRequests);
         this.stats.lastSuccessTime = Date.now();
         return result;
-      } catch (err: any) {
+      } catch (err: unknown) {
         this.stats.totalFailures++;
         this.stats.lastFailureTime = Date.now();
         throw err;
       }
     };
 
-    const fallback = async (error: any) => {
-      logger.warn(`[ProviderWrapper] 执行降级: ${opName}`, { error: error?.message });
+    const fallback = async (error: unknown) => {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.warn(`[ProviderWrapper] 执行降级: ${opName}`, { error: err.message });
       throw error; // 先不提供真正的降级实现
     };
 
@@ -131,9 +163,9 @@ class ProviderWrapperService {
     const fullConfig: ProviderConfig = {
       ...this.defaultConfig,
       ...config,
-      circuitBreaker: { ...this.defaultConfig.circuitBreaker, ...(config.circuitBreaker as any) },
-      retry: { ...this.defaultConfig.retry, ...(config.retry as any) },
-      cache: { ...this.defaultConfig.cache, ...(config.cache as any) }
+      circuitBreaker: { ...this.defaultConfig.circuitBreaker, ...(config.circuitBreaker || {}) },
+      retry: { ...this.defaultConfig.retry, ...(config.retry || {}) },
+      cache: { ...this.defaultConfig.cache, ...(config.cache || {}) }
     } as ProviderConfig;
 
     const circuitBreaker = circuitBreakerService.getCircuitBreaker(
@@ -157,16 +189,16 @@ class ProviderWrapperService {
   async execute(
     providerName: string,
     methodName: string,
-    args: any[] = [],
-    options: Record<string, any> = {}
-  ) {
+    args: unknown[] = [],
+    options: ProviderExecuteOptions = {}
+  ): Promise<unknown> {
     const wrapper = this.getWrapper(providerName);
     if (!wrapper) throw new Error(`Provider不存在: ${providerName}`);
     return await wrapper.execute(methodName, args, options);
   }
 
-  getAllProviderStates() {
-    const states: Record<string, any> = {};
+  getAllProviderStates(): Omit<HealthCheckResponse, 'status' | 'error'> & { providers: Record<string, unknown> } {
+    const states: Record<string, unknown> = {};
     for (const [name, wrapper] of this.wrappers) {
       states[name] = wrapper.getState();
     }
@@ -192,16 +224,17 @@ class ProviderWrapperService {
     return true;
   }
 
-  async healthCheck() {
+  async healthCheck(): Promise<HealthCheckResponse> {
     try {
       const states = this.getAllProviderStates();
       return {
         status: states.activeProviders > 0 ? 'healthy' : 'degraded',
         ...states
       };
-    } catch (error: any) {
-      logger.error('[ProviderWrapper] 健康检查失败', error);
-      return { status: 'unhealthy', error: error?.message, timestamp: new Date().toISOString() };
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[ProviderWrapper] 健康检查失败', err);
+      return { status: 'unhealthy', error: err.message, timestamp: new Date().toISOString() };
     }
   }
 }

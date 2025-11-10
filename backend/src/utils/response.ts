@@ -3,7 +3,7 @@
  * 艹，TypeScript版本，不偷懒！
  */
 
-export interface SuccessResponse<T = any> {
+export interface SuccessResponse<T = unknown> {
   success: true;
   code: number;
   message: string;
@@ -16,7 +16,7 @@ export interface ErrorResponse {
   code: number;
   error: string;
   message: string;
-  details: any;
+  details: unknown;
   timestamp: string;
 }
 
@@ -29,7 +29,7 @@ export interface PaginationInfo {
   hasPrev: boolean;
 }
 
-export interface PaginatedResponse<T = any> {
+export interface PaginatedResponse<T = unknown> {
   success: true;
   code: number;
   message: string;
@@ -43,8 +43,8 @@ export interface PaginatedResponse<T = any> {
 /**
  * 创建成功响应
  */
-export function createSuccessResponse<T = any>(
-  data: T = null as any,
+export function createSuccessResponse<T = unknown>(
+  data: T = null as unknown,
   message: string = '操作成功',
   code: number = 200
 ): SuccessResponse<T> {
@@ -63,7 +63,7 @@ export function createSuccessResponse<T = any>(
 export function createErrorResponse(
   error: string,
   message: string = '操作失败',
-  details: any = null,
+  details: unknown = null,
   code: number = 400
 ): ErrorResponse {
   return {
@@ -79,7 +79,7 @@ export function createErrorResponse(
 /**
  * 创建分页响应
  */
-export function createPaginatedResponse<T = any>(
+export function createPaginatedResponse<T = unknown>(
   items: T[],
   total: number,
   page: number,

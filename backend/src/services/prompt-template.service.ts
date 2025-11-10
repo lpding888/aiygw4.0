@@ -9,6 +9,31 @@ const logger = require('../utils/logger');
 const configCacheService = require('../cache/config-cache');
 const { v4: uuidv4 } = require('uuid');
 
+// Knex transaction type - flexible type to handle Knex transaction objects
+type KnexTransaction = unknown;
+
+// Database row type
+interface DbTemplateRow extends Record<string, unknown> {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  tags: string;
+  template: string;
+  variables: string;
+  version: string;
+  status: string;
+  published_at?: Date;
+  metadata: string;
+  examples: string;
+  config: string;
+  usage_stats: string;
+  created_by: string;
+  updated_by: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
 interface PromptTemplate {
   id: string;
   name: string;
@@ -53,12 +78,12 @@ interface TemplateVariable {
   type: 'string' | 'number' | 'boolean' | 'array' | 'object';
   description: string;
   required: boolean;
-  defaultValue?: any;
+  defaultValue?: unknown;
   validation?: {
     min?: number;
     max?: number;
     pattern?: string;
-    enum?: any[];
+    enum?: unknown[];
     minLength?: number;
     maxLength?: number;
   };
@@ -69,7 +94,7 @@ interface TemplateExample {
   id: string;
   name: string;
   description: string;
-  variables: Record<string, any>;
+  variables: Record<string, unknown>;
   output: string;
   rating?: number;
 }
@@ -94,7 +119,7 @@ interface TemplateValidation {
 
 interface TemplatePreview {
   rendered: string;
-  variables: Record<string, any>;
+  variables: Record<string, unknown>;
   estimatedTokens: number;
   renderingTime: number;
 }
@@ -234,7 +259,7 @@ class PromptTemplateService {
         const newVersion = this.incrementVersion(existingTemplate.version);
         const now = new Date();
 
-        const updateFields: any = {
+        const updateFields: Record<string, unknown> = {
           version: newVersion,
           updated_by: updatedBy,
           updated_at: now
@@ -245,16 +270,16 @@ class PromptTemplateService {
         const applyUpdate = (
           property: keyof PromptTemplate,
           column: string,
-          transformDb?: (value: any) => any,
-          transformSnapshot?: (value: any) => any
+          transformDb?: (value: unknown) => unknown,
+          transformSnapshot?: (value: unknown) => unknown
         ) => {
           if (!Object.prototype.hasOwnProperty.call(updateData, property)) {
             return;
           }
 
-          const rawValue = (updateData as any)[property];
+          const rawValue = (updateData as Record<string, unknown>)[property];
           updateFields[column] = transformDb ? transformDb(rawValue) : rawValue;
-          (updatedTemplate as any)[property] = transformSnapshot
+          (updatedTemplate as Record<string, unknown>)[property] = transformSnapshot
             ? transformSnapshot(rawValue)
             : rawValue;
         };
@@ -321,7 +346,7 @@ class PromptTemplateService {
         // 状态默认回到草稿（除非显式传入允许的状态）
         if (!Object.prototype.hasOwnProperty.call(updateData, 'status')) {
           updateFields.status = 'draft';
-          (updatedTemplate as any).status = 'draft';
+          (updatedTemplate as Record<string, unknown>).status = 'draft';
         }
 
         await trx('prompt_templates').where('id', templateId).update(updateFields);
@@ -381,11 +406,9 @@ class PromptTemplateService {
         });
 
         // 创建发布快照
-        const publishedTemplate: any = {
+        const publishedTemplate: PromptTemplate = {
           ...template,
-          status: 'published',
-          publishedBy,
-          publishedAt: new Date()
+          status: 'published'
         };
         await this.createSnapshot(trx, publishedTemplate, 'publish', '发布Prompt模板', publishedBy);
       });
@@ -617,21 +640,64 @@ class PromptTemplateService {
       // 排序和分页
       const offset = (page - 1) * limit;
 
-      let orderColumn: any;
-      switch (sortBy) {
-        case 'used_count':
-          orderColumn = knex.raw("JSON_EXTRACT(usage_stats, '$.usedCount')");
-          break;
-        case 'avg_rating':
-          orderColumn = knex.raw("JSON_EXTRACT(usage_stats, '$.avgRating')");
-          break;
-        default:
-          orderColumn = sortBy;
+      interface TemplateRow extends Record<string, unknown> {
+        id?: string;
+        name?: string;
+        description?: string;
+        category?: string;
+        tags?: string;
+        template?: string;
+        variables?: string;
+        version?: string;
+        status?: string;
+        metadata?: string;
+        examples?: string;
+        config?: string;
+        usage_stats?: string;
+        created_by?: string;
+        updated_by?: string;
+        created_at?: Date;
+        updated_at?: Date;
       }
 
-      const templates = await query.orderBy(orderColumn, sortOrder).limit(limit).offset(offset);
+      let sortedQuery = query;
+      if (sortBy === 'used_count') {
+        sortedQuery = query.orderByRaw(
+          "JSON_EXTRACT(usage_stats, '$.usedCount') " + (sortOrder === 'asc' ? 'ASC' : 'DESC')
+        ) as unknown as typeof query;
+      } else if (sortBy === 'avg_rating') {
+        sortedQuery = query.orderByRaw(
+          "JSON_EXTRACT(usage_stats, '$.avgRating') " + (sortOrder === 'asc' ? 'ASC' : 'DESC')
+        ) as unknown as typeof query;
+      } else {
+        sortedQuery = query.orderBy(sortBy, sortOrder);
+      }
 
-      const mappedTemplates = templates.map((template) => this.mapDbRowToTemplate(template));
+      const templates = (await sortedQuery.limit(limit).offset(offset)) as TemplateRow[];
+
+      const mappedTemplates = templates.map((template) => {
+        const dbRow: DbTemplateRow = {
+          id: String(template.id),
+          name: String(template.name),
+          description: String(template.description),
+          category: String(template.category),
+          tags: String(template.tags),
+          template: String(template.template),
+          variables: String(template.variables),
+          version: String(template.version),
+          status: String(template.status),
+          published_at: template.published_at as Date | undefined,
+          metadata: String(template.metadata),
+          examples: String(template.examples),
+          config: String(template.config),
+          usage_stats: String(template.usage_stats),
+          created_by: String(template.created_by),
+          updated_by: String(template.updated_by),
+          created_at: template.created_at as Date,
+          updated_at: template.updated_at as Date
+        };
+        return this.mapDbRowToTemplate(dbRow);
+      });
 
       return { templates: mappedTemplates, total };
     } catch (error) {
@@ -797,7 +863,7 @@ class PromptTemplateService {
    */
   async previewTemplate(
     templateId: string,
-    variables: Record<string, any>
+    variables: Record<string, unknown>
   ): Promise<TemplatePreview> {
     const template = await this.getTemplate(templateId);
     if (!template) {
@@ -946,31 +1012,64 @@ class PromptTemplateService {
   /**
    * 获取统计信息
    */
-  async getStats(): Promise<any> {
+  async getStats(): Promise<{
+    total: number;
+    byStatus: Record<string, number>;
+    byCategory: Record<string, number>;
+    byComplexity: Record<string, number>;
+  }> {
     try {
+      interface CountResult extends Record<string, unknown> {
+        count?: number | string;
+        status?: string;
+        category?: string;
+        complexity?: string;
+      }
+
+      interface TotalResult extends Record<string, unknown> {
+        total?: number | string;
+      }
+
       const [statusStats, categoryStats, complexityStats, totalTemplates] = await Promise.all([
-        knex('prompt_templates').select('status').count('* as count').groupBy('status'),
-        knex('prompt_templates').select('category').count('* as count').groupBy('category'),
+        knex('prompt_templates').select('status').count('* as count').groupBy('status') as Promise<
+          CountResult[]
+        >,
+        knex('prompt_templates')
+          .select('category')
+          .count('* as count')
+          .groupBy('category') as Promise<CountResult[]>,
         knex('prompt_templates')
           .select(knex.raw("JSON_EXTRACT(metadata, '$.complexity') as complexity"))
           .count('* as count')
-          .groupBy(knex.raw("JSON_EXTRACT(metadata, '$.complexity')")),
-        knex('prompt_templates').count('* as total').first()
+          .groupBy(knex.raw("JSON_EXTRACT(metadata, '$.complexity'")) as Promise<CountResult[]>,
+        knex('prompt_templates').count('* as total').first() as Promise<TotalResult | undefined>
       ]);
 
+      const totalValue =
+        totalTemplates && typeof totalTemplates.total === 'string'
+          ? parseInt(totalTemplates.total)
+          : typeof totalTemplates?.total === 'number'
+            ? totalTemplates.total
+            : 0;
+
       return {
-        total: totalTemplates?.total || 0,
-        byStatus: statusStats.reduce((acc: any, row: any) => {
-          acc[row.status] = parseInt(String(row.count));
+        total: totalValue,
+        byStatus: statusStats.reduce((acc: Record<string, number>, row: CountResult) => {
+          const status = row.status ?? '';
+          const count = typeof row.count === 'string' ? parseInt(row.count) : (row.count ?? 0);
+          acc[status] = count;
           return acc;
         }, {}),
-        byCategory: categoryStats.reduce((acc: any, row: any) => {
-          acc[row.category] = parseInt(String(row.count));
+        byCategory: categoryStats.reduce((acc: Record<string, number>, row: CountResult) => {
+          const category = row.category ?? '';
+          const count = typeof row.count === 'string' ? parseInt(row.count) : (row.count ?? 0);
+          acc[category] = count;
           return acc;
         }, {}),
-        byComplexity: complexityStats.reduce((acc: any, row: any) => {
+        byComplexity: complexityStats.reduce((acc: Record<string, number>, row: CountResult) => {
           if (row.complexity) {
-            acc[row.complexity] = parseInt(String(row.count));
+            const count = typeof row.count === 'string' ? parseInt(row.count) : (row.count ?? 0);
+            acc[row.complexity] = count;
           }
           return acc;
         }, {})
@@ -990,22 +1089,31 @@ class PromptTemplateService {
    * 创建快照
    */
   private async createSnapshot(
-    trx: any,
+    trx: KnexTransaction,
     template: PromptTemplate,
     action: string,
     description: string,
     createdBy: string
   ): Promise<void> {
-    await trx('prompt_template_snapshots').insert({
-      id: this.generateId(),
-      template_id: template.id,
-      version: template.version,
-      template: JSON.stringify(template),
-      action,
-      description,
-      created_by: createdBy,
-      created_at: new Date()
-    });
+    try {
+      const trxAsFunction = trx as (table: string) => {
+        insert: (data: object) => Promise<unknown>;
+      };
+      const tableQuery = trxAsFunction('prompt_template_snapshots');
+      await tableQuery.insert({
+        id: this.generateId(),
+        template_id: template.id,
+        version: template.version,
+        template: JSON.stringify(template),
+        action,
+        description,
+        created_by: createdBy,
+        created_at: new Date()
+      });
+    } catch (error) {
+      logger.error('创建快照失败:', error);
+      throw error;
+    }
   }
 
   /**
@@ -1057,7 +1165,7 @@ class PromptTemplateService {
   /**
    * 渲染模板
    */
-  private renderTemplate(template: string, variables: Record<string, any>): string {
+  private renderTemplate(template: string, variables: Record<string, unknown>): string {
     let rendered = template;
 
     for (const [key, value] of Object.entries(variables)) {
@@ -1101,55 +1209,108 @@ class PromptTemplateService {
   /**
    * 重新计算评分
    */
-  private async recalculateRating(templateId: string, trx: any): Promise<void> {
-    const ratingResult = await trx('prompt_template_ratings')
-      .where('template_id', templateId)
-      .avg('rating as avgRating')
-      .count('* as count')
-      .first();
+  private async recalculateRating(templateId: string, trx: KnexTransaction): Promise<void> {
+    interface RatingResult extends Record<string, unknown> {
+      avgRating?: number | string;
+      count?: number | string;
+    }
 
-    const avgRating = parseFloat(ratingResult.avgRating) || 0;
-    const ratingCount = parseInt(ratingResult.count) || 0;
+    try {
+      const trxAsFunction = trx as (table: string) => {
+        where: (
+          column: string,
+          value: string
+        ) => {
+          avg: (expr: string) => {
+            count: (expr: string) => {
+              first: () => Promise<RatingResult>;
+            };
+          };
+        };
+      };
 
-    await trx('prompt_templates')
-      .where('id', templateId)
-      .update({
+      const ratingTableQuery = trxAsFunction('prompt_template_ratings');
+      const ratingChain = ratingTableQuery.where('template_id', templateId);
+      const countChain = ratingChain.avg('rating as avgRating');
+      const firstChain = countChain.count('* as count');
+      const ratingResult = await firstChain.first();
+
+      const avgRating = parseFloat(String(ratingResult?.avgRating)) || 0;
+      const ratingCount = parseInt(String(ratingResult?.count)) || 0;
+
+      const templateTableQuery = trxAsFunction('prompt_templates');
+      const updateChain = templateTableQuery.where('id', templateId) as unknown as {
+        update: (data: object) => Promise<unknown>;
+      };
+
+      await updateChain.update({
         usage_stats: knex.raw(
           `JSON_SET(
-          JSON_SET(usage_stats, '$.avgRating', ?),
-          '$.ratingCount',
-          ?
-        )`,
+            JSON_SET(usage_stats, '$.avgRating', ?),
+            '$.ratingCount',
+            ?
+          )`,
           [avgRating, ratingCount]
         )
       });
+    } catch (error) {
+      logger.error('重新计算评分失败:', error);
+    }
   }
 
   /**
    * 将数据库行映射为PromptTemplate对象
    */
-  private mapDbRowToTemplate(row: any): PromptTemplate {
+  private mapDbRowToTemplate(row: DbTemplateRow): PromptTemplate {
+    const parseJson = (jsonStr: unknown, defaultValue: unknown = {}): unknown => {
+      if (!jsonStr || typeof jsonStr !== 'string') {
+        return defaultValue;
+      }
+      try {
+        return JSON.parse(jsonStr);
+      } catch {
+        return defaultValue;
+      }
+    };
+
+    const toStringValue = (value: unknown, defaultValue: string = ''): string => {
+      return typeof value === 'string' ? value : defaultValue;
+    };
+
+    const toDateValue = (value: unknown, defaultValue: Date = new Date()): Date => {
+      return value instanceof Date ? value : defaultValue;
+    };
+
+    const tags = parseJson(row.tags, []) as string[];
+    const variables = parseJson(row.variables, []) as TemplateVariable[];
+    const metadata = parseJson(row.metadata, {}) as PromptTemplate['metadata'];
+    const examples = parseJson(row.examples, []) as TemplateExample[];
+    const config = parseJson(row.config, {}) as PromptTemplate['config'];
+    const usageStats = parseJson(row.usage_stats, {
+      usedCount: 0,
+      avgRating: 0,
+      ratingCount: 0
+    }) as PromptTemplate['usageStats'];
+
     return {
-      id: row.id,
-      name: row.name,
-      description: row.description,
-      category: row.category,
-      tags: row.tags ? JSON.parse(row.tags) : [],
-      template: row.template,
-      variables: row.variables ? JSON.parse(row.variables) : [],
-      version: row.version,
-      status: row.status,
-      publishedAt: row.published_at,
-      metadata: row.metadata ? JSON.parse(row.metadata) : {},
-      examples: row.examples ? JSON.parse(row.examples) : [],
-      config: row.config ? JSON.parse(row.config) : {},
-      usageStats: row.usage_stats
-        ? JSON.parse(row.usage_stats)
-        : { usedCount: 0, avgRating: 0, ratingCount: 0 },
-      createdBy: row.created_by,
-      updatedBy: row.updated_by,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
+      id: toStringValue(row.id),
+      name: toStringValue(row.name),
+      description: toStringValue(row.description),
+      category: toStringValue(row.category),
+      tags,
+      template: toStringValue(row.template),
+      variables,
+      version: toStringValue(row.version),
+      status: (toStringValue(row.status) as 'draft' | 'published' | 'archived') || 'draft',
+      publishedAt: row.published_at ? toDateValue(row.published_at) : undefined,
+      metadata,
+      examples,
+      config,
+      usageStats,
+      createdBy: toStringValue(row.created_by),
+      updatedBy: toStringValue(row.updated_by),
+      createdAt: toDateValue(row.created_at),
+      updatedAt: toDateValue(row.updated_at)
     };
   }
 

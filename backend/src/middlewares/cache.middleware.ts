@@ -3,6 +3,17 @@ import cacheService from '../services/cache.service.js';
 import logger from '../utils/logger.js';
 import crypto from 'crypto';
 
+/**
+ * 艹！定义用户认证后的Request类型
+ */
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    role?: string;
+    [key: string]: unknown;
+  };
+}
+
 interface ResponseCacheOptions {
   ttl?: number;
   keyGenerator?: ((req: Request) => string) | null;
@@ -11,6 +22,13 @@ interface ResponseCacheOptions {
   skipCache?: boolean;
   headersToInclude?: string[];
   queryParamsToInclude?: string[];
+}
+
+/**
+ * 扩展 Response 类型，包含自定义 json 方法
+ */
+interface ResponseWithCustomJson extends Response {
+  json: (data: unknown) => Response;
 }
 
 class CacheMiddleware {
@@ -46,25 +64,29 @@ class CacheMiddleware {
           return;
         }
 
+        // 保存原始 json 方法
         const originalJson = res.json.bind(res);
-        res.json = ((data: any) => {
+        const customRes = res as ResponseWithCustomJson;
+
+        // 重写 json 方法以缓存响应
+        customRes.json = (data: unknown) => {
           cacheService
             .setWithVersion(namespace, cacheKey, data, ttl)
             .then(() => {
               logger.debug(`[CacheMiddleware] 响应已缓存: ${cacheKey}`);
             })
-            .catch((error: any) => {
+            .catch((error) => {
               logger.warn(`[CacheMiddleware] 响应缓存失败: ${cacheKey}`, error);
             });
 
-          (res as any).set('X-Cache', 'MISS');
-          (res as any).set('X-Cache-Key', cacheKey);
+          res.set('X-Cache', 'MISS');
+          res.set('X-Cache-Key', cacheKey);
           return originalJson(data);
-        }) as any;
+        };
 
         next();
       } catch (error) {
-        logger.error('[CacheMiddleware] 缓存中间件错误', error as any);
+        logger.error('[CacheMiddleware] 缓存中间件错误', error);
         next();
       }
     };
@@ -76,11 +98,14 @@ class CacheMiddleware {
       ttl,
       namespace,
       keyGenerator: (req) => {
+        const authReq = req as AuthenticatedRequest;
         const userId =
-          (req as any).user?.id || (req.params as any).userId || (req.query as any).userId;
+          authReq.user?.id ||
+          String((req.params as Record<string, unknown>).userId || '') ||
+          String((req.query as Record<string, unknown>).userId || '');
         return `user:${userId}:${req.originalUrl}`;
       },
-      condition: (req) => Boolean((req as any).user)
+      condition: (req) => Boolean((req as AuthenticatedRequest).user)
     });
   }
 
@@ -90,12 +115,12 @@ class CacheMiddleware {
       ttl,
       namespace,
       keyGenerator: (req) => {
-        const adminId = (req as any).user?.id;
+        const adminId = (req as AuthenticatedRequest).user?.id;
         const path = req.originalUrl;
         const query = JSON.stringify(req.query);
         return `admin:${adminId}:${path}:${query}`;
       },
-      condition: (req) => (req as any).user?.role === 'admin'
+      condition: (req) => (req as AuthenticatedRequest).user?.role === 'admin'
     });
   }
 
@@ -105,7 +130,9 @@ class CacheMiddleware {
       ttl,
       namespace,
       keyGenerator: (req) => {
-        const featureId = (req.params as any).featureId || (req.query as any).featureId;
+        const params = req.params as Record<string, unknown>;
+        const query = req.query as Record<string, unknown>;
+        const featureId = params.featureId || query.featureId;
         return `feature:${featureId}`;
       },
       condition: (req) =>
@@ -119,7 +146,7 @@ class CacheMiddleware {
       ttl,
       namespace,
       keyGenerator: (req) => {
-        const userId = (req as any).user?.id;
+        const userId = (req as AuthenticatedRequest).user?.id;
         const path = req.originalUrl;
         const query = JSON.stringify(req.query);
         return `stats:${userId}:${path}:${query}`;
@@ -139,15 +166,17 @@ class CacheMiddleware {
   ): string {
     try {
       const keyComponents: string[] = [req.method.toLowerCase(), req.path];
+      const authReq = req as AuthenticatedRequest;
 
-      if ((req as any).user?.id) {
-        keyComponents.push(`user:${(req as any).user.id}`);
+      if (authReq.user?.id) {
+        keyComponents.push(`user:${authReq.user.id}`);
       }
 
+      const queryObj = req.query as Record<string, unknown>;
       if (queryParamsToInclude.length > 0) {
         const queryParams: Record<string, unknown> = {};
         for (const param of queryParamsToInclude) {
-          const q = (req.query as any)[param];
+          const q = queryObj[param];
           if (q !== undefined) queryParams[param] = q;
         }
         if (Object.keys(queryParams).length > 0) {
@@ -157,10 +186,11 @@ class CacheMiddleware {
         keyComponents.push(`q:${JSON.stringify(req.query)}`);
       }
 
+      const headersObj = req.headers as Record<string, unknown>;
       if (headersToInclude.length > 0) {
         const headers: Record<string, unknown> = {};
         for (const header of headersToInclude) {
-          const v = (req.headers as any)[header];
+          const v = headersObj[header];
           if (v) headers[header] = v;
         }
         if (Object.keys(headers).length > 0) {
@@ -172,7 +202,7 @@ class CacheMiddleware {
       const hash = crypto.createHash('md5').update(baseKey).digest('hex').substring(0, 8);
       return `${namespace}:${hash}:${baseKey.substring(0, 100)}`;
     } catch (error) {
-      logger.error('[CacheMiddleware] 生成缓存键失败', error as any);
+      logger.error('[CacheMiddleware] 生成缓存键失败', error);
       return `${namespace}:${req.method}:${req.path}:${Date.now()}`;
     }
   }
@@ -189,7 +219,7 @@ class CacheMiddleware {
         }
         next();
       } catch (error) {
-        logger.error('[CacheMiddleware] 清除缓存失败', error as any);
+        logger.error('[CacheMiddleware] 清除缓存失败', error);
         next();
       }
     };
@@ -201,20 +231,24 @@ class CacheMiddleware {
       res.set('Pragma', 'no-cache');
       res.set('Expires', '0');
 
-      if ((req.query as any).nocache === 'true') {
-        const namespace = ((req.headers as any)['x-cache-namespace'] as string) || 'api_response';
-        const pattern = (req.headers as any)['x-cache-pattern'] as string | undefined;
+      const queryObj = req.query as Record<string, unknown>;
+      const headersObj = req.headers as Record<string, unknown>;
+
+      if (queryObj.nocache === 'true') {
+        const namespace =
+          (headersObj['x-cache-namespace'] as string | undefined) || 'api_response';
+        const pattern = headersObj['x-cache-pattern'] as string | undefined;
 
         if (pattern) {
           cacheService
             .deletePattern(`${namespace}:${pattern}*`)
             .then(() => logger.info(`[CacheMiddleware] 强制清除缓存: ${namespace}:${pattern}*`))
-            .catch((error: any) => logger.warn('[CacheMiddleware] 强制清除缓存失败', error));
+            .catch((error) => logger.warn('[CacheMiddleware] 强制清除缓存失败', error));
         } else {
           cacheService
             .incrementVersion(namespace)
             .then(() => logger.info(`[CacheMiddleware] 强制清除命名空间: ${namespace}`))
-            .catch((error: any) => logger.warn('[CacheMiddleware] 强制清除命名空间失败', error));
+            .catch((error) => logger.warn('[CacheMiddleware] 强制清除命名空间失败', error));
         }
       }
 
@@ -232,7 +266,7 @@ class CacheMiddleware {
         try {
           return condition(req, res);
         } catch (error) {
-          logger.error('[CacheMiddleware] 条件判断失败', error as any);
+          logger.error('[CacheMiddleware] 条件判断失败', error);
           return false;
         }
       }
@@ -249,7 +283,11 @@ class CacheMiddleware {
     cacheOptions: ResponseCacheOptions & { workTTL?: number; offWorkTTL?: number } = {}
   ) {
     const { workHours = { start: 9, end: 18 }, workDays = [1, 2, 3, 4, 5] } = timeConfig;
-    const options: ResponseCacheOptions & { workTTL?: number; offWorkTTL?: number } = {
+
+    // 艹！创建可变的options对象来动态设置ttl
+    let dynamicTTL = 300;
+
+    const options: ResponseCacheOptions = {
       ...cacheOptions,
       condition: (_req) => {
         const now = new Date();
@@ -258,12 +296,13 @@ class CacheMiddleware {
         const isWorkHour = hour >= workHours.start && hour < workHours.end;
         const isWorkDay = workDays.includes(day);
         if (isWorkHour && isWorkDay) {
-          (options as any).ttl = cacheOptions.workTTL || 300;
+          dynamicTTL = cacheOptions.workTTL || 300;
         } else {
-          (options as any).ttl = cacheOptions.offWorkTTL || 1800;
+          dynamicTTL = cacheOptions.offWorkTTL || 1800;
         }
         return true;
-      }
+      },
+      ttl: dynamicTTL
     };
     return this.responseCache(options);
   }
@@ -271,9 +310,10 @@ class CacheMiddleware {
   cacheStats() {
     return (_req: Request, res: Response, next: NextFunction) => {
       if (_req.path === '/cache/stats') {
+        const stats = cacheService.getStats();
         return res.json({
           success: true,
-          data: { ...(cacheService.getStats() as any), timestamp: new Date().toISOString() }
+          data: { ...(stats as Record<string, unknown>), timestamp: new Date().toISOString() }
         });
       }
       next();
@@ -286,8 +326,9 @@ class CacheMiddleware {
         try {
           const health = await cacheService.healthCheck();
           return res.json({ success: true, data: health });
-        } catch (error: any) {
-          return res.status(503).json({ success: false, error: error.message });
+        } catch (error) {
+          const err = error as Error;
+          return res.status(503).json({ success: false, error: err.message });
         }
       }
       next();

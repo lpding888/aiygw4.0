@@ -6,6 +6,26 @@ import contentAuditService from './contentAudit.service.js';
 import systemConfigService from './systemConfig.service.js';
 import { db } from '../config/database.js';
 
+interface SystemConfigService {
+  get(key: string, defaultValue?: string): Promise<string | unknown>;
+}
+
+interface TaskStatusPayload {
+  errorMessage?: string;
+  resultUrls?: string[];
+}
+
+interface RunningHubResponse {
+  data?: {
+    data?: {
+      taskId?: string;
+    };
+    taskId?: string;
+    status?: string;
+    outputs?: string[];
+  };
+}
+
 class AIModelService {
   private config = {
     apiUrl: process.env.RUNNING_HUB_API_URL || 'https://www.runninghub.cn/task/openapi/ai-app/run',
@@ -23,28 +43,35 @@ class AIModelService {
     nodeImage: null
   };
 
-  private promptTemplatesCache: any = null;
+  private promptTemplatesCache: Record<string, unknown> | null = null;
   private initialized = false;
 
   private async _initialize(): Promise<void> {
     if (this.initialized) return;
     try {
-      this.dynamicConfig.webappId = await (systemConfigService as any).get(
-        'runninghub_webapp_id',
-        '1982694711750213634'
+      this.dynamicConfig.webappId = String(
+        await (systemConfigService as unknown as SystemConfigService).get(
+          'runninghub_webapp_id',
+          '1982694711750213634'
+        )
       );
-      this.dynamicConfig.nodePrompt = await (systemConfigService as any).get(
-        'runninghub_node_prompt',
-        '103'
+      this.dynamicConfig.nodePrompt = String(
+        await (systemConfigService as unknown as SystemConfigService).get(
+          'runninghub_node_prompt',
+          '103'
+        )
       );
-      this.dynamicConfig.nodeImage = await (systemConfigService as any).get(
-        'runninghub_node_image',
-        '74'
+      this.dynamicConfig.nodeImage = String(
+        await (systemConfigService as unknown as SystemConfigService).get(
+          'runninghub_node_image',
+          '74'
+        )
       );
       this.initialized = true;
-      logger.info('[AIModelService] 动态配置加载完成', this.dynamicConfig as any);
-    } catch (error: any) {
-      logger.error('[AIModelService] 动态配置加载失败,使用默认值', error);
+      logger.info('[AIModelService] 动态配置加载完成', this.dynamicConfig);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('[AIModelService] 动态配置加载失败,使用默认值', errorMessage);
       this.dynamicConfig.webappId = '1982694711750213634';
       this.dynamicConfig.nodePrompt = '103';
       this.dynamicConfig.nodeImage = '74';
@@ -55,15 +82,16 @@ class AIModelService {
   async generatePrompt(scene: string, category: string): Promise<string> {
     try {
       const configKey = `ai_model_prompt_${scene}_${category}`;
-      const prompt = await (systemConfigService as any).get(configKey);
+      const prompt = await (systemConfigService as unknown as SystemConfigService).get(configKey);
       if (!prompt) {
         logger.warn(`[AIModelService] 未找到配置 ${configKey},使用默认Prompt`);
         return this._getDefaultPrompt(scene, category);
       }
       logger.info(`[AIModelService] 使用动态Prompt配置 ${configKey}`);
-      return prompt as string;
-    } catch (error: any) {
-      logger.error(`[AIModelService] 加载Prompt配置失败: ${error.message}`, { scene, category });
+      return String(prompt);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[AIModelService] 加载Prompt配置失败: ${errorMessage}`, { scene, category });
       return this._getDefaultPrompt(scene, category);
     }
   }
@@ -100,29 +128,32 @@ class AIModelService {
     return prompt;
   }
 
-  async createModelTask(taskId: string, inputImageUrl: string, params: Record<string, any> = {}) {
+  async createModelTask(taskId: string, inputImageUrl: string, params: Record<string, unknown> = {}) {
     try {
-      const { scene = 'street', category = 'dress' } = params;
+      const scene = (params.scene as string) || 'street';
+      const category = (params.category as string) || 'dress';
       logger.info(
         `[AIModelService] 创建AI模特任务 taskId=${taskId} scene=${scene} category=${category}`
       );
       await this._initialize();
-      await taskService.updateStatus(taskId, 'processing', {} as any);
+      await taskService.updateStatus(taskId, 'processing', {});
       const prompt = await this.generatePrompt(scene, category);
       const runningHubTaskId = await this.submitToRunningHub(inputImageUrl, prompt);
       await this.saveRunningHubTaskId(taskId, runningHubTaskId);
       logger.info(
         `[AIModelService] AI模特任务已提交 taskId=${taskId} rhTaskId=${runningHubTaskId}`
       );
-      this.startPolling(taskId, runningHubTaskId).catch((err) => {
-        logger.error(`[AIModelService] 轮询失败: ${err.message}`, { taskId });
+      this.startPolling(taskId, runningHubTaskId).catch((err: unknown) => {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        logger.error(`[AIModelService] 轮询失败: ${errorMessage}`, { taskId });
       });
       return { taskId, runningHubTaskId, status: 'processing' };
-    } catch (error: any) {
-      logger.error(`[AIModelService] 创建AI模特任务失败: ${error.message}`, { taskId, error });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'AI模特任务创建失败';
+      logger.error(`[AIModelService] 创建AI模特任务失败: ${errorMessage}`, { taskId, error });
       await taskService.updateStatus(taskId, 'failed', {
-        errorMessage: error.message || 'AI模特任务创建失败'
-      });
+        errorMessage
+      } as TaskStatusPayload);
       throw error;
     }
   }
@@ -130,7 +161,7 @@ class AIModelService {
   async submitToRunningHub(imageUrl: string, prompt: string): Promise<string> {
     try {
       const imageKey = this.extractImageKey(imageUrl);
-      const requestBody = {
+      const requestBody: Record<string, unknown> = {
         webappId: this.dynamicConfig.webappId,
         apiKey: this.config.apiKey,
         nodeInfoList: [
@@ -147,14 +178,14 @@ class AIModelService {
             description: '输入图片'
           }
         ]
-      } as any;
+      };
       logger.info('[AIModelService] 调用RunningHub API (使用动态配置)', {
         webappId: this.dynamicConfig.webappId,
         nodePrompt: this.dynamicConfig.nodePrompt,
         nodeImage: this.dynamicConfig.nodeImage,
         imageKey
       });
-      const response = await axios.post(this.config.apiUrl, requestBody, {
+      const response = await axios.post<RunningHubResponse>(this.config.apiUrl, requestBody, {
         headers: { Host: 'www.runninghub.cn', 'Content-Type': 'application/json' },
         timeout: 30000
       });
@@ -162,13 +193,15 @@ class AIModelService {
       if (!taskId) throw new Error('RunningHub未返回任务ID');
       logger.info(`[AIModelService] RunningHub任务已创建 taskId=${taskId}`);
       return taskId;
-    } catch (error: any) {
-      if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+    } catch (error: unknown) {
+      const axiosError = error as Record<string, unknown>;
+      if (axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ENOTFOUND') {
         logger.warn('[AIModelService] RunningHub未配置,使用模拟任务ID');
         return `mock_${nanoid()}`;
       }
-      logger.error(`[AIModelService] RunningHub调用失败: ${error.message}`, error);
-      throw new Error(`RunningHub调用失败: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`[AIModelService] RunningHub调用失败: ${errorMessage}`, error);
+      throw new Error(`RunningHub调用失败: ${errorMessage}`);
     }
   }
 
@@ -178,8 +211,9 @@ class AIModelService {
       const pathname = urlObj.pathname;
       const parts = pathname.split('/');
       return parts[parts.length - 1];
-    } catch (error: any) {
-      logger.error(`[AIModelService] 提取图片key失败: ${error.message}`, { url });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[AIModelService] 提取图片key失败: ${errorMessage}`, { url });
       throw new Error('无效的图片URL');
     }
   }
@@ -193,7 +227,7 @@ class AIModelService {
   async startPolling(taskId: string, runningHubTaskId: string): Promise<void> {
     const maxAttempts = 60;
     let attempts = 0;
-    const poll = async () => {
+    const poll = async (): Promise<void> => {
       try {
         attempts++;
         const task = await db('tasks').where('id', taskId).first();
@@ -213,20 +247,21 @@ class AIModelService {
             logger.warn('[AIModelService] 内容审核未通过', { taskId });
             return;
           }
-          await taskService.updateStatus(taskId, 'success', { resultUrls });
+          await taskService.updateStatus(taskId, 'success', { resultUrls } as TaskStatusPayload);
           logger.info('[AIModelService] AI模特任务完成', { taskId, count: resultUrls.length });
           return;
         } else if (status === 'FAILED') {
-          await taskService.updateStatus(taskId, 'failed', { errorMessage: 'RunningHub处理失败' });
+          await taskService.updateStatus(taskId, 'failed', { errorMessage: 'RunningHub处理失败' } as TaskStatusPayload);
           return;
         }
         if (attempts < maxAttempts) {
           setTimeout(poll, 3000);
         } else {
-          await taskService.updateStatus(taskId, 'failed', { errorMessage: '处理超时(3分钟)' });
+          await taskService.updateStatus(taskId, 'failed', { errorMessage: '处理超时(3分钟)' } as TaskStatusPayload);
         }
-      } catch (error: any) {
-        logger.error('[AIModelService] 轮询错误', { taskId, attempts, error: error.message });
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        logger.error('[AIModelService] 轮询错误', { taskId, attempts, error: errorMessage });
         if (attempts < maxAttempts) {
           setTimeout(poll, 3000);
         }
@@ -237,13 +272,18 @@ class AIModelService {
 
   async queryRunningHubStatus(runningHubTaskId: string): Promise<'SUCCESS' | 'FAILED' | 'PENDING'> {
     try {
-      const response = await axios.get(`${this.config.apiUrl}/v1/status/${runningHubTaskId}`, {
+      const response = await axios.get<RunningHubResponse>(`${this.config.apiUrl}/v1/status/${runningHubTaskId}`, {
         headers: { Authorization: `Bearer ${this.config.apiKey}` },
         timeout: 10000
       });
-      return (response.data?.status as any) || 'PENDING';
-    } catch (error: any) {
-      if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      const status = String(response.data?.status || 'PENDING');
+      if (['SUCCESS', 'FAILED', 'PENDING'].includes(status)) {
+        return status as 'SUCCESS' | 'FAILED' | 'PENDING';
+      }
+      return 'PENDING';
+    } catch (error: unknown) {
+      const axiosError = error as Record<string, unknown>;
+      if (axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ENOTFOUND') {
         return runningHubTaskId.startsWith('mock_') ? 'SUCCESS' : 'PENDING';
       }
       throw error;
@@ -252,13 +292,18 @@ class AIModelService {
 
   async fetchResults(runningHubTaskId: string): Promise<string[]> {
     try {
-      const response = await axios.get(`${this.config.apiUrl}/v1/outputs/${runningHubTaskId}`, {
+      const response = await axios.get<RunningHubResponse>(`${this.config.apiUrl}/v1/outputs/${runningHubTaskId}`, {
         headers: { Authorization: `Bearer ${this.config.apiKey}` },
         timeout: 30000
       });
-      return (response.data?.outputs as string[]) || [];
-    } catch (error: any) {
-      if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      const outputs = response.data?.outputs;
+      if (Array.isArray(outputs)) {
+        return outputs as string[];
+      }
+      return [];
+    } catch (error: unknown) {
+      const axiosError = error as Record<string, unknown>;
+      if (axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ENOTFOUND') {
         const mockUrls: string[] = [];
         for (let i = 0; i < 12; i++) mockUrls.push(`https://mock-cdn.com/result_${i + 1}.png`);
         return mockUrls;

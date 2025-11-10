@@ -94,7 +94,7 @@ export async function getText(params: {
 export async function getPageTexts(params: {
   page: string;
   language?: string;
-}): Promise<Record<string, any>> {
+}): Promise<Record<string, unknown>> {
   const { page, language = 'zh-CN' } = params;
 
   const texts = await db<ContentText>('content_texts')
@@ -102,7 +102,7 @@ export async function getPageTexts(params: {
     .select('section', 'key', 'value');
 
   // 艹，组织成层级结构
-  const result: Record<string, any> = {};
+  const result: Record<string, unknown> = {};
 
   for (const text of texts) {
     if (text.section) {

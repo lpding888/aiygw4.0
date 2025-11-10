@@ -7,6 +7,21 @@ import { Request, Response, NextFunction } from 'express';
 import * as announcementRepo from '../repositories/announcements.repo.js';
 import type { CreateAnnouncementInput } from '../repositories/announcements.repo.js';
 
+/**
+ * Express请求对象扩展类型定义
+ */
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: number;
+    [key: string]: unknown;
+  };
+}
+
+/**
+ * 目标受众类型
+ */
+type TargetAudience = string | string[] | undefined;
+
 export class AnnouncementsController {
   /**
    * 列出公告（管理端）
@@ -31,9 +46,10 @@ export class AnnouncementsController {
           offset: parseInt(offset as string)
         }
       });
-    } catch (error: any) {
-      console.error('[AnnouncementsController] 列出公告失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[AnnouncementsController] 列出公告失败:', err.message);
+      next(err);
     }
   }
 
@@ -46,16 +62,17 @@ export class AnnouncementsController {
 
       const announcements = await announcementRepo.getActiveAnnouncements({
         position: position as string,
-        target_audience: target_audience as any
+        target_audience: target_audience as TargetAudience
       });
 
       res.json({
         success: true,
         data: announcements
       });
-    } catch (error: any) {
-      console.error('[AnnouncementsController] 获取有效公告失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[AnnouncementsController] 获取有效公告失败:', err.message);
+      next(err);
     }
   }
 
@@ -76,9 +93,10 @@ export class AnnouncementsController {
       }
 
       res.json({ success: true, data: announcement });
-    } catch (error: any) {
-      console.error('[AnnouncementsController] 获取公告失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[AnnouncementsController] 获取公告失败:', err.message);
+      next(err);
     }
   }
 
@@ -89,7 +107,7 @@ export class AnnouncementsController {
     try {
       const input: CreateAnnouncementInput = {
         ...req.body,
-        created_by: (req as any).user?.id
+        created_by: (req as AuthenticatedRequest).user?.id
       };
 
       // 艹，基础校验
@@ -112,9 +130,10 @@ export class AnnouncementsController {
       const announcement = await announcementRepo.createAnnouncement(input);
 
       res.status(201).json({ success: true, data: announcement });
-    } catch (error: any) {
-      console.error('[AnnouncementsController] 创建公告失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[AnnouncementsController] 创建公告失败:', err.message);
+      next(err);
     }
   }
 
@@ -129,16 +148,17 @@ export class AnnouncementsController {
       const announcement = await announcementRepo.updateAnnouncement(id, updates);
 
       res.json({ success: true, data: announcement });
-    } catch (error: any) {
-      if (error.message.includes('不存在')) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      if (err.message.includes('不存在')) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: error.message }
+          error: { code: 'NOT_FOUND', message: err.message }
         });
         return;
       }
-      console.error('[AnnouncementsController] 更新公告失败:', error.message);
-      next(error);
+      console.error('[AnnouncementsController] 更新公告失败:', err.message);
+      next(err);
     }
   }
 
@@ -159,9 +179,10 @@ export class AnnouncementsController {
       }
 
       res.json({ success: true, message: '公告已删除' });
-    } catch (error: any) {
-      console.error('[AnnouncementsController] 删除公告失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[AnnouncementsController] 删除公告失败:', err.message);
+      next(err);
     }
   }
 }

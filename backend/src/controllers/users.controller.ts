@@ -6,6 +6,16 @@
 import { Request, Response, NextFunction } from 'express';
 import * as userRepo from '../repositories/users.repo.js';
 
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+  };
+}
+
+interface UserUpdates extends Record<string, unknown> {
+  phone?: string;
+}
+
 export class UsersController {
   /**
    * 获取当前登录用户信息
@@ -47,8 +57,9 @@ export class UsersController {
         success: true,
         data: safeUser
       });
-    } catch (error: any) {
-      console.error('[UsersController] 获取当前用户失败:', error.message);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[UsersController] 获取当前用户失败:', err.message);
       next(error);
     }
   }
@@ -73,7 +84,7 @@ export class UsersController {
 
       // 艹，只允许更新部分字段！
       const allowedFields = ['phone']; // 可扩展：nickname, avatar等
-      const updates: any = {};
+      const updates: UserUpdates = {};
 
       for (const field of allowedFields) {
         if (req.body[field] !== undefined) {
@@ -129,8 +140,9 @@ export class UsersController {
         success: true,
         data: safeUser
       });
-    } catch (error: any) {
-      console.error('[UsersController] 更新当前用户失败:', error.message);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[UsersController] 更新当前用户失败:', err.message);
       next(error);
     }
   }

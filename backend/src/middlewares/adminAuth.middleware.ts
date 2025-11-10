@@ -1,4 +1,4 @@
-import type { NextFunction, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import { db } from '../config/database.js';
 import logger from '../utils/logger.js';
 import type { UserRole } from '../utils/rbac.js';
@@ -9,13 +9,22 @@ interface AdminInfo {
   role: UserRole | string;
 }
 
+interface AdminRequest extends Request {
+  user?: {
+    id: string;
+    [key: string]: unknown;
+  };
+  admin?: AdminInfo;
+}
+
 export async function requireAdmin(
-  req: import('express').Request,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
   try {
-    const userId = req.user?.id;
+    const adminReq = req as AdminRequest;
+    const userId = adminReq.user?.id;
 
     if (!userId) {
       res.status(401).json({ success: false, error: { code: 4001, message: '未登录' } });
@@ -40,10 +49,11 @@ export async function requireAdmin(
     }
 
     // 附加到 req.admin（已在 global.d.ts 声明）
-    (req as any).admin = { id: user.id, phone: user.phone, role: user.role } as AdminInfo;
+    adminReq.admin = { id: user.id, phone: user.phone, role: user.role };
     next();
-  } catch (error: any) {
-    logger.error(`[AdminAuth] 权限验证失败: ${error.message}`, { userId: req.user?.id, error });
+  } catch (error) {
+    const err = error as Error;
+    logger.error(`[AdminAuth] 权限验证失败: ${err.message}`, { userId: adminReq.user?.id, error });
     res.status(500).json({ success: false, error: { code: 9999, message: '服务器内部错误' } });
   }
 }

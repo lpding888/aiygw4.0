@@ -18,13 +18,25 @@ const router = express.Router();
 /**
  * 验证中间件
  */
+// 扩展Request类型
+declare global {
+  namespace Express {
+    interface Request {
+      id?: string;
+      user?: {
+        id: string;
+      };
+    }
+  }
+}
+
 const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
       errors: errors.array(),
-      requestId: (req as any).id
+      requestId: req.id
     });
   }
   next();
@@ -74,7 +86,7 @@ router.post(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = (req as any).user.id;
+      const userId = req.user?.id ?? '';
       const chatRequest: ChatRequest = req.body;
       const { provider } = req.body;
 
@@ -133,10 +145,10 @@ router.post(
         res.json({
           success: true,
           data: response,
-          requestId: (req as any).id
+          requestId: req.id
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('[AIRoute] Chat请求失败:', error);
       next(error);
     }
@@ -174,7 +186,7 @@ router.post(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = (req as any).user.id;
+      const userId = req.user?.id ?? '';
       const { model, prompt, temperature, max_tokens, stream, provider } = req.body;
 
       logger.info(
@@ -236,10 +248,10 @@ router.post(
         res.json({
           success: true,
           data: response,
-          requestId: (req as any).id
+          requestId: req.id
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('[AIRoute] Completions请求失败:', error);
       next(error);
     }
@@ -260,9 +272,9 @@ router.get('/health', async (req: Request, res: Response, next: NextFunction) =>
         status: 'healthy',
         timestamp: new Date().toISOString()
       },
-      requestId: (req as any).id
+      requestId: req.id
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error('[AIRoute] 健康检查失败:', error);
     next(error);
   }

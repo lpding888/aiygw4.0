@@ -9,6 +9,30 @@
 import COS from 'cos-nodejs-sdk-v5';
 
 /**
+ * COS SDK 回调错误类型
+ */
+interface COSError {
+  Code: string;
+  Message: string;
+  message?: string;
+}
+
+/**
+ * COS 获取对象URL响应数据
+ */
+interface COSGetUrlResponse {
+  Url: string;
+}
+
+/**
+ * COS 上传对象响应数据
+ */
+interface COSPutObjectResponse {
+  ETag: string;
+  Location?: string;
+}
+
+/**
  * COS配置
  * 艹，从环境变量读取！
  */
@@ -65,15 +89,17 @@ export async function getUploadSignedUrl(options: {
         Expires: expiresInSeconds,
         Sign: true
       },
-      (err: any, data: any) => {
+      (err: unknown, data: unknown) => {
         if (err) {
-          console.error('[COS] 生成预签名URL失败:', err.message);
-          reject(new Error(`生成预签名URL失败: ${err.message}`));
+          const error = err as COSError;
+          console.error('[COS] 生成预签名URL失败:', error.message || error.Message);
+          reject(new Error(`生成预签名URL失败: ${error.message || error.Message}`));
           return;
         }
 
+        const response = data as COSGetUrlResponse;
         console.log(`[COS] 生成预签名URL: ${key}, 有效期: ${expiresInSeconds}秒`);
-        resolve(data.Url);
+        resolve(response.Url);
       }
     );
   });
@@ -130,10 +156,11 @@ export async function uploadFile(options: {
         Body: body,
         ContentType: contentType
       },
-      (err: any, data: any) => {
+      (err: unknown, data: unknown) => {
         if (err) {
-          console.error('[COS] 上传失败:', err.message);
-          reject(new Error(`COS上传失败: ${err.message}`));
+          const error = err as COSError;
+          console.error('[COS] 上传失败:', error.message || error.Message);
+          reject(new Error(`COS上传失败: ${error.message || error.Message}`));
           return;
         }
 
@@ -160,10 +187,11 @@ export async function deleteFile(key: string): Promise<void> {
         Region: cosConfig.Region,
         Key: key
       },
-      (err: any) => {
+      (err: unknown) => {
         if (err) {
-          console.error('[COS] 删除失败:', err.message);
-          reject(new Error(`COS删除失败: ${err.message}`));
+          const error = err as COSError;
+          console.error('[COS] 删除失败:', error.message || error.Message);
+          reject(new Error(`COS删除失败: ${error.message || error.Message}`));
           return;
         }
 

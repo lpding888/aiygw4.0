@@ -54,8 +54,9 @@ class CronJobsService {
       }
 
       logger.info(`[CronJobsService] 已启动 ${this.jobs.length} 个定时任务`);
-    } catch (error: any) {
-      logger.error(`[CronJobsService] 启动定时任务失败: ${error.message}`, error);
+    } catch (error) {
+      const err = error as Error;
+      logger.error(`[CronJobsService] 启动定时任务失败: ${err.message}`, error);
     }
   }
 
@@ -71,8 +72,9 @@ class CronJobsService {
 
       this.jobs = [];
       logger.info('[CronJobsService] 所有定时任务已停止');
-    } catch (error: any) {
-      logger.error(`[CronJobsService] 停止定时任务失败: ${error.message}`, error);
+    } catch (error) {
+      const err = error as Error;
+      logger.error(`[CronJobsService] 停止定时任务失败: ${err.message}`, error);
     }
   }
 
@@ -171,8 +173,9 @@ class CronJobsService {
           await options.fn();
           metric.lastSuccessAt = metric.lastRunAt;
           metric.lastError = null;
-        } catch (error: any) {
-          metric.lastError = error?.message ?? 'unknown error';
+        } catch (error) {
+          const err = error as Error;
+          metric.lastError = err?.message ?? 'unknown error';
           logger.error(`[CronJobs] 任务 ${options.name} 执行异常: ${metric.lastError}`, error);
         }
       });
@@ -181,8 +184,9 @@ class CronJobsService {
       logger.info(
         `[CronJobsService] 任务 ${options.name} 已启动 (cron=${options.cronExpr}, interval=${options.intervalMs}ms)`
       );
-    } catch (error: any) {
-      logger.error(`[CronJobsService] 调度任务 ${options.name} 失败: ${error.message}`, error);
+    } catch (error) {
+      const err = error as Error;
+      logger.error(`[CronJobsService] 调度任务 ${options.name} 失败: ${err.message}`, error);
     }
   }
 }

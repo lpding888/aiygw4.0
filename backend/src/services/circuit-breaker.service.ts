@@ -1,7 +1,7 @@
 import logger from '../utils/logger.js';
 import cacheService from './cache.service.js';
 
-type CircuitBreakerConfig = Record<string, any>;
+type CircuitBreakerConfig = Record<string, unknown>;
 type OperationFn<T = unknown> = () => Promise<T> | T;
 type FallbackFn<T = unknown> = (error: Error) => Promise<T> | T;
 type BatchOperation<T = unknown> = OperationFn<T>;
@@ -17,7 +17,7 @@ type BatchOperation<T = unknown> = OperationFn<T>;
  * - 监控和告警
  */
 class CircuitBreakerService {
-  private circuitBreakers: Map<string, any>;
+  private circuitBreakers: Map<string, CircuitBreaker>;
 
   private metrics: {
     totalRequests: number;
@@ -79,7 +79,7 @@ class CircuitBreakerService {
    * @param {Function} operation - 要执行的操作
    * @param {Function} fallback - 降级操作
    * @param {Object} config - 熔断器配置
-   * @returns {Promise<any>} 操作结果
+   * @returns {Promise<T>} 操作结果
    */
   async execute<T = unknown>(
     name: string,
@@ -114,28 +114,31 @@ class CircuitBreakerService {
 
       logger.debug(`[CircuitBreaker] 操作成功: ${name}, 耗时: ${duration}ms`);
       return result;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 记录失败
       circuitBreaker.recordFailure();
       this.metrics.totalFailures++;
 
+      const err = error instanceof Error ? error : new Error(String(error));
       logger.error(`[CircuitBreaker] 操作失败: ${name}`, {
-        error: error.message,
+        error: err.message,
         state: circuitBreaker.getState()
       });
 
       // 执行降级操作
       if (fallback) {
         try {
-          const fallbackResult = await fallback(error);
+          const fallbackResult = await fallback(err);
           logger.info(`[CircuitBreaker] 降级操作执行成功: ${name}`);
           return fallbackResult;
-        } catch (fallbackError: any) {
-          logger.error(`[CircuitBreaker] 降级操作失败: ${name}`, fallbackError);
-          throw fallbackError;
+        } catch (fallbackError: unknown) {
+          const fbErr =
+            fallbackError instanceof Error ? fallbackError : new Error(String(fallbackError));
+          logger.error(`[CircuitBreaker] 降级操作失败: ${name}`, fbErr);
+          throw fbErr;
         }
       } else {
-        throw error;
+        throw err;
       }
     }
   }
@@ -169,8 +172,9 @@ class CircuitBreakerService {
             try {
               const result = await fallback(new Error('Circuit breaker is open'));
               results.push(result);
-            } catch (error: any) {
-              results.push({ error: (error as Error).message });
+            } catch (error: unknown) {
+              const err = error instanceof Error ? error : new Error(String(error));
+              results.push({ error: err.message });
             }
           }
           return results;
@@ -197,9 +201,10 @@ class CircuitBreakerService {
       }
 
       return results;
-    } catch (error: any) {
-      logger.error(`[CircuitBreaker] 批量执行失败: ${name}`, error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`[CircuitBreaker] 批量执行失败: ${name}`, err);
+      throw err;
     }
   }
 
@@ -208,7 +213,7 @@ class CircuitBreakerService {
    * @param {string} name - 熔断器名称
    * @returns {Object} 熔断器状态
    */
-  getCircuitBreakerState(name: string): Record<string, any> | null {
+  getCircuitBreakerState(name: string): Record<string, unknown> | null {
     const circuitBreaker = this.circuitBreakers.get(name) as CircuitBreaker | undefined;
     if (!circuitBreaker) {
       return null;
@@ -313,7 +318,7 @@ class CircuitBreakerService {
    * 健康检查
    * @returns {Promise<Object>} 健康状态
    */
-  async healthCheck(): Promise<Record<string, any>> {
+  async healthCheck(): Promise<Record<string, unknown>> {
     try {
       const states = this.getAllCircuitBreakerStates();
       const activeBreakers = states.metrics.activeBreakers;
@@ -334,11 +339,12 @@ class CircuitBreakerService {
       };
 
       return health;
-    } catch (error: any) {
-      logger.error('[CircuitBreaker] 健康检查失败', error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[CircuitBreaker] 健康检查失败', err);
       return {
         status: 'unhealthy',
-        error: error.message,
+        error: err.message,
         timestamp: new Date().toISOString()
       };
     }
@@ -380,7 +386,7 @@ class CircuitBreakerService {
    * 获取统计信息
    * @returns {Object} 统计信息
    */
-  getStats(): Record<string, any> {
+  getStats(): Record<string, unknown> {
     return {
       ...this.metrics,
       circuitBreakerCount: this.circuitBreakers.size,

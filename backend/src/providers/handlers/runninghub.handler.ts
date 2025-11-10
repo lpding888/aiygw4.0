@@ -24,7 +24,7 @@ export interface RunningHubInput {
   apiKey: string;
 
   /** 工作流输入参数（必填） */
-  params: Record<string, any>;
+  params: Record<string, unknown>;
 
   /** 轮询间隔（可选，毫秒，默认5000ms） */
   pollInterval?: number;
@@ -58,7 +58,7 @@ export class RunningHubProvider extends BaseProvider {
    * @param input - 输入数据
    * @returns 校验错误信息，null表示校验通过
    */
-  public validate(input: any): string | null {
+  public validate(input: unknown): string | null {
     if (!input || typeof input !== 'object') {
       return '输入参数必须是对象';
     }
@@ -157,24 +157,25 @@ export class RunningHubProvider extends BaseProvider {
           // 例如：runId, status, result, duration等
         }
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 艹，RunningHub工作流失败了！
+      const err = error instanceof Error ? error : new Error(String(error));
       this.logger.error(`[${this.key}] RunningHub工作流失败`, {
         taskId: context.taskId,
         workflowId,
-        error: error.message
+        error: err.message
       });
 
       return {
         success: false,
         error: {
           code: ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED,
-          message: `RunningHub工作流失败: ${error.message}`,
+          message: `RunningHub工作流失败: ${err.message}`,
           details: {
             taskId: context.taskId,
             workflowId,
-            originalError: error.message,
-            stack: error.stack
+            originalError: err.message,
+            stack: err instanceof Error ? err.stack : undefined
           }
         }
       };

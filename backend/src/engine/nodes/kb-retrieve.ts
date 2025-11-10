@@ -22,7 +22,7 @@ interface KBRetrieveConfig {
   query: string; // 检索查询（支持变量模板）
   kbId?: string; // 知识库ID（可选）
   topK?: number; // 返回结果数量（默认5）
-  filters?: Record<string, any>; // 过滤条件
+  filters?: Record<string, unknown>; // 过滤条件
   outputKey?: string; // 输出键名（默认'contexts'）
 }
 
@@ -32,7 +32,7 @@ interface KBRetrieveConfig {
 interface RetrieveResult {
   id: string;
   text: string;
-  metadata: any;
+  metadata: unknown;
   title: string;
   kbId: string;
 }
@@ -85,7 +85,7 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
         },
         duration
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duration = Date.now() - startTime;
 
       logger.error(`[KBRetrieve] 检索失败: nodeId=${context.node.id}`, error);
@@ -133,7 +133,7 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
     query: string,
     kbId: string | undefined,
     topK: number,
-    filters: Record<string, any>
+    filters: Record<string, unknown>
   ): Promise<RetrieveResult[]> {
     try {
       // 简化实现：直接查询数据库
@@ -158,7 +158,7 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
         )
         .limit(topK);
 
-      return results.map((r: any) => ({
+      return results.map((r: { id: string; text: string; metadata: string; title: string; kb_id: string }) => ({
         id: r.id,
         text: r.text,
         metadata: JSON.parse(r.metadata || '{}'),
@@ -175,7 +175,7 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
    * 解析变量值
    * @private
    */
-  private resolveValue(value: any, state: Record<string, any>): any {
+  private resolveValue(value: unknown, state: Record<string, unknown>): unknown {
     if (typeof value === 'string') {
       return value.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
         const resolved = this.getNestedValue(state, path.trim());
@@ -189,13 +189,13 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
    * 获取嵌套对象值
    * @private
    */
-  private getNestedValue(obj: Record<string, any>, path: string): any {
+  private getNestedValue(obj: Record<string, unknown>, path: string): unknown {
     const keys = path.split('.');
-    let value: any = obj;
+    let value: unknown = obj;
 
     for (const key of keys) {
       if (value && typeof value === 'object' && key in value) {
-        value = value[key];
+        value = (value as Record<string, unknown>)[key];
       } else {
         return undefined;
       }
@@ -208,10 +208,11 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
    * 处理错误
    * @private
    */
-  private handleError(error: any): NodeError {
+  private handleError(error: unknown): NodeError {
+    const err = error instanceof Error ? error : new Error(String(error));
     return {
       code: 'KB_RETRIEVE_ERROR',
-      message: error.message || 'KB retrieve failed',
+      message: err.message || 'KB retrieve failed',
       type: NodeErrorType.KB_RETRIEVE_ERROR
     };
   }

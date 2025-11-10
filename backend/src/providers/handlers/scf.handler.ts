@@ -51,7 +51,7 @@ export interface ScfParams {
   invokeType: 'sync' | 'async';
 
   /** 事件参数（必填，传递给云函数的数据） */
-  payload: any;
+  payload: unknown;
 
   /** 日志类型（可选：None=不返回日志、Tail=返回日志） */
   logType?: 'None' | 'Tail';
@@ -84,7 +84,7 @@ export class ScfProvider extends BaseProvider {
    * @param input - 输入数据
    * @returns 校验错误信息，null表示校验通过
    */
-  public validate(input: any): string | null {
+  public validate(input: unknown): string | null {
     if (!input || typeof input !== 'object') {
       return '输入参数必须是对象';
     }
@@ -179,7 +179,7 @@ export class ScfProvider extends BaseProvider {
       });
 
       // 2. 构建调用参数
-      const invokeParams: any = {
+      const invokeParams: Record<string, unknown> = {
         FunctionName: params.functionName,
         Namespace: params.namespace || 'default',
         Qualifier: params.qualifier || '$LATEST',
@@ -229,13 +229,16 @@ export class ScfProvider extends BaseProvider {
           log: response.Log ? Buffer.from(response.Log, 'base64').toString('utf-8') : undefined
         }
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 艹，SCF调用失败了！
+      const err = error instanceof Error ? error : new Error(String(error));
+      const errorCode = typeof error === 'object' && error !== null && 'code' in error ? (error as Record<string, unknown>).code : undefined;
+
       this.logger.error(`[${this.key}] SCF调用失败`, {
         taskId: context.taskId,
         functionName: params.functionName,
-        error: error.message,
-        code: error.code
+        error: err.message,
+        code: errorCode
       });
 
       // 处理腾讯云API错误
@@ -249,7 +252,7 @@ export class ScfProvider extends BaseProvider {
    * @param invokeType - 调用类型
    * @returns 解析后的结果
    */
-  private parseScfResponse(response: any, invokeType: 'sync' | 'async'): any {
+  private parseScfResponse(response: Record<string, unknown>, invokeType: 'sync' | 'async'): unknown {
     // 异步调用没有返回结果
     if (invokeType === 'async') {
       return {
@@ -292,31 +295,32 @@ export class ScfProvider extends BaseProvider {
    * @param functionName - 函数名称
    * @returns ExecResult - 执行结果
    */
-  private handleScfError(error: any, taskId: string, functionName: string): ExecResult {
+  private handleScfError(error: unknown, taskId: string, functionName: string): ExecResult {
     let errorCode = ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED;
-    let message = `SCF调用失败: ${error.message}`;
-    const details: any = {
+    let message = `SCF调用失败: ${error instanceof Error ? error.message : String(error)}`;
+    const details: Record<string, unknown> = {
       taskId,
       functionName,
-      originalCode: error.code,
-      originalMessage: error.message
+      originalCode: typeof error === 'object' && error !== null && 'code' in error ? (error as Record<string, unknown>).code : undefined,
+      originalMessage: error instanceof Error ? error.message : String(error)
     };
 
     // 艹，根据腾讯云错误码归一化
-    if (error.code) {
-      switch (error.code) {
+    if (typeof error === 'object' && error !== null && 'code' in error) {
+      const code = (error as Record<string, unknown>).code;
+      switch (code) {
         // 认证/权限错误
         case 'AuthFailure.SecretIdNotFound':
         case 'AuthFailure.SignatureFailure':
         case 'AuthFailure.TokenFailure':
         case 'AuthFailure.InvalidSecretId':
-          message = `认证失败: ${error.message}`;
+          message = `认证失败: ${error instanceof Error ? error.message : String(error)}`;
           details.category = 'auth';
           break;
 
         case 'UnauthorizedOperation':
         case 'UnauthorizedOperation.Role':
-          message = `权限不足: ${error.message}`;
+          message = `权限不足: ${error instanceof Error ? error.message : String(error)}`;
           details.category = 'permission';
           break;
 
@@ -325,7 +329,7 @@ export class ScfProvider extends BaseProvider {
         case 'InvalidParameter':
         case 'MissingParameter':
           errorCode = ProviderErrorCode.ERR_PROVIDER_VALIDATION_FAILED;
-          message = `参数错误: ${error.message}`;
+          message = `参数错误: ${error instanceof Error ? error.message : String(error)}`;
           details.category = 'parameter';
           break;
 
@@ -333,7 +337,7 @@ export class ScfProvider extends BaseProvider {
         case 'ResourceNotFound.Function':
         case 'ResourceNotFound.FunctionName':
         case 'ResourceNotFound.Namespace':
-          message = `资源不存在: ${error.message}`;
+          message = `资源不存在: ${error instanceof Error ? error.message : String(error)}`;
           details.category = 'not_found';
           break;
 
@@ -341,36 +345,37 @@ export class ScfProvider extends BaseProvider {
         case 'LimitExceeded':
         case 'RequestLimitExceeded':
         case 'ResourceInUse.FunctionName':
-          message = `配额限制: ${error.message}`;
+          message = `配额限制: ${error instanceof Error ? error.message : String(error)}`;
           details.category = 'quota';
           break;
 
         // 超时
         case 'ResourceUnavailable.FunctionInsufficientBalance':
           errorCode = ProviderErrorCode.ERR_PROVIDER_TIMEOUT;
-          message = `函数执行超时: ${error.message}`;
+          message = `函数执行超时: ${error instanceof Error ? error.message : String(error)}`;
           details.category = 'timeout';
           break;
 
         // 内部错误（可重试）
         case 'InternalError':
         case 'InternalError.System':
-          message = `内部错误: ${error.message}`;
+          message = `内部错误: ${error instanceof Error ? error.message : String(error)}`;
           details.category = 'internal';
           details.retryable = true;
           break;
 
         default:
-          message = `SCF调用失败: ${error.message} (${error.code})`;
+          message = `SCF调用失败: ${error instanceof Error ? error.message : String(error)} (${code})`;
           details.category = 'unknown';
           break;
       }
     }
 
     // 记录详细错误
+    const stack = error instanceof Error ? error.stack : undefined;
     this.logger.error(`[${this.key}] SCF错误详情`, {
       ...details,
-      stack: error.stack
+      stack
     });
 
     return {

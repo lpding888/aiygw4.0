@@ -171,7 +171,7 @@ const mapStatusCode = (code: ErrorCode): number => {
 };
 
 const resolveMetadata = (code: ErrorCode) => {
-  const metadataEntry = (ERROR_METADATA as Record<ErrorCode, typeof DEFAULT_METADATA>)[code];
+  const metadataEntry = (ERROR_METADATA as unknown as Record<ErrorCode, typeof DEFAULT_METADATA>)[code];
   return metadataEntry ?? DEFAULT_METADATA;
 };
 
@@ -201,7 +201,7 @@ export class AppError extends Error {
     options: AppErrorOptions = {}
   ) {
     const messages = getMessagesForLanguage(DEFAULT_LANGUAGE as SupportedLanguageCode);
-    const message = customMessage ?? (messages as any)[code] ?? '未知错误';
+    const message = customMessage ?? (messages as unknown as Record<ErrorCode, string>)[code] ?? '未知错误';
     super(message);
 
     this.name = 'AppError';
@@ -229,7 +229,7 @@ export class AppError extends Error {
     language: SupportedLanguageCode = DEFAULT_LANGUAGE as SupportedLanguageCode
   ): string {
     const messages = getMessagesForLanguage(language);
-    return (messages as any)[this.code] ?? this.message;
+    return (messages as unknown as Record<ErrorCode, string>)[this.code] ?? this.message;
   }
 
   public getLocalizedMessage(language: SupportedLanguageCode): string {

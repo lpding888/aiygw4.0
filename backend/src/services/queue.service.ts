@@ -1,15 +1,19 @@
-import { Queue, QueueEvents, type JobsOptions, type BulkJobOptions, Worker } from 'bullmq';
+import { Queue, QueueEvents, type JobsOptions, type BulkJobOptions, Worker, Job } from 'bullmq';
 import { Redis as IORedis } from 'ioredis';
 import { redisConfig } from '../config/redis.js';
 import pLimit from 'p-limit';
 import logger from '../utils/logger.js';
 
-type ProcessorFn = (job: any) => Promise<any> | any;
+interface JobData {
+  [key: string]: unknown;
+}
+
+type ProcessorFn = (job: Job<JobData>) => Promise<unknown> | unknown;
 
 interface ProcessorEntry {
   processor: ProcessorFn;
   concurrency: number;
-  options?: Record<string, any>;
+  options?: Record<string, unknown>;
 }
 
 class QueueService {
@@ -39,12 +43,13 @@ class QueueService {
 
   private buildConnection() {
     // BullMQ 接受 IORedis 实例或连接配置。这里用实例，继承 redis.ts 配置。
+    const config = redisConfig as Record<string, unknown>;
     return new IORedis({
       host: redisConfig.host,
       port: Number(redisConfig.port ?? 6379),
       password: redisConfig.password,
       db: Number(redisConfig.db ?? 2),
-      maxRetriesPerRequest: (redisConfig as any).maxRetriesPerRequest ?? 3
+      maxRetriesPerRequest: (config.maxRetriesPerRequest as number) ?? 3
     });
   }
 
@@ -92,9 +97,10 @@ class QueueService {
               duration
             });
             return result;
-          } catch (error: any) {
+          } catch (error: unknown) {
+            const err = error as Error;
             logger.error(`[QueueService] 任务处理失败: ${queueName}:${job.id}:${job.name}`, {
-              error: error?.message
+              error: err?.message
             });
             throw error;
           }
@@ -160,7 +166,12 @@ class QueueService {
     this.ensureQueueInfrastructure(name, { defaultJobOptions: options?.defaultJobOptions });
   }
 
-  public async addJob(queueName: string, jobName: string, data: any, options: JobsOptions = {}) {
+  public async addJob(
+    queueName: string,
+    jobName: string,
+    data: JobData,
+    options: JobsOptions = {}
+  ) {
     const queue = this.queues.get(queueName);
     if (!queue) throw new Error(`队列不存在: ${queueName}`);
     const defaultOptions: JobsOptions = {
@@ -180,7 +191,7 @@ class QueueService {
   public async addDelayedJob(
     queueName: string,
     jobName: string,
-    data: any,
+    data: JobData,
     delayMs: number,
     options: JobsOptions = {}
   ) {
@@ -190,7 +201,7 @@ class QueueService {
   public async addHighPriorityJob(
     queueName: string,
     jobName: string,
-    data: any,
+    data: JobData,
     options: JobsOptions = {}
   ) {
     return this.addJob(queueName, jobName, data, { ...options, priority: 10 });
@@ -198,16 +209,16 @@ class QueueService {
 
   public async addBulkJobs(
     queueName: string,
-    jobs: Array<{ name: string; data: any; options?: JobsOptions }>
+    jobs: Array<{ name: string; data: JobData; options?: JobsOptions }>
   ) {
     const queue = this.queues.get(queueName);
     if (!queue) throw new Error(`队列不存在: ${queueName}`);
-    const bulk = jobs.map((j) => ({
+    const bulk: Array<{ name: string; data: JobData; opts: JobsOptions }> = jobs.map((j) => ({
       name: j.name,
       data: j.data,
       opts: j.options || {}
-    })) as BulkJobOptions[];
-    const added = await queue.addBulk(bulk as any);
+    }));
+    const added = await queue.addBulk(bulk as BulkJobOptions[]);
     this.stats.totalQueued += added.length;
     logger.info(`[QueueService] 批量添加任务: ${queueName}, 数量: ${added.length}`);
     return added;
@@ -247,7 +258,8 @@ class QueueService {
     const job = await queue.getJob(jobId);
     if (!job) return { exists: false };
     const state = await job.getState();
-    const progress = (job as any).progress ?? 0;
+    const jobWithProgress = job as Job<JobData> & { progress?: number };
+    const progress = jobWithProgress.progress ?? 0;
     return {
       exists: true,
       id: job.id,
@@ -285,13 +297,14 @@ class QueueService {
 
   public async getAllQueueStats() {
     const names = Array.from(this.queues.keys());
-    const stats: Record<string, any> = {};
+    const stats: Record<string, unknown> = {};
     for (const name of names) {
       try {
         stats[name] = await this.getQueueStats(name);
-      } catch (e: any) {
+      } catch (e: unknown) {
+        const err = e as Error;
         logger.warn(`[QueueService] 获取队列统计失败: ${name}`, e);
-        stats[name] = { error: e?.message };
+        stats[name] = { error: err?.message };
       }
     }
     return { queues: stats, global: this.stats, timestamp: new Date().toISOString() };
@@ -357,8 +370,11 @@ class QueueService {
     try {
       const queueStats = await this.getAllQueueStats();
       const activeQueues = Object.keys(queueStats.queues).length;
-      const totalJobs = Object.values(queueStats.queues as any).reduce(
-        (sum: number, s: any) => sum + (s.total || 0),
+      interface QueueStatsEntry {
+        total?: number;
+      }
+      const totalJobs = Object.values(queueStats.queues as Record<string, QueueStatsEntry>).reduce(
+        (sum: number, s: QueueStatsEntry) => sum + (s.total || 0),
         0
       );
       return {
@@ -368,9 +384,10 @@ class QueueService {
         globalStats: this.stats,
         timestamp: new Date().toISOString()
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as Error;
       logger.error('[QueueService] 健康检查失败', error);
-      return { status: 'unhealthy', error: error?.message, timestamp: new Date().toISOString() };
+      return { status: 'unhealthy', error: err?.message, timestamp: new Date().toISOString() };
     }
   }
 

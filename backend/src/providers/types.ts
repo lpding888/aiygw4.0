@@ -13,7 +13,7 @@ export interface ExecContext {
   taskId: string;
 
   /** 输入数据（来自上一步或用户输入） */
-  input: any;
+  input: unknown;
 
   /** AbortSignal，用于取消执行（超时控制） */
   signal?: AbortSignal;
@@ -22,14 +22,14 @@ export interface ExecContext {
   timeout?: number;
 
   /** 额外的元数据，各Provider可自定义使用 */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
  * 执行结果
  * 统一的返回格式，便于Pipeline传递数据
  */
-export interface ExecResult<T = any> {
+export interface ExecResult<T = unknown> {
   /** 执行是否成功 */
   success: boolean;
 
@@ -40,14 +40,14 @@ export interface ExecResult<T = any> {
   error?: {
     code: string;
     message: string;
-    details?: any;
+    details?: unknown;
   };
 
   /** 执行时长（毫秒） */
   duration?: number;
 
   /** 额外的元数据 */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -94,7 +94,7 @@ export interface IProvider {
    * @param input - 输入数据
    * @returns 校验错误信息，null表示校验通过
    */
-  validate(input: any): string | null;
+  validate(input: unknown): string | null;
 
   /**
    * 执行Provider任务
@@ -144,9 +144,9 @@ export enum ProviderErrorCode {
  */
 export class ProviderError extends Error {
   public readonly code: ProviderErrorCode;
-  public readonly details?: any;
+  public readonly details?: unknown;
 
-  constructor(code: ProviderErrorCode, message: string, details?: any) {
+  constructor(code: ProviderErrorCode, message: string, details?: unknown) {
     super(message);
     this.name = 'ProviderError';
     this.code = code;

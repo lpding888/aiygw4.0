@@ -15,14 +15,23 @@ import { aiGateway } from '../../services/ai-gateway.service.js';
 const QUEUE_NAME = 'kb-ingest';
 const JOB_NAME = 'kb-ingest.process';
 
-const createConnection = () =>
-  new IORedis({
+const createConnection = () => {
+  interface RedisConfigExtended {
+    host?: string;
+    port?: string | number;
+    password?: string;
+    db?: string | number;
+    maxRetriesPerRequest?: number;
+  }
+
+  return new IORedis({
     host: redisConfig.host,
     port: Number(redisConfig.port ?? 6379),
     password: redisConfig.password,
     db: Number(redisConfig.db ?? 3),
-    maxRetriesPerRequest: (redisConfig as any).maxRetriesPerRequest ?? 3
+    maxRetriesPerRequest: (redisConfig as unknown as RedisConfigExtended).maxRetriesPerRequest ?? 3
   });
+};
 
 const ingestQueue = new Queue<IngestJobData>(QUEUE_NAME, {
   connection: createConnection(),
@@ -84,7 +93,7 @@ async function processIngestJob(job: JobProcessor) {
     });
 
     await job.updateProgress(20);
-    const parseResult = await parser.parse(content, format as any);
+    const parseResult = await parser.parse(content, format as 'markdown' | 'html' | 'pdf' | 'text');
     logger.info(
       `[IngestWorker] 解析完成: documentId=${documentId} length=${parseResult.metadata.length}`
     );
@@ -97,7 +106,7 @@ async function processIngestJob(job: JobProcessor) {
     logger.info(`[IngestWorker] 切块完成: documentId=${documentId} chunks=${chunks.length}`);
 
     await job.updateProgress(60);
-    const chunkRecords = chunks.map((chunk: Chunk) => ({
+    const chunkRecords = chunks.map((chunk: Chunk): Record<string, unknown> => ({
       document_id: documentId,
       chunk_index: chunk.index,
       text: chunk.text,
@@ -132,12 +141,13 @@ async function processIngestJob(job: JobProcessor) {
       documentId,
       chunkCount: chunks.length
     };
-  } catch (error: any) {
-    logger.error(`[IngestWorker] 处理失败: documentId=${documentId}`, error);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    logger.error(`[IngestWorker] 处理失败: documentId=${documentId}`, err);
 
     await db('kb_documents').where('id', documentId).update({
       status: 'failed',
-      error_message: error.message,
+      error_message: err.message,
       updated_at: new Date()
     });
 
@@ -148,7 +158,11 @@ async function processIngestJob(job: JobProcessor) {
 async function scheduleEmbedding(documentId: string, chunks: Chunk[]): Promise<void> {
   logger.info(`[IngestWorker] 调度向量化: documentId=${documentId} chunks=${chunks.length}`);
 
-  if (aiGateway && typeof (aiGateway as any).embed === 'function') {
+  interface AiGatewayWithEmbed {
+    embed?: (data: unknown) => unknown;
+  }
+
+  if (aiGateway && typeof (aiGateway as unknown as AiGatewayWithEmbed).embed === 'function') {
     logger.debug('[IngestWorker] aiGateway embed 能力已注册，等待后续实现');
   }
 }

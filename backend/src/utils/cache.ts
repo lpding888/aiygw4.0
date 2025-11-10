@@ -58,7 +58,7 @@ export interface CacheStats {
  * 两层缓存管理器
  */
 export class CacheManager {
-  private l1Cache: LRUCache<string, any>;
+  private l1Cache: LRUCache<string, unknown>;
   private l2Cache: Redis | null = null;
   private namespace: string;
   private l2DefaultTtl: number;
@@ -112,11 +112,13 @@ export class CacheManager {
           console.log('[CACHE] Redis连接成功');
         });
 
-        this.l2Cache.on('error', (err: any) => {
-          console.error('[CACHE] Redis错误:', err.message);
+        this.l2Cache.on('error', (err: unknown) => {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.error('[CACHE] Redis错误:', errMsg);
         });
-      } catch (error: any) {
-        console.error('[CACHE] 初始化Redis失败:', error.message);
+      } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error('[CACHE] 初始化Redis失败:', errMsg);
         this.l2Cache = null;
       }
     } else {
@@ -136,7 +138,7 @@ export class CacheManager {
    * @param key - 缓存key
    * @returns 缓存值，未找到返回null
    */
-  async get<T = any>(key: string): Promise<T | null> {
+  async get<T = unknown>(key: string): Promise<T | null> {
     const fullKey = this.buildKey(key);
 
     // 1. 先查L1缓存
@@ -165,8 +167,9 @@ export class CacheManager {
           return l2Value;
         }
         this.stats.l2Misses++;
-      } catch (error: any) {
-        console.error(`[CACHE] L2读取失败: ${error.message}`);
+      } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[CACHE] L2读取失败: ${errMsg}`);
       }
     }
 
@@ -180,7 +183,7 @@ export class CacheManager {
    * @param value - 缓存值
    * @param ttl - TTL（秒），不传则使用默认值
    */
-  async set(key: string, value: any, ttl?: number): Promise<void> {
+  async set(key: string, value: unknown, ttl?: number): Promise<void> {
     const fullKey = this.buildKey(key);
 
     // 1. 写L1缓存
@@ -195,8 +198,9 @@ export class CacheManager {
 
         await this.l2Cache.setex(fullKey, l2Ttl, valueStr);
         console.log(`[CACHE] 写入缓存: ${key} (TTL: ${l2Ttl}s)`);
-      } catch (error: any) {
-        console.error(`[CACHE] L2写入失败: ${error.message}`);
+      } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[CACHE] L2写入失败: ${errMsg}`);
       }
     }
   }
@@ -216,8 +220,9 @@ export class CacheManager {
       try {
         await this.l2Cache.del(fullKey);
         console.log(`[CACHE] 删除缓存: ${key}`);
-      } catch (error: any) {
-        console.error(`[CACHE] L2删除失败: ${error.message}`);
+      } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[CACHE] L2删除失败: ${errMsg}`);
       }
     }
   }
@@ -242,8 +247,9 @@ export class CacheManager {
           deletedCount = await this.l2Cache.del(...keys);
           console.log(`[CACHE] 删除${deletedCount}个匹配的key: ${pattern}`);
         }
-      } catch (error: any) {
-        console.error(`[CACHE] 批量删除失败: ${error.message}`);
+      } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[CACHE] 批量删除失败: ${errMsg}`);
       }
     }
 
@@ -266,8 +272,9 @@ export class CacheManager {
           await this.l2Cache.del(...keys);
           console.log(`[CACHE] 清空缓存，删除${keys.length}个key`);
         }
-      } catch (error: any) {
-        console.error(`[CACHE] 清空缓存失败: ${error.message}`);
+      } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[CACHE] 清空缓存失败: ${errMsg}`);
       }
     }
   }

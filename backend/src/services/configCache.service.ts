@@ -17,7 +17,11 @@ export interface InvalidationMessage {
 
 export interface WarmupEntry {
   options: CacheOptions;
-  loader: () => Promise<any>;
+  loader: () => Promise<unknown>;
+}
+
+export interface WarmupLoaderMap {
+  [key: string]: unknown;
 }
 
 export interface CacheStats {
@@ -31,7 +35,7 @@ export interface CacheStats {
 }
 
 export class ConfigCacheService {
-  private memoryCache: LRUCache<string, any>;
+  private memoryCache: LRUCache<string, unknown>;
   private readonly CACHE_PREFIX = 'cms:config:';
   private readonly INVALIDATE_CHANNEL = 'cms:invalidate';
   private versionCache: Map<string, number>;
@@ -48,7 +52,7 @@ export class ConfigCacheService {
     this.initRedisSubscription();
   }
 
-  async getOrSet(options: CacheOptions, fetcher: () => Promise<any>): Promise<any> {
+  async getOrSet(options: CacheOptions, fetcher: () => Promise<unknown>): Promise<unknown> {
     const { scope, key, version = 'latest' } = options;
     const cacheKey = this.buildCacheKey(scope, key, version);
 
@@ -84,7 +88,7 @@ export class ConfigCacheService {
 
       logger.debug(`Cache miss and fetched: ${cacheKey}`);
       return data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error(`Cache error for ${cacheKey}:`, error);
       const snapshotData = await this.getSnapshot(scope, key, version);
       if (snapshotData) {
@@ -118,7 +122,7 @@ export class ConfigCacheService {
       await this.publishInvalidation(scope, key, version);
 
       logger.info(`Cache invalidated: ${scope}:${key}:${version}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error(`Cache invalidation error for ${scope}:${key}:${version}:`, error);
     }
   }
@@ -140,7 +144,7 @@ export class ConfigCacheService {
       await this.publishInvalidation(scope, '*', '*');
 
       logger.info(`Cache scope invalidated: ${scope}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error(`Cache scope invalidation error for ${scope}:`, error);
     }
   }
@@ -171,7 +175,7 @@ export class ConfigCacheService {
       });
 
       logger.info(`[ConfigCache] Subscribed to ${this.INVALIDATE_CHANNEL}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.warn('Failed to initialize Redis subscription:', error);
     }
   }
@@ -186,7 +190,7 @@ export class ConfigCacheService {
       };
 
       await redis.publish(this.INVALIDATE_CHANNEL, JSON.stringify(message));
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('Failed to publish invalidation:', error);
     }
   }
@@ -205,7 +209,7 @@ export class ConfigCacheService {
       });
 
       logger.debug(`Handled invalidation broadcast: ${scope}:${key}:${version}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('Error handling invalidation broadcast:', error);
     }
   }
@@ -218,27 +222,27 @@ export class ConfigCacheService {
     return `${scope}:${key}:${version}`;
   }
 
-  async saveSnapshot(scope: string, key: string, version: string, data: any): Promise<void> {
+  async saveSnapshot(scope: string, key: string, version: string, data: unknown): Promise<void> {
     const snapshotKey = `snapshot:${this.buildCacheKey(scope, key, version)}`;
     try {
       await redis.setex(snapshotKey, 3600, JSON.stringify(data));
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.warn('Failed to save snapshot:', error);
     }
   }
 
-  async getSnapshot(scope: string, key: string, version: string): Promise<any> {
+  async getSnapshot(scope: string, key: string, version: string): Promise<unknown> {
     const snapshotKey = `snapshot:${this.buildCacheKey(scope, key, version)}`;
     try {
       const snapshot = await redis.get(snapshotKey);
       return snapshot ? JSON.parse(snapshot) : null;
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.warn('Failed to get snapshot:', error);
       return null;
     }
   }
 
-  async warmup(dataLoaders: any): Promise<void> {
+  async warmup(dataLoaders: unknown): Promise<void> {
     if (!dataLoaders) {
       return;
     }
@@ -248,44 +252,47 @@ export class ConfigCacheService {
     let entries: WarmupEntry[] = [];
 
     if (Array.isArray(dataLoaders)) {
-      entries = dataLoaders;
+      entries = dataLoaders as WarmupEntry[];
     } else {
-      const mappedEntries: (WarmupEntry | null)[] = Object.entries(dataLoaders ?? {}).map(
-        ([descriptor, loader]: [string, any]) => {
-          if (typeof loader === 'function') {
-            const [scope, key, version] = descriptor.split(':');
-            if (!scope || !key) {
-              return null;
-            }
-
-            const entry: WarmupEntry = {
-              options: {
-                scope,
-                key,
-                version: version || 'latest'
-              },
-              loader
-            };
-
-            return entry;
+      const mappedEntries: (WarmupEntry | null)[] = Object.entries(
+        dataLoaders as WarmupLoaderMap
+      ).map(([descriptor, loader]: [string, unknown]) => {
+        if (typeof loader === 'function') {
+          const [scope, key, version] = descriptor.split(':');
+          if (!scope || !key) {
+            return null;
           }
 
-          if (loader && typeof loader === 'object' && typeof loader.loader === 'function') {
-            const entry: WarmupEntry = {
-              options: {
-                scope: loader.scope,
-                key: loader.key,
-                version: loader.version || 'latest'
-              },
-              loader: loader.loader
-            };
+          const entry: WarmupEntry = {
+            options: {
+              scope,
+              key,
+              version: version || 'latest'
+            },
+            loader: loader as () => Promise<unknown>
+          };
 
-            return entry;
-          }
-
-          return null;
+          return entry;
         }
-      );
+
+        if (loader && typeof loader === 'object') {
+          const loaderObj = loader as Record<string, unknown>;
+          if (typeof loaderObj.loader === 'function') {
+            const entry: WarmupEntry = {
+              options: {
+                scope: loaderObj.scope as string,
+                key: loaderObj.key as string,
+                version: (loaderObj.version as string) || 'latest'
+              },
+              loader: loaderObj.loader as () => Promise<unknown>
+            };
+
+            return entry;
+          }
+        }
+
+        return null;
+      });
 
       entries = mappedEntries.filter(
         (entry): entry is WarmupEntry => entry !== null && typeof entry.loader === 'function'
@@ -302,7 +309,7 @@ export class ConfigCacheService {
       try {
         await this.getOrSet(options, loader);
         logger.debug(`[ConfigCache] Warmed cache: ${options.scope}:${options.key}`);
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.warn(`[ConfigCache] Warmup failed for ${options.scope}:${options.key}`, error);
       }
     }

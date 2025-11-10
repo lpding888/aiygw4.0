@@ -6,6 +6,10 @@
 import { Request, Response, NextFunction } from 'express';
 import * as auditRepo from '../repositories/auditLogs.repo.js';
 
+interface AuditError extends Error {
+  message: string;
+}
+
 export class AuditLogsController {
   /**
    * 列出审计日志（管理端）
@@ -52,8 +56,9 @@ export class AuditLogsController {
           offset: parseInt(offset as string)
         }
       });
-    } catch (error: any) {
-      console.error('[AuditLogsController] 列出审计日志失败:', error.message);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[AuditLogsController] 列出审计日志失败:', err.message);
       next(error);
     }
   }
@@ -71,8 +76,9 @@ export class AuditLogsController {
         success: true,
         data: history
       });
-    } catch (error: any) {
-      console.error('[AuditLogsController] 获取实体历史失败:', error.message);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[AuditLogsController] 获取实体历史失败:', err.message);
       next(error);
     }
   }
@@ -94,8 +100,9 @@ export class AuditLogsController {
         success: true,
         data: history
       });
-    } catch (error: any) {
-      console.error('[AuditLogsController] 获取用户历史失败:', error.message);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[AuditLogsController] 获取用户历史失败:', err.message);
       next(error);
     }
   }
@@ -117,8 +124,9 @@ export class AuditLogsController {
       }
 
       res.json({ success: true, data: log });
-    } catch (error: any) {
-      console.error('[AuditLogsController] 获取审计日志失败:', error.message);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[AuditLogsController] 获取审计日志失败:', err.message);
       next(error);
     }
   }

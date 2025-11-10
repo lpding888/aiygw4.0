@@ -3,11 +3,21 @@ import crypto from 'crypto';
 import logger from '../utils/logger.js';
 import { db } from '../config/database.js';
 
+interface ScfCallbackPayload extends Record<string, unknown> {
+  taskId?: string | unknown;
+  stepIndex?: number | unknown;
+  status?: string | unknown;
+  output?: unknown;
+  errorMessage?: string | unknown;
+  timestamp?: number | string | unknown;
+  signature?: string | unknown;
+}
+
 class ScfCallbackController {
   async handleCallback(req: Request, res: Response): Promise<void> {
     try {
       const { taskId, stepIndex, status, output, errorMessage, timestamp, signature } = (req.body ??
-        {}) as Record<string, any>;
+        {}) as ScfCallbackPayload;
 
       logger.info(
         `[ScfCallbackController] 收到SCF回调 taskId=${taskId} stepIndex=${stepIndex} status=${status}`
@@ -113,8 +123,9 @@ class ScfCallbackController {
       }
 
       res.json({ success: true, message: '回调处理成功' });
-    } catch (error: any) {
-      logger.error(`[ScfCallbackController] 处理回调失败: ${error.message}`, {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`[ScfCallbackController] 处理回调失败: ${err.message}`, {
         error,
         body: req.body
       });
@@ -122,19 +133,20 @@ class ScfCallbackController {
     }
   }
 
-  verifySignature(data: Record<string, any>): boolean {
+  verifySignature(data: ScfCallbackPayload): boolean {
     try {
       const { signature, ...payload } = data || {};
       const hmacSecret = process.env.INTERNAL_CALLBACK_SECRET || 'default_secret';
       const sortedKeys = Object.keys(payload).sort();
-      const signatureData = sortedKeys.map((key) => `${key}=${payload[key]}`).join('&');
+      const signatureData = sortedKeys.map((key) => `${key}=${String(payload[key])}`).join('&');
       const expectedSignature = crypto
         .createHmac('sha256', hmacSecret)
         .update(signatureData)
         .digest('hex');
       return signature === expectedSignature;
-    } catch (error: any) {
-      logger.error(`[ScfCallbackController] 签名验证异常: ${error.message}`, error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`[ScfCallbackController] 签名验证异常: ${err.message}`, error);
       return false;
     }
   }

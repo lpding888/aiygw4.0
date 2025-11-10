@@ -5,9 +5,13 @@ import aiModelService from './aiModel.service.js';
 
 type ProviderConfig = Parameters<typeof providerWrapperService.registerProvider>[2];
 
+interface ProviderInstance {
+  [key: string]: unknown;
+}
+
 class ProviderRegistryService {
-  private registeredProviders = new Map<string, any>();
-  private providerConfigs = new Map<string, any>();
+  private registeredProviders = new Map<string, ProviderInstance>();
+  private providerConfigs = new Map<string, ProviderConfig>();
   private initialized = false;
 
   async initialize() {
@@ -25,7 +29,7 @@ class ProviderRegistryService {
   private async registerBuiltinProviders() {
     this.registerProvider(
       'imageProcess',
-      imageProcessService as any,
+      imageProcessService as ProviderInstance,
       {
         circuitBreaker: {
           failureThreshold: 3,
@@ -37,11 +41,11 @@ class ProviderRegistryService {
         retry: { maxAttempts: 2, baseDelay: 1000, maxDelay: 8000, backoff: 'exponential' },
         timeout: 60000,
         cache: { ttl: 300, enabled: true }
-      } as any
+      }
     );
     this.registerProvider(
       'aiModel',
-      aiModelService as any,
+      aiModelService as ProviderInstance,
       {
         circuitBreaker: {
           failureThreshold: 2,
@@ -53,7 +57,7 @@ class ProviderRegistryService {
         retry: { maxAttempts: 1, baseDelay: 2000, maxDelay: 5000, backoff: 'linear' },
         timeout: 120000,
         cache: { ttl: 600, enabled: true }
-      } as any
+      }
     );
   }
 
@@ -61,7 +65,7 @@ class ProviderRegistryService {
     // 预留：可以在此读取数据库/配置注册更多 Provider
   }
 
-  registerProvider(name: string, provider: any, config: ProviderConfig = {} as any) {
+  registerProvider(name: string, provider: ProviderInstance, config: ProviderConfig = {}) {
     providerWrapperService.registerProvider(name, provider, config);
     this.registeredProviders.set(name, provider);
     this.providerConfigs.set(name, config);
@@ -82,8 +86,8 @@ class ProviderRegistryService {
   async execute(
     providerName: string,
     methodName: string,
-    args: any[] = [],
-    options: Record<string, any> = {}
+    args: unknown[] = [],
+    options: Record<string, unknown> = {}
   ) {
     return await providerWrapperService.execute(providerName, methodName, args, options);
   }

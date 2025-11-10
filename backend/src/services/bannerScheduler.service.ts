@@ -54,8 +54,9 @@ export async function runBannerScheduler(): Promise<void> {
     }
 
     console.log('[SCHEDULER] 轮播图定时任务执行完成');
-  } catch (error: any) {
-    console.error('[SCHEDULER] 轮播图定时任务执行失败:', error.message);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error.message : String(error);
+    console.error('[SCHEDULER] 轮播图定时任务执行失败:', err);
   }
 }
 

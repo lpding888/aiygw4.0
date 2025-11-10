@@ -30,9 +30,10 @@ export class MembershipBenefitsController {
           offset: parseInt(offset as string)
         }
       });
-    } catch (error: any) {
-      console.error('[BenefitsController] 列出权益失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[BenefitsController] 列出权益失败:', err.message);
+      next(err);
     }
   }
 
@@ -51,9 +52,10 @@ export class MembershipBenefitsController {
         success: true,
         data: benefits
       });
-    } catch (error: any) {
-      console.error('[BenefitsController] 获取激活权益失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[BenefitsController] 获取激活权益失败:', err.message);
+      next(err);
     }
   }
 
@@ -74,9 +76,10 @@ export class MembershipBenefitsController {
       }
 
       res.json({ success: true, data: benefit });
-    } catch (error: any) {
-      console.error('[BenefitsController] 获取权益失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[BenefitsController] 获取权益失败:', err.message);
+      next(err);
     }
   }
 
@@ -118,9 +121,10 @@ export class MembershipBenefitsController {
       const benefit = await benefitRepo.createBenefit(input);
 
       res.status(201).json({ success: true, data: benefit });
-    } catch (error: any) {
-      console.error('[BenefitsController] 创建权益失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[BenefitsController] 创建权益失败:', err.message);
+      next(err);
     }
   }
 
@@ -135,16 +139,17 @@ export class MembershipBenefitsController {
       const benefit = await benefitRepo.updateBenefit(id, updates);
 
       res.json({ success: true, data: benefit });
-    } catch (error: any) {
-      if (error.message.includes('不存在')) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      if (err.message.includes('不存在')) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: error.message }
+          error: { code: 'NOT_FOUND', message: err.message }
         });
         return;
       }
-      console.error('[BenefitsController] 更新权益失败:', error.message);
-      next(error);
+      console.error('[BenefitsController] 更新权益失败:', err.message);
+      next(err);
     }
   }
 
@@ -165,9 +170,10 @@ export class MembershipBenefitsController {
       }
 
       res.json({ success: true, message: '权益已删除' });
-    } catch (error: any) {
-      console.error('[BenefitsController] 删除权益失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[BenefitsController] 删除权益失败:', err.message);
+      next(err);
     }
   }
 }

@@ -11,12 +11,118 @@ import * as planRepo from '../repositories/membershipPlans.repo.js';
 import * as benefitRepo from '../repositories/membershipBenefits.repo.js';
 
 /**
- * 导出文案为JSON
+ * 内容文案导出对象
  */
-export async function exportContentTextsJSON(options?: {
+interface ContentTextExport {
+  page: string;
+  section: string;
+  key: string;
+  language: string;
+  value: string;
+  description?: string;
+  status: string;
+}
+
+/**
+ * 公告导出对象
+ */
+interface AnnouncementExport {
+  title: string;
+  content: string;
+  type: string;
+  position: string;
+  priority: number;
+  status: string;
+  publish_at?: string | null;
+  expire_at?: string | null;
+  target_audience?: string;
+}
+
+/**
+ * 轮播图导出对象
+ */
+interface BannerExport {
+  title: string;
+  image_url: string;
+  link_url: string;
+  description?: string;
+  sort_order: number;
+  status: string;
+  publish_at?: string | null;
+  expire_at?: string | null;
+  target_audience?: string;
+}
+
+/**
+ * 套餐导出对象
+ */
+interface PlanExport {
+  name: string;
+  slug: string;
+  description?: string;
+  price: number;
+  currency: string;
+  duration_days: number;
+  quota_uploads: number;
+  quota_storage: number;
+  quota_features: number;
+  status: string;
+  sort_order: number;
+  is_default: boolean;
+  is_popular: boolean;
+}
+
+/**
+ * 权益导出对象
+ */
+interface BenefitExport {
+  name: string;
+  key: string;
+  description?: string;
+  type: string;
+  value: unknown;
+  icon?: string;
+  color?: string;
+  status: string;
+}
+
+/**
+ * 导入错误对象
+ */
+interface ImportError {
+  error: string;
+  [key: string]: unknown;
+}
+
+/**
+ * 导入结果
+ */
+interface ImportResult {
+  created: number;
+  updated: number;
+  errors: ImportError[];
+}
+
+/**
+ * 导出选项
+ */
+interface ExportOptions {
   page?: string;
   language?: string;
-}): Promise<any[]> {
+  [key: string]: unknown;
+}
+
+/**
+ * CSV行对象
+ */
+interface CSVRow {
+  [key: string]: unknown;
+}
+
+/**
+ * 导出文案为JSON
+ */
+export async function exportContentTextsJSON(options?: ExportOptions): Promise<ContentTextExport[]> {
   const texts = await textRepo.listTexts({
     page: options?.page,
     language: options?.language,
@@ -37,7 +143,7 @@ export async function exportContentTextsJSON(options?: {
 /**
  * 导出文案为CSV
  */
-export function convertToCSV(data: any[], fields: string[]): string {
+export function convertToCSV(data: CSVRow[], fields: string[]): string {
   // 艹，CSV头部
   const header = fields.join(',');
 
@@ -71,10 +177,10 @@ export async function exportContentTextsCSV(options?: {
  * 导入文案JSON
  */
 export async function importContentTextsJSON(
-  data: any[],
+  data: ContentTextExport[],
   updated_by?: number
-): Promise<{ created: number; updated: number; errors: any[] }> {
-  const errors: any[] = [];
+): Promise<ImportResult> {
+  const errors: ImportError[] = [];
   let created = 0;
   let updated = 0;
 
@@ -82,8 +188,9 @@ export async function importContentTextsJSON(
     const result = await textRepo.batchUpsertTexts(data, updated_by);
     created = result.created;
     updated = result.updated;
-  } catch (error: any) {
-    errors.push({ error: error.message });
+  } catch (error: unknown) {
+    const err = error as Error;
+    errors.push({ error: err.message });
   }
 
   return { created, updated, errors };
@@ -92,7 +199,7 @@ export async function importContentTextsJSON(
 /**
  * 解析CSV为JSON
  */
-export function parseCSV(csvContent: string): any[] {
+export function parseCSV(csvContent: string): CSVRow[] {
   const lines = csvContent.trim().split('\n');
   if (lines.length < 2) return [];
 
@@ -100,7 +207,7 @@ export function parseCSV(csvContent: string): any[] {
   const header = lines[0].split(',').map((h) => h.trim());
 
   // 艹，解析数据行
-  const data: any[] = [];
+  const data: CSVRow[] = [];
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
     if (!line.trim()) continue;
@@ -108,7 +215,7 @@ export function parseCSV(csvContent: string): any[] {
     // 简单CSV解析（不处理复杂的引号转义）
     const values = line.split(',').map((v) => v.trim().replace(/^"(.*)"$/, '$1'));
 
-    const obj: any = {};
+    const obj: CSVRow = {};
     header.forEach((key, index) => {
       obj[key] = values[index] || null;
     });
@@ -122,7 +229,7 @@ export function parseCSV(csvContent: string): any[] {
 /**
  * 导出公告为JSON
  */
-export async function exportAnnouncementsJSON(): Promise<any[]> {
+export async function exportAnnouncementsJSON(): Promise<AnnouncementExport[]> {
   const announcements = await announcementRepo.listAnnouncements({
     limit: 10000
   });
@@ -143,7 +250,7 @@ export async function exportAnnouncementsJSON(): Promise<any[]> {
 /**
  * 导出轮播图为JSON
  */
-export async function exportBannersJSON(): Promise<any[]> {
+export async function exportBannersJSON(): Promise<BannerExport[]> {
   const banners = await bannerRepo.listBanners({
     limit: 10000
   });
@@ -164,7 +271,7 @@ export async function exportBannersJSON(): Promise<any[]> {
 /**
  * 导出套餐为JSON
  */
-export async function exportPlansJSON(): Promise<any[]> {
+export async function exportPlansJSON(): Promise<PlanExport[]> {
   const plans = await planRepo.listPlans({
     limit: 10000
   });
@@ -189,7 +296,7 @@ export async function exportPlansJSON(): Promise<any[]> {
 /**
  * 导出权益为JSON
  */
-export async function exportBenefitsJSON(): Promise<any[]> {
+export async function exportBenefitsJSON(): Promise<BenefitExport[]> {
   const benefits = await benefitRepo.listBenefits({
     limit: 10000
   });
@@ -212,9 +319,9 @@ export async function exportBenefitsJSON(): Promise<any[]> {
 export async function exportEntity(
   entityType: string,
   format: 'json' | 'csv' = 'json',
-  options?: any
-): Promise<any> {
-  let data: any[];
+  options?: ExportOptions
+): Promise<ContentTextExport[] | AnnouncementExport[] | BannerExport[] | PlanExport[] | BenefitExport[] | string> {
+  let data: CSVRow[];
 
   switch (entityType) {
     case 'content_texts':

@@ -20,10 +20,10 @@ import {
  * Provider可以通过这个接口输出日志
  */
 export interface ILogger {
-  info(message: string, meta?: any): void;
-  warn(message: string, meta?: any): void;
-  error(message: string, meta?: any): void;
-  debug(message: string, meta?: any): void;
+  info(message: string, meta?: unknown): void;
+  warn(message: string, meta?: unknown): void;
+  error(message: string, meta?: unknown): void;
+  debug(message: string, meta?: unknown): void;
 }
 
 /**
@@ -31,19 +31,19 @@ export interface ILogger {
  * 生产环境应该替换成Winston等专业日志库
  */
 class ConsoleLogger implements ILogger {
-  info(message: string, meta?: any): void {
+  info(message: string, meta?: unknown): void {
     console.log(`[INFO] ${message}`, meta || '');
   }
 
-  warn(message: string, meta?: any): void {
+  warn(message: string, meta?: unknown): void {
     console.warn(`[WARN] ${message}`, meta || '');
   }
 
-  error(message: string, meta?: any): void {
+  error(message: string, meta?: unknown): void {
     console.error(`[ERROR] ${message}`, meta || '');
   }
 
-  debug(message: string, meta?: any): void {
+  debug(message: string, meta?: unknown): void {
     console.debug(`[DEBUG] ${message}`, meta || '');
   }
 }
@@ -83,7 +83,7 @@ export abstract class BaseProvider implements IProvider {
    * @param input - 输入数据
    * @returns 校验错误信息，null表示校验通过
    */
-  public abstract validate(input: any): string | null;
+  public abstract validate(input: unknown): string | null;
 
   /**
    * 执行Provider任务（带重试和超时控制）
@@ -137,11 +137,14 @@ export abstract class BaseProvider implements IProvider {
         ...result,
         duration: Date.now() - startTime
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       clearTimeout(timeoutId);
 
       // 处理超时错误
-      if (error.name === 'AbortError' || abortController.signal.aborted) {
+      if (
+        (typeof error === 'object' && error !== null && 'name' in error && (error as Record<string, unknown>).name === 'AbortError') ||
+        abortController.signal.aborted
+      ) {
         this.logger.error(`[${this.key}] 执行超时`, {
           taskId: context.taskId,
           timeout
@@ -158,21 +161,33 @@ export abstract class BaseProvider implements IProvider {
       }
 
       // 处理其他错误
+      let errorCode = ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED;
+      let message = '执行失败';
+      let details: unknown = undefined;
+
+      if (error instanceof ProviderError) {
+        errorCode = error.code;
+        message = error.message;
+        details = error.details;
+      } else if (error instanceof Error) {
+        message = error.message || '执行失败';
+        details = { stack: error.stack };
+      } else {
+        message = String(error);
+      }
+
       this.logger.error(`[${this.key}] 执行失败`, {
         taskId: context.taskId,
-        error: error.message,
-        stack: error.stack
+        error: message,
+        stack: details
       });
 
       return {
         success: false,
         error: {
-          code:
-            error instanceof ProviderError
-              ? error.code
-              : ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED,
-          message: error.message || '执行失败',
-          details: error.details || { stack: error.stack }
+          code: errorCode,
+          message,
+          details
         },
         duration: Date.now() - startTime
       };
@@ -186,7 +201,7 @@ export abstract class BaseProvider implements IProvider {
    * @returns Promise<ExecResult> - 执行结果
    */
   protected async executeWithRetry(context: ExecContext): Promise<ExecResult> {
-    let lastError: any = null;
+    let lastError: unknown = null;
     let attempt = 0;
 
     while (attempt <= this.retryPolicy.maxRetries) {
@@ -226,7 +241,7 @@ export abstract class BaseProvider implements IProvider {
           `[${this.key}] 执行失败，准备重试 (尝试 ${attempt + 1}/${this.retryPolicy.maxRetries + 1})`,
           { taskId: context.taskId, error: errorCode }
         );
-      } catch (error: any) {
+      } catch (error: unknown) {
         // 捕获doExecute抛出的异常
         lastError = error;
 
@@ -235,26 +250,36 @@ export abstract class BaseProvider implements IProvider {
           throw error;
         }
 
-        const isRetryable = this.isRetryableError(
-          error.code || ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED
-        );
+        const errorCode =
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error
+            ? (error as Record<string, unknown>).code
+            : ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED;
+
+        const isRetryable = this.isRetryableError(String(errorCode));
 
         // 艹，如果不可重试，直接throw
         if (!isRetryable) {
           throw error;
         }
 
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : String(error);
+
         // 如果已经达到最大重试次数，不throw，让循环结束后返回MAX_RETRIES_EXCEEDED
         if (attempt >= this.retryPolicy.maxRetries) {
           this.logger.warn(
             `[${this.key}] 执行异常，已达最大重试次数 (尝试 ${attempt + 1}/${this.retryPolicy.maxRetries + 1})`,
-            { taskId: context.taskId, error: error.message }
+            { taskId: context.taskId, error: errorMessage }
           );
           // 不throw，让程序继续，最后会走到循环后面返回MAX_RETRIES_EXCEEDED
         } else {
           this.logger.warn(
             `[${this.key}] 执行异常，准备重试 (尝试 ${attempt + 1}/${this.retryPolicy.maxRetries + 1})`,
-            { taskId: context.taskId, error: error.message }
+            { taskId: context.taskId, error: errorMessage }
           );
         }
       }
@@ -270,9 +295,15 @@ export abstract class BaseProvider implements IProvider {
         // 等待一段时间后重试，同时检查是否被中止
         try {
           await this.sleep(delay, context.signal);
-        } catch (sleepError: any) {
+        } catch (sleepError: unknown) {
           // sleep被中止，直接抛出
-          if (sleepError.name === 'AbortError' || context.signal?.aborted) {
+          if (
+            (typeof sleepError === 'object' &&
+              sleepError !== null &&
+              'name' in sleepError &&
+              (sleepError as Record<string, unknown>).name === 'AbortError') ||
+            context.signal?.aborted
+          ) {
             throw sleepError;
           }
           throw sleepError;
@@ -359,12 +390,13 @@ export abstract class BaseProvider implements IProvider {
 
       // 监听中止信号
       if (signal) {
-        signal.addEventListener('abort', () => {
+        const abortHandler = () => {
           clearTimeout(timeoutId);
           const error = new Error('执行被中止');
-          error.name = 'AbortError'; // 艹，这个name很重要！
+          (error as Record<string, string>).name = 'AbortError'; // 艹，这个name很重要！
           reject(error);
-        });
+        };
+        signal.addEventListener('abort', abortHandler);
       }
     });
   }

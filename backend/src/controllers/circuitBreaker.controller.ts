@@ -9,9 +9,10 @@ class CircuitBreakerController {
     try {
       const states = circuitBreakerService.getAllCircuitBreakerStates();
       res.json({ success: true, data: states, timestamp: new Date().toISOString() });
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       logger.error('[CircuitBreakerController] 获取熔断器状态失败:', error);
-      res.status(500).json({ success: false, error: '获取熔断器状态失败', message: error.message });
+      res.status(500).json({ success: false, error: '获取熔断器状态失败', message: err.message });
     }
   }
 
@@ -24,9 +25,10 @@ class CircuitBreakerController {
         return;
       }
       res.json({ success: true, data: state, timestamp: new Date().toISOString() });
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       logger.error('[CircuitBreakerController] 获取熔断器状态失败:', error);
-      res.status(500).json({ success: false, error: '获取熔断器状态失败', message: error.message });
+      res.status(500).json({ success: false, error: '获取熔断器状态失败', message: err.message });
     }
   }
 
@@ -45,9 +47,10 @@ class CircuitBreakerController {
         reason: reason || 'manual',
         timestamp: new Date().toISOString()
       });
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       logger.error('[CircuitBreakerController] 打开熔断器失败:', error);
-      res.status(500).json({ success: false, error: '打开熔断器失败', message: error.message });
+      res.status(500).json({ success: false, error: '打开熔断器失败', message: err.message });
     }
   }
 
@@ -64,9 +67,10 @@ class CircuitBreakerController {
         message: `熔断器 ${name} 已手动关闭`,
         timestamp: new Date().toISOString()
       });
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       logger.error('[CircuitBreakerController] 关闭熔断器失败:', error);
-      res.status(500).json({ success: false, error: '关闭熔断器失败', message: error.message });
+      res.status(500).json({ success: false, error: '关闭熔断器失败', message: err.message });
     }
   }
 
@@ -83,9 +87,10 @@ class CircuitBreakerController {
         message: `熔断器 ${name} 已重置`,
         timestamp: new Date().toISOString()
       });
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       logger.error('[CircuitBreakerController] 重置熔断器失败:', error);
-      res.status(500).json({ success: false, error: '重置熔断器失败', message: error.message });
+      res.status(500).json({ success: false, error: '重置熔断器失败', message: err.message });
     }
   }
 
@@ -93,11 +98,12 @@ class CircuitBreakerController {
     try {
       const states = providerWrapperService.getAllProviderStates();
       res.json({ success: true, data: states, timestamp: new Date().toISOString() });
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       logger.error('[CircuitBreakerController] 获取Provider状态失败:', error);
       res
         .status(500)
-        .json({ success: false, error: '获取Provider状态失败', message: error.message });
+        .json({ success: false, error: '获取Provider状态失败', message: err.message });
     }
   }
 
@@ -106,11 +112,12 @@ class CircuitBreakerController {
       const providers = providerRegistryService.getRegisteredProviders();
       const states = providerRegistryService.getAllProviderStates();
       res.json({ success: true, data: { providers, states }, timestamp: new Date().toISOString() });
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       logger.error('[CircuitBreakerController] 获取已注册Provider失败:', error);
       res
         .status(500)
-        .json({ success: false, error: '获取已注册Provider失败', message: error.message });
+        .json({ success: false, error: '获取已注册Provider失败', message: err.message });
     }
   }
 
@@ -119,11 +126,12 @@ class CircuitBreakerController {
       const { name } = req.params as { name: string };
       const state = providerWrapperService.getProviderStats(name);
       res.json({ success: true, data: state, timestamp: new Date().toISOString() });
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       logger.error('[CircuitBreakerController] 获取Provider状态失败:', error);
       res
         .status(500)
-        .json({ success: false, error: '获取Provider状态失败', message: error.message });
+        .json({ success: false, error: '获取Provider状态失败', message: err.message });
     }
   }
 
@@ -132,11 +140,12 @@ class CircuitBreakerController {
       const { name } = req.params as { name: string };
       const success = providerWrapperService.resetProviderStats(name);
       res.json({ success, message: success ? '重置成功' : '重置失败' });
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       logger.error('[CircuitBreakerController] 重置Provider统计失败:', error);
       res
         .status(500)
-        .json({ success: false, error: '重置Provider统计失败', message: error.message });
+        .json({ success: false, error: '重置Provider统计失败', message: err.message });
     }
   }
 
@@ -146,18 +155,22 @@ class CircuitBreakerController {
         providerName: string;
         methodName: string;
       };
-      const { args = [], options = {} } = (req.body ?? {}) as { args?: any[]; options?: any };
+      const { args = [], options = {} } = (req.body ?? {}) as {
+        args?: unknown[];
+        options?: Record<string, unknown>;
+      };
       if (!providerRegistryService.isProviderRegistered(providerName)) {
         res.status(404).json({ success: false, error: 'Provider未注册', providerName });
         return;
       }
       const result = await providerRegistryService.execute(providerName, methodName, args, options);
       res.json({ success: true, data: result });
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       logger.error('[CircuitBreakerController] 执行Provider方法失败:', error);
       res
         .status(500)
-        .json({ success: false, error: '执行Provider方法失败', message: error.message });
+        .json({ success: false, error: '执行Provider方法失败', message: err.message });
     }
   }
 
@@ -187,12 +200,13 @@ class CircuitBreakerController {
         },
         timestamp: new Date().toISOString()
       });
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       logger.error('[CircuitBreakerController] 健康检查失败:', error);
       res.status(500).json({
         success: false,
         error: '健康检查失败',
-        message: error.message,
+        message: err.message,
         status: 'unhealthy'
       });
     }
@@ -202,15 +216,16 @@ class CircuitBreakerController {
     try {
       const stats = circuitBreakerService.getStats();
       res.json({ success: true, data: stats, timestamp: new Date().toISOString() });
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       logger.error('[CircuitBreakerController] 获取熔断器统计失败:', error);
-      res.status(500).json({ success: false, error: '获取熔断器统计失败', message: error.message });
+      res.status(500).json({ success: false, error: '获取熔断器统计失败', message: err.message });
     }
   }
 
   async cleanupInactiveCircuitBreakers(req: Request, res: Response): Promise<void> {
     try {
-      const { inactiveThresholdMs = '3600000' } = req.query as any;
+      const { inactiveThresholdMs = '3600000' } = req.query as Record<string, unknown>;
       const cleanedCount = circuitBreakerService.cleanupInactiveCircuitBreakers(
         Number(inactiveThresholdMs)
       );
@@ -221,9 +236,10 @@ class CircuitBreakerController {
         thresholdMs: Number(inactiveThresholdMs),
         timestamp: new Date().toISOString()
       });
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       logger.error('[CircuitBreakerController] 清理熔断器失败:', error);
-      res.status(500).json({ success: false, error: '清理熔断器失败', message: error.message });
+      res.status(500).json({ success: false, error: '清理熔断器失败', message: err.message });
     }
   }
 
@@ -236,7 +252,12 @@ class CircuitBreakerController {
           .json({ success: false, error: '参数错误', message: '需要提供 operation 和 names 数组' });
         return;
       }
-      const results: any[] = [];
+      const results: Array<{
+        name: string;
+        success: boolean;
+        operation: string;
+        error?: string;
+      }> = [];
       let successCount = 0;
       let failureCount = 0;
       for (const name of names) {
@@ -258,8 +279,9 @@ class CircuitBreakerController {
           results.push({ name, success, operation });
           if (success) successCount++;
           else failureCount++;
-        } catch (error: any) {
-          results.push({ name, success: false, operation, error: error.message });
+        } catch (error) {
+          const err = error as Error;
+          results.push({ name, success: false, operation, error: err.message });
           failureCount++;
         }
       }
@@ -268,9 +290,10 @@ class CircuitBreakerController {
         data: { operation, results, summary: { total: names.length, successCount, failureCount } },
         timestamp: new Date().toISOString()
       });
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       logger.error('[CircuitBreakerController] 批量操作熔断器失败:', error);
-      res.status(500).json({ success: false, error: '批量操作熔断器失败', message: error.message });
+      res.status(500).json({ success: false, error: '批量操作熔断器失败', message: err.message });
     }
   }
 }

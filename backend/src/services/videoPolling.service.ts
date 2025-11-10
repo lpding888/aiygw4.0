@@ -4,10 +4,27 @@ import videoGenerateService from './videoGenerate.service.js';
 import taskService from './task.service.js';
 import quotaService from './quota.service.js';
 import logger from '../utils/logger.js';
+import type { Task } from '../types/task.types.js';
+
+type CronScheduledTask = ReturnType<typeof cron.schedule>;
+
+type KuaiStatusResult = {
+  vendorTaskId: string;
+  status: string;
+  videoUrl?: string;
+  errorMessage?: string;
+  statusUpdateTime?: string;
+};
+
+type COSUploadResult = {
+  resultUrls: string[];
+  coverUrl: string;
+  thumbnailUrl: string;
+};
 
 class VideoPollingService {
   private isRunning = false;
-  private pollingTask: any = null;
+  private pollingTask: CronScheduledTask | null = null;
 
   start(): void {
     if (this.isRunning) {
@@ -50,17 +67,20 @@ class VideoPollingService {
         await this.processVideoTask(task);
       }
       logger.info('[VideoPollingService] 视频任务轮询完成');
-    } catch (error: any) {
-      logger.error('[VideoPollingService] 轮询视频任务失败', { error: error.message });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[VideoPollingService] 轮询视频任务失败', { error: err.message });
     }
   }
 
-  private async processVideoTask(task: any): Promise<void> {
+  private async processVideoTask(task: Task): Promise<void> {
     try {
       logger.info(
         `[VideoPollingService] 处理视频任务 taskId=${task.id} vendorTaskId=${task.vendorTaskId}`
       );
-      if (videoGenerateService.isTimeout(task.created_at)) {
+      const createdAt =
+        task.created_at instanceof Date ? task.created_at : new Date(task.created_at);
+      if (videoGenerateService.isTimeout(createdAt)) {
         await this.handleTimeoutTask(task);
         return;
       }
@@ -83,14 +103,15 @@ class VideoPollingService {
             `[VideoPollingService] 未知任务状态 taskId=${task.id} status=${statusResult.status}`
           );
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       logger.error(`[VideoPollingService] 处理视频任务失败 taskId=${task.id}`, {
-        error: error.message
+        error: err.message
       });
     }
   }
 
-  private async handleSuccessTask(task: any, statusResult: any): Promise<void> {
+  private async handleSuccessTask(task: Task, statusResult: KuaiStatusResult): Promise<void> {
     try {
       logger.info(
         `[VideoPollingService] 处理成功任务 taskId=${task.id} videoUrl=${statusResult.videoUrl}`
@@ -108,15 +129,20 @@ class VideoPollingService {
         });
       logger.info(`[VideoPollingService] 任务成功处理完成 taskId=${task.id}`);
       await quotaService.confirm(task.id).catch(() => {});
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       logger.error(`[VideoPollingService] 处理成功任务失败 taskId=${task.id}`, {
-        error: error.message
+        error: err.message
       });
-      await this.handleFailedTask(task, { errorMessage: `视频下载失败: ${error.message}` });
+      await this.handleFailedTask(task, {
+        vendorTaskId: task.vendorTaskId || '',
+        status: 'failed',
+        errorMessage: `视频下载失败: ${err.message}`
+      });
     }
   }
 
-  private async handleFailedTask(task: any, statusResult: any): Promise<void> {
+  private async handleFailedTask(task: Task, statusResult: KuaiStatusResult): Promise<void> {
     try {
       const errorMessage = statusResult.errorMessage || '视频生成失败';
       logger.info(`[VideoPollingService] 处理失败任务 taskId=${task.id} error=${errorMessage}`);
@@ -128,14 +154,15 @@ class VideoPollingService {
       });
       await quotaService.cancel(task.id).catch(() => {});
       logger.info(`[VideoPollingService] 失败任务处理完成 taskId=${task.id} 已退还配额`);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       logger.error(`[VideoPollingService] 处理失败任务异常 taskId=${task.id}`, {
-        error: error.message
+        error: err.message
       });
     }
   }
 
-  private async handleTimeoutTask(task: any): Promise<void> {
+  private async handleTimeoutTask(task: Task): Promise<void> {
     try {
       logger.info(`[VideoPollingService] 处理超时任务 taskId=${task.id}`);
       await db('tasks').where('id', task.id).update({
@@ -146,17 +173,15 @@ class VideoPollingService {
       });
       await quotaService.cancel(task.id).catch(() => {});
       logger.info(`[VideoPollingService] 超时任务处理完成 taskId=${task.id} 已退还配额`);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       logger.error(`[VideoPollingService] 处理超时任务异常 taskId=${task.id}`, {
-        error: error.message
+        error: err.message
       });
     }
   }
 
-  private async downloadVideoToCOS(
-    task: any,
-    videoUrl: string
-  ): Promise<{ resultUrls: string[]; coverUrl: string; thumbnailUrl: string }> {
+  private async downloadVideoToCOS(task: Task, videoUrl: string): Promise<COSUploadResult> {
     logger.info(`[VideoPollingService] 下载视频到COS taskId=${task.id} videoUrl=${videoUrl}`);
     // TODO: 实现COS下载逻辑；先返回模拟
     const result = {
@@ -171,7 +196,7 @@ class VideoPollingService {
     return result;
   }
 
-  getStatus() {
+  getStatus(): { isRunning: boolean; pollingInterval: string } {
     return { isRunning: this.isRunning, pollingInterval: '5 minutes' };
   }
 }

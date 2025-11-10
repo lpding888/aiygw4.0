@@ -139,7 +139,7 @@ class ProviderManagementService {
       const response = await axios.get(`${provider.baseUrl}/health`, {
         timeout: provider.timeoutMs,
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Bearer ${apiKey as string}`,
           'Content-Type': 'application/json'
         }
       });
@@ -154,9 +154,10 @@ class ProviderManagementService {
       } else {
         throw new Error(`健康检查失败: ${response.status}`);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       const latency = Date.now() - startTime;
-      const errorMessage = error.message || '连接失败';
+      const err = error instanceof Error ? error : new Error(String(error));
+      const errorMessage = err.message || '连接失败';
 
       // 更新健康状态
       await this.updateHealthStatus(providerId, false, errorMessage);

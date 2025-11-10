@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Knex } from 'knex';
 import { db } from '../config/database.js';
 import logger from '../utils/logger.js';
@@ -39,6 +38,11 @@ type CommissionRecord = {
 };
 
 type CommissionStatus = 'frozen' | 'available' | 'cancelled';
+
+type DatabaseError = {
+  code?: string;
+  message?: string;
+};
 
 const DUP_ENTRY_ERROR_CODES = new Set(['ER_DUP_ENTRY', '23505']);
 
@@ -112,8 +116,9 @@ class CommissionService {
           freeze_until: freezeUntil,
           created_at: new Date()
         });
-      } catch (error: any) {
-        if (error?.code && DUP_ENTRY_ERROR_CODES.has(error.code)) {
+      } catch (error: unknown) {
+        const dbError = error as DatabaseError;
+        if (dbError?.code && DUP_ENTRY_ERROR_CODES.has(dbError.code)) {
           logger.warn(`订单已计佣,跳过: orderId=${orderId}`);
           return null;
         }

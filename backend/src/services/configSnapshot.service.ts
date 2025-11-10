@@ -6,6 +6,18 @@
 import db from '../db/index.js';
 
 /**
+ * 配置数据类型定义
+ */
+export type ConfigData = Record<string, unknown>;
+
+/**
+ * 回滚操作返回结果
+ */
+export interface RollbackResult {
+  [key: string]: unknown;
+}
+
+/**
  * 配置快照接口
  */
 export interface ConfigSnapshot {
@@ -14,7 +26,7 @@ export interface ConfigSnapshot {
   description?: string;
   config_type: string;
   config_ref?: string;
-  config_data: any;
+  config_data: ConfigData;
   created_by?: number;
   created_at: Date;
   is_rollback: boolean;
@@ -29,7 +41,7 @@ export interface CreateSnapshotInput {
   description?: string;
   config_type: string;
   config_ref?: string;
-  config_data: any;
+  config_data: ConfigData;
   created_by?: number;
 }
 
@@ -121,7 +133,7 @@ export async function listSnapshots(options: {
  * @param userId - 操作用户ID
  * @returns 回滚后的配置数据
  */
-export async function rollbackToSnapshot(snapshotId: number, userId?: number): Promise<any> {
+export async function rollbackToSnapshot(snapshotId: number, userId?: number): Promise<RollbackResult> {
   // 1. 获取快照
   const snapshot = await getSnapshotById(snapshotId);
   if (!snapshot) {
@@ -131,7 +143,7 @@ export async function rollbackToSnapshot(snapshotId: number, userId?: number): P
   console.log(`[SNAPSHOT] 开始回滚到快照: ${snapshot.snapshot_name}`);
 
   // 2. 根据配置类型执行回滚
-  let result: any;
+  let result: RollbackResult;
 
   switch (snapshot.config_type) {
     case 'provider':
@@ -176,7 +188,7 @@ export async function rollbackToSnapshot(snapshotId: number, userId?: number): P
 /**
  * 回滚Provider配置
  */
-async function rollbackProviderConfig(snapshot: ConfigSnapshot): Promise<any> {
+async function rollbackProviderConfig(snapshot: ConfigSnapshot): Promise<RollbackResult> {
   const { config_ref, config_data } = snapshot;
 
   if (!config_ref) {
@@ -197,25 +209,25 @@ async function rollbackProviderConfig(snapshot: ConfigSnapshot): Promise<any> {
     throw new Error(`Provider不存在: ${config_ref}`);
   }
 
-  return config_data;
+  return config_data as RollbackResult;
 }
 
 /**
  * 回滚公告配置
  */
-async function rollbackAnnouncementConfig(snapshot: ConfigSnapshot): Promise<any> {
+async function rollbackAnnouncementConfig(snapshot: ConfigSnapshot): Promise<RollbackResult> {
   // TODO: 实现公告回滚（CMS-401实现后集成）
   console.log('[SNAPSHOT] 公告回滚功能待实现');
-  return snapshot.config_data;
+  return snapshot.config_data as RollbackResult;
 }
 
 /**
  * 回滚轮播图配置
  */
-async function rollbackBannerConfig(snapshot: ConfigSnapshot): Promise<any> {
+async function rollbackBannerConfig(snapshot: ConfigSnapshot): Promise<RollbackResult> {
   // TODO: 实现轮播图回滚（CMS-402实现后集成）
   console.log('[SNAPSHOT] 轮播图回滚功能待实现');
-  return snapshot.config_data;
+  return snapshot.config_data as RollbackResult;
 }
 
 /**

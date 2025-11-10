@@ -13,9 +13,29 @@ export interface ProviderConfig {
   provider_id: string;
   provider_name: string;
   type: string;
-  config: any;
+  config: Record<string, unknown>;
   is_enabled: boolean;
   deleted_at: Date | null;
+}
+
+/**
+ * Provider健康检查配置
+ */
+export interface ProviderHealthCheckConfig {
+  [key: string]: unknown;
+}
+
+/**
+ * 更新健康记录数据
+ */
+export interface UpdateHealthRecordData {
+  is_healthy: boolean;
+  last_check_at: Date;
+  response_time_ms: number;
+  error_message: string | null;
+  consecutive_failures: number;
+  updated_at: Date;
+  last_recovery_at?: Date;
 }
 
 /**
@@ -78,10 +98,11 @@ export class ProviderHealthService {
 
       // 2. 并发执行健康检查
       const checkPromises = providers.map((provider) =>
-        this.checkProviderHealth(provider).catch((err: any) => {
+        this.checkProviderHealth(provider).catch((err: unknown) => {
+          const error = err instanceof Error ? err : new Error(String(err));
           logger.error(
             `[ProviderHealthService] Provider健康检查异常 ` +
-              `providerId=${provider.provider_id} error=${err.message}`
+              `providerId=${provider.provider_id} error=${error.message}`
           );
           return null;
         })
@@ -103,9 +124,10 @@ export class ProviderHealthService {
         success: successCount,
         fail: failCount
       };
-    } catch (error: any) {
-      logger.error(`[ProviderHealthService] 健康检查失败: ${error.message}`, error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`[ProviderHealthService] 健康检查失败: ${err.message}`, err);
+      throw err;
     }
   }
 
@@ -153,16 +175,17 @@ export class ProviderHealthService {
       );
 
       return { isHealthy, responseTime };
-    } catch (error: any) {
+    } catch (error: unknown) {
       const responseTime = Date.now() - startTime;
+      const err = error instanceof Error ? error : new Error(String(error));
 
       logger.error(
         `[ProviderHealthService] Provider检查失败 ` +
-          `providerId=${provider_id} error=${error.message}`
+          `providerId=${provider_id} error=${err.message}`
       );
 
       // 更新为不健康状态
-      await this.updateHealthRecord(provider_id, false, responseTime, error.message);
+      await this.updateHealthRecord(provider_id, false, responseTime, err.message);
 
       return { isHealthy: false, responseTime };
     }
@@ -174,15 +197,16 @@ export class ProviderHealthService {
    * @param config - Provider配置
    * @returns 是否健康
    */
-  async checkSyncImageProcessHealth(config: any): Promise<boolean> {
+  async checkSyncImageProcessHealth(config: ProviderHealthCheckConfig): Promise<boolean> {
     try {
       // TODO: 实现实际的健康检查逻辑
       // 例如: ping腾讯云数据万象API
       // 暂时返回true
       logger.debug('[ProviderHealthService] 检查同步图片处理Provider (暂时返回健康)');
       return true;
-    } catch (error: any) {
-      logger.error(`[ProviderHealthService] 同步图片处理健康检查失败: ${error.message}`);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`[ProviderHealthService] 同步图片处理健康检查失败: ${err.message}`);
       return false;
     }
   }
@@ -193,14 +217,15 @@ export class ProviderHealthService {
    * @param config - Provider配置
    * @returns 是否健康
    */
-  async checkRunninghubHealth(config: any): Promise<boolean> {
+  async checkRunninghubHealth(config: ProviderHealthCheckConfig): Promise<boolean> {
     try {
       // TODO: 实现实际的健康检查逻辑
       // 例如: 调用RunningHub的health endpoint
       logger.debug('[ProviderHealthService] 检查RunningHub Provider (暂时返回健康)');
       return true;
-    } catch (error: any) {
-      logger.error(`[ProviderHealthService] RunningHub健康检查失败: ${error.message}`);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`[ProviderHealthService] RunningHub健康检查失败: ${err.message}`);
       return false;
     }
   }
@@ -211,14 +236,15 @@ export class ProviderHealthService {
    * @param config - Provider配置
    * @returns 是否健康
    */
-  async checkScfHealth(config: any): Promise<boolean> {
+  async checkScfHealth(config: ProviderHealthCheckConfig): Promise<boolean> {
     try {
       // TODO: 实现实际的健康检查逻辑
       // 例如: 调用云函数的health check接口
       logger.debug('[ProviderHealthService] 检查SCF Provider (暂时返回健康)');
       return true;
-    } catch (error: any) {
-      logger.error(`[ProviderHealthService] SCF健康检查失败: ${error.message}`);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`[ProviderHealthService] SCF健康检查失败: ${err.message}`);
       return false;
     }
   }
@@ -245,12 +271,12 @@ export class ProviderHealthService {
 
       if (existing) {
         // 更新现有记录
-        const updateData: any = {
+        const updateData: UpdateHealthRecordData = {
           is_healthy: isHealthy,
           last_check_at: now,
           response_time_ms: responseTime,
           error_message: errorMessage,
-          consecutive_failures: isHealthy ? 0 : (existing.consecutive_failures || 0) + 1,
+          consecutive_failures: isHealthy ? 0 : (existing.consecutive_failures as number || 0) + 1,
           updated_at: now
         };
 
@@ -273,8 +299,9 @@ export class ProviderHealthService {
           updated_at: now
         });
       }
-    } catch (error: any) {
-      logger.error(`[ProviderHealthService] 更新健康记录失败 providerId=${providerId}`, error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`[ProviderHealthService] 更新健康记录失败 providerId=${providerId}`, err);
     }
   }
 
@@ -302,9 +329,10 @@ export class ProviderHealthService {
         .orderBy('phc.last_check_at', 'desc');
 
       return healthRecords;
-    } catch (error: any) {
-      logger.error(`[ProviderHealthService] 获取健康摘要失败: ${error.message}`, error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`[ProviderHealthService] 获取健康摘要失败: ${err.message}`, err);
+      throw err;
     }
   }
 
@@ -331,9 +359,10 @@ export class ProviderHealthService {
         .orderBy('phc.consecutive_failures', 'desc');
 
       return unhealthyProviders;
-    } catch (error: any) {
-      logger.error(`[ProviderHealthService] 获取不健康Provider失败: ${error.message}`, error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`[ProviderHealthService] 获取不健康Provider失败: ${err.message}`, err);
+      throw err;
     }
   }
 }

@@ -87,11 +87,13 @@ export class CacheInvalidationManager {
           this.isReady = true;
         });
 
-        this.publisher.on('error', (err: any) => {
-          console.error('[CACHE_INVALIDATION] Publisher错误:', err.message);
+        this.publisher.on('error', (err: unknown) => {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.error('[CACHE_INVALIDATION] Publisher错误:', errMsg);
         });
-      } catch (error: any) {
-        console.error('[CACHE_INVALIDATION] 初始化失败:', error.message);
+      } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error('[CACHE_INVALIDATION] 初始化失败:', errMsg);
       }
     } else {
       console.warn('[CACHE_INVALIDATION] 未配置Redis，缓存失效广播不可用');
@@ -111,9 +113,10 @@ export class CacheInvalidationManager {
   private setupSubscriber(): void {
     if (!this.subscriber) return;
 
-    this.subscriber.subscribe(this.channel, (err: any) => {
+    this.subscriber.subscribe(this.channel, (err: unknown) => {
       if (err) {
-        console.error('[CACHE_INVALIDATION] 订阅失败:', err.message);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error('[CACHE_INVALIDATION] 订阅失败:', errMsg);
       } else {
         console.log(`[CACHE_INVALIDATION] 已订阅频道: ${this.channel}`);
       }
@@ -133,13 +136,15 @@ export class CacheInvalidationManager {
         console.log(`[CACHE_INVALIDATION] 收到失效消息: ${msg.type}`, msg.keys || msg.pattern);
 
         await this.handleInvalidationMessage(msg);
-      } catch (error: any) {
-        console.error('[CACHE_INVALIDATION] 处理消息失败:', error.message);
+      } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        console.error('[CACHE_INVALIDATION] 处理消息失败:', errMsg);
       }
     });
 
-    this.subscriber.on('error', (err: any) => {
-      console.error('[CACHE_INVALIDATION] Subscriber错误:', err.message);
+    this.subscriber.on('error', (err: unknown) => {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error('[CACHE_INVALIDATION] Subscriber错误:', errMsg);
     });
   }
 
@@ -193,8 +198,9 @@ export class CacheInvalidationManager {
     try {
       await this.publisher.publish(this.channel, JSON.stringify(message));
       console.log(`[CACHE_INVALIDATION] 已发布失效消息: ${keys.join(', ')}`);
-    } catch (error: any) {
-      console.error('[CACHE_INVALIDATION] 发布失败:', error.message);
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error('[CACHE_INVALIDATION] 发布失败:', errMsg);
     }
   }
 
@@ -220,8 +226,9 @@ export class CacheInvalidationManager {
     try {
       await this.publisher.publish(this.channel, JSON.stringify(message));
       console.log(`[CACHE_INVALIDATION] 已发布模糊失效消息: ${pattern}`);
-    } catch (error: any) {
-      console.error('[CACHE_INVALIDATION] 发布失败:', error.message);
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error('[CACHE_INVALIDATION] 发布失败:', errMsg);
     }
   }
 
@@ -245,8 +252,9 @@ export class CacheInvalidationManager {
     try {
       await this.publisher.publish(this.channel, JSON.stringify(message));
       console.log('[CACHE_INVALIDATION] 已发布清空缓存消息');
-    } catch (error: any) {
-      console.error('[CACHE_INVALIDATION] 发布失败:', error.message);
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error('[CACHE_INVALIDATION] 发布失败:', errMsg);
     }
   }
 

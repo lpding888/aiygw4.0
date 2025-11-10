@@ -8,10 +8,16 @@ import { validate } from '../middlewares/validate.middleware.js';
 const router = Router();
 
 // 文件上传配置
+interface FileWithMimetype {
+  mimetype: string;
+}
+
+type FileFilterCallback = (err: Error | null, acceptFile?: boolean) => void;
+
 const upload = multer({
   dest: 'uploads/temp/',
   limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (_req: Request, file: any, cb: (err: any, acceptFile?: boolean) => void) => {
+  fileFilter: (_req: Request, file: FileWithMimetype, cb: FileFilterCallback) => {
     const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     if (allowed.includes(file.mimetype)) cb(null, true);
     else cb(new Error('只支持 JPG、PNG、GIF、WebP 格式的图片'));
@@ -257,23 +263,29 @@ router.post('/upload/avatar', upload.single('avatar'), userProfileController.upl
 router.post('/upload/banner', upload.single('banner'), userProfileController.uploadBanner);
 
 // Multer错误处理
-router.use((error: any, _req: Request, res: Response, next: NextFunction) => {
-  if (error && error.name === 'MulterError') {
-    if (error.code === 'LIMIT_FILE_SIZE') {
+interface MulterError extends Error {
+  code?: string;
+  name: string;
+}
+
+router.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
+  const err = error as MulterError | null;
+  if (err && err.name === 'MulterError') {
+    if (err.code === 'LIMIT_FILE_SIZE') {
       res.status(400).json({ success: false, error: '文件大小超过限制（最大5MB）' });
       return;
     }
-    if (error.code === 'LIMIT_FILE_COUNT') {
+    if (err.code === 'LIMIT_FILE_COUNT') {
       res.status(400).json({ success: false, error: '文件数量超过限制' });
       return;
     }
-    if (error.code === 'LIMIT_UNEXPECTED_FILE') {
+    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
       res.status(400).json({ success: false, error: '意外的文件字段' });
       return;
     }
   }
-  if (error && error.message === '只支持 JPG、PNG、GIF、WebP 格式的图片') {
-    res.status(400).json({ success: false, error: error.message });
+  if (err && err.message === '只支持 JPG、PNG、GIF、WebP 格式的图片') {
+    res.status(400).json({ success: false, error: err.message });
     return;
   }
   next(error);

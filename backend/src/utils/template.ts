@@ -21,7 +21,7 @@ export interface TemplateOptions {
  * @param path - 点路径
  * @returns 提取的值，不存在返回undefined
  */
-export function extractValue(obj: any, path: string): any {
+export function extractValue(obj: unknown, path: string): unknown {
   if (!obj || typeof obj !== 'object') {
     return undefined;
   }
@@ -76,10 +76,10 @@ export function escapeHtml(str: string): string {
  * ```
  */
 export function replaceVariables(
-  template: any,
-  variables: Record<string, any>,
+  template: unknown,
+  variables: Record<string, unknown>,
   options: TemplateOptions = {}
-): any {
+): unknown {
   const { throwOnMissing = false, escapeHtml: shouldEscape = false } = options;
 
   // 艹，如果template是字符串，直接替换
@@ -114,10 +114,10 @@ export function replaceVariables(
 
   // 如果template是对象，递归替换每个值
   if (template !== null && typeof template === 'object') {
-    const result: Record<string, any> = {};
+    const result: Record<string, unknown> = {};
     for (const key in template) {
-      if (template.hasOwnProperty(key)) {
-        result[key] = replaceVariables(template[key], variables, options);
+      if ((template as Record<string, unknown>).hasOwnProperty(key)) {
+        result[key] = replaceVariables((template as Record<string, unknown>)[key], variables, options);
       }
     }
     return result;
@@ -133,10 +133,10 @@ export function replaceVariables(
  * @param template - 模板字符串或对象
  * @returns 变量名数组
  */
-export function extractVariableReferences(template: any): string[] {
+export function extractVariableReferences(template: unknown): string[] {
   const references = new Set<string>();
 
-  function scan(value: any): void {
+  function scan(value: unknown): void {
     if (typeof value === 'string') {
       // 匹配所有 {{varName}}
       const matches = value.matchAll(/\{\{([a-zA-Z0-9_.]+)\}\}/g);
@@ -160,7 +160,7 @@ export function extractVariableReferences(template: any): string[] {
  * @param variables - 变量对象
  * @returns 缺失的变量名数组，如果全部存在则返回空数组
  */
-export function validateVariables(template: any, variables: Record<string, any>): string[] {
+export function validateVariables(template: unknown, variables: Record<string, unknown>): string[] {
   const references = extractVariableReferences(template);
   const missing: string[] = [];
 

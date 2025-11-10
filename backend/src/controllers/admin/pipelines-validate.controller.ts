@@ -2,6 +2,19 @@ import type { Request, Response, NextFunction } from 'express';
 import pipelineValidator from '../../services/pipelineValidator.service.js';
 import logger from '../../utils/logger.js';
 
+interface PipelineValidationData {
+  nodes?: unknown;
+  edges?: unknown;
+}
+
+interface TopologicalSortResult {
+  isDAG?: boolean;
+  hasCycle?: boolean;
+  topologicalOrder?: unknown[];
+  remainingNodes?: unknown[];
+  cycleNodes?: unknown[];
+}
+
 class PipelinesValidateController {
   /**
    * 校验 Pipeline 拓扑结构
@@ -9,7 +22,7 @@ class PipelinesValidateController {
    */
   async validatePipeline(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { nodes, edges } = req.body as { nodes?: any; edges?: any };
+      const { nodes, edges } = req.body as PipelineValidationData;
 
       if (!Array.isArray(nodes)) {
         res.status(400).json({
@@ -69,7 +82,7 @@ class PipelinesValidateController {
    */
   async getTopologicalOrder(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { nodes, edges } = req.body as { nodes?: any; edges?: any };
+      const { nodes, edges } = req.body as PipelineValidationData;
 
       if (!Array.isArray(nodes) || !Array.isArray(edges)) {
         res.status(400).json({
@@ -82,7 +95,7 @@ class PipelinesValidateController {
         return;
       }
 
-      const result = pipelineValidator.detectCyclesUsingKahn(nodes, edges) as any;
+      const result = pipelineValidator.detectCyclesUsingKahn(nodes, edges) as TopologicalSortResult;
       const isDAG = typeof result.isDAG === 'boolean' ? result.isDAG : !result.hasCycle;
       const topologicalOrder = result.topologicalOrder ?? [];
       const remainingNodes = result.remainingNodes ?? result.cycleNodes ?? [];

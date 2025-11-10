@@ -308,7 +308,7 @@ class AuthService implements AuthProvider {
    * 获取用户信息
    * 艹，通过ID获取用户详情！
    */
-  async getUser(userId: string): Promise<any> {
+  async getUser(userId: string): Promise<userRepo.SafeUser> {
     const user = await userRepo.findUserById(userId);
 
     if (!user) {
@@ -423,11 +423,16 @@ class AuthService implements AuthProvider {
         ...tokens,
         user: userRepo.toSafeUser(user)
       };
-    } catch (error: any) {
-      if (error.statusCode) {
-        throw error;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        const appError = error as Error & { statusCode?: number };
+        if (appError.statusCode) {
+          throw error;
+        }
+        logger.error(`微信登录异常: ${error.message}`, error);
+      } else {
+        logger.error(`微信登录异常:`, error);
       }
-      logger.error(`微信登录异常: ${error.message}`, error);
       throw new Error('微信登录失败');
     }
   }

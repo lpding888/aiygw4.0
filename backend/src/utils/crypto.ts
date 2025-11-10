@@ -85,8 +85,9 @@ class KeyManager {
 
       this.addKey(1, keyBuffer);
       console.log('[CRYPTO] 主密钥加载成功 (版本: 1)');
-    } catch (error: any) {
-      throw new Error(`加载MASTER_KEY失败: ${error.message}`);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      throw new Error(`加载MASTER_KEY失败: ${err.message}`);
     }
   }
 
@@ -196,8 +197,9 @@ export function decrypt(encryptedData: EncryptedData): string {
   let key: Buffer;
   try {
     key = keyManager.getKey(keyVersion);
-  } catch (error: any) {
-    throw new Error(`解密失败：密钥版本${keyVersion}不存在。${error.message}`);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    throw new Error(`解密失败：密钥版本${keyVersion}不存在。${err.message}`);
   }
 
   // 转换Base64为Buffer
@@ -215,9 +217,10 @@ export function decrypt(encryptedData: EncryptedData): string {
     let plaintext = decipher.update(ciphertext, 'base64', 'utf8');
     plaintext += decipher.final('utf8');
     return plaintext;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 艹，GCM解密失败通常意味着数据被篡改或密钥错误
-    throw new Error(`解密失败：数据可能被篡改或密钥错误。${error.message}`);
+    const err = error instanceof Error ? error : new Error(String(error));
+    throw new Error(`解密失败：数据可能被篡改或密钥错误。${err.message}`);
   }
 }
 
@@ -228,10 +231,10 @@ export function decrypt(encryptedData: EncryptedData): string {
  * @returns 加密后的对象
  */
 export function encryptFields(
-  obj: Record<string, any>,
+  obj: Record<string, unknown>,
   sensitiveFields: string[]
-): Record<string, any> {
-  const result: Record<string, any> = { ...obj };
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...obj };
 
   for (const field of sensitiveFields) {
     if (obj[field] !== undefined && obj[field] !== null) {
@@ -253,28 +256,29 @@ export function encryptFields(
  * @returns 解密后的对象
  */
 export function decryptFields(
-  obj: Record<string, any>,
+  obj: Record<string, unknown>,
   sensitiveFields: string[]
-): Record<string, any> {
-  const result: Record<string, any> = { ...obj };
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...obj };
 
   for (const field of sensitiveFields) {
     if (obj[field] !== undefined && obj[field] !== null) {
       try {
         // 解析JSON并解密
         const encryptedData: EncryptedData =
-          typeof obj[field] === 'string' ? JSON.parse(obj[field]) : obj[field];
+          typeof obj[field] === 'string' ? JSON.parse(obj[field] as string) : (obj[field] as EncryptedData);
 
         result[field] = decrypt(encryptedData);
 
         // 尝试解析为JSON对象（如果原始数据是对象）
         try {
-          result[field] = JSON.parse(result[field]);
+          result[field] = JSON.parse(result[field] as string);
         } catch {
           // 不是JSON，保持字符串
         }
-      } catch (error: any) {
-        console.error(`[CRYPTO] 解密字段"${field}"失败: ${error.message}`);
+      } catch (error: unknown) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        console.error(`[CRYPTO] 解密字段"${field}"失败: ${err.message}`);
         // 保留加密数据（不要丢失）
         result[field] = obj[field];
       }

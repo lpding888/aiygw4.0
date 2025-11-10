@@ -4,12 +4,29 @@ import imageProcessService from '../services/imageProcess.service.js';
 import aiModelService from '../services/aiModel.service.js';
 import paginationService from '../services/pagination.service.js';
 import logger from '../utils/logger.js';
+import type {
+  AuthenticatedRequest,
+  CreateFeatureTaskRequest,
+  CreateTaskRequest,
+  UpdateTaskStatusRequest,
+  AdminTaskQuery,
+  TaskSearchQuery,
+  DbPerformanceQuery,
+  AdminTaskFilters,
+  TaskError,
+  TaskCreateResult
+} from '../types/task.types.js';
+import type { Knex } from 'knex';
 
 class TaskController {
   async createByFeature(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { featureId, inputData } = (req.body ?? {}) as { featureId?: string; inputData?: any };
-      const userId = (req as any).user?.id as string;
+      const { featureId, inputData } = (req.body ?? {}) as CreateFeatureTaskRequest;
+      const userId = (req as AuthenticatedRequest).user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { code: 4003, message: '未授权操作' } });
+        return;
+      }
       if (!featureId) {
         res
           .status(400)
@@ -22,26 +39,26 @@ class TaskController {
           .json({ success: false, error: { code: 4001, message: 'inputData必须是一个对象' } });
         return;
       }
-      const task = await taskService.createByFeature(userId, featureId, inputData);
+      const task: TaskCreateResult = await taskService.createByFeature(userId, featureId, inputData);
       logger.info(
-        `[TaskController] Feature任务创建成功 taskId=${(task as any).taskId} userId=${userId} featureId=${featureId}`
+        `[TaskController] Feature任务创建成功 taskId=${task.taskId} userId=${userId} featureId=${featureId}`
       );
       res.json({ success: true, data: task });
     } catch (error) {
+      const err = error as TaskError;
       logger.error(
-        `[TaskController] 创建Feature任务失败: ${(error as any)?.message}`,
-        error as any
+        `[TaskController] 创建Feature任务失败: ${err.message || String(error)}`,
+        error
       );
-      const e: any = error;
-      if (e?.errorCode === 4029) {
+      if (err?.errorCode === 4029) {
         res.status(429).json({
           success: false,
-          error: { code: e.errorCode, message: e.message, rateLimitInfo: e.rateLimitInfo }
+          error: { code: err.errorCode, message: err.message, rateLimitInfo: err.rateLimitInfo }
         });
         return;
       }
-      if (e?.errorCode) {
-        res.status(400).json({ success: false, error: { code: e.errorCode, message: e.message } });
+      if (err?.errorCode) {
+        res.status(400).json({ success: false, error: { code: err.errorCode, message: err.message } });
         return;
       }
       next(error);
@@ -50,12 +67,12 @@ class TaskController {
 
   async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { type, inputImageUrl, params } = (req.body ?? {}) as {
-        type?: string;
-        inputImageUrl?: string;
-        params?: any;
-      };
-      const userId = (req as any).user?.id as string;
+      const { type, inputImageUrl, params } = (req.body ?? {}) as CreateTaskRequest;
+      const userId = (req as AuthenticatedRequest).user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { code: 4003, message: '未授权操作' } });
+        return;
+      }
       if (!type || !inputImageUrl) {
         res.status(400).json({
           success: false,
@@ -63,29 +80,30 @@ class TaskController {
         });
         return;
       }
-      const task = await taskService.create(userId, type, inputImageUrl, params);
-      logger.info(`[TaskController] 任务创建成功 taskId=${(task as any).taskId} userId=${userId}`);
+      const task: TaskCreateResult = await taskService.create(userId, type, inputImageUrl, params);
+      logger.info(`[TaskController] 任务创建成功 taskId=${task.taskId} userId=${userId}`);
       if (type === 'basic_clean') {
         imageProcessService
-          .processBasicClean((task as any).taskId, inputImageUrl, params)
-          .catch((err: any) => {
+          .processBasicClean(task.taskId, inputImageUrl, params)
+          .catch((err: Error) => {
             logger.error(`[TaskController] 异步处理失败: ${err.message}`, {
-              taskId: (task as any).taskId
+              taskId: task.taskId
             });
           });
       }
       if (type === 'model_pose12') {
         aiModelService
-          .createModelTask((task as any).taskId, inputImageUrl, params)
-          .catch((err: any) => {
+          .createModelTask(task.taskId, inputImageUrl, params)
+          .catch((err: Error) => {
             logger.error(`[TaskController] AI模特任务创建失败: ${err.message}`, {
-              taskId: (task as any).taskId
+              taskId: task.taskId
             });
           });
       }
       res.json({ success: true, data: task });
     } catch (error) {
-      logger.error(`[TaskController] 创建任务失败: ${(error as any)?.message}`, error as any);
+      const err = error as Error;
+      logger.error(`[TaskController] 创建任务失败: ${err.message}`, error);
       next(error);
     }
   }
@@ -102,8 +120,12 @@ class TaskController {
 
   async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).user?.id as string;
-      const result = await taskService.list(userId, req.query as any);
+      const userId = (req as AuthenticatedRequest).user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { code: 4003, message: '未授权操作' } });
+        return;
+      }
+      const result = await taskService.list(userId, req.query as Record<string, string>);
       res.json({ success: true, data: result });
     } catch (error) {
       next(error);
@@ -113,11 +135,7 @@ class TaskController {
   async updateStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { taskId } = req.params as { taskId: string };
-      const { status, resultUrls, errorMessage } = (req.body ?? {}) as {
-        status?: string;
-        resultUrls?: string[];
-        errorMessage?: string;
-      };
+      const { status, resultUrls, errorMessage } = (req.body ?? {}) as UpdateTaskStatusRequest;
       if (!status) {
         res
           .status(400)
@@ -127,14 +145,16 @@ class TaskController {
       await taskService.updateStatus(taskId, status, { resultUrls, errorMessage });
       res.json({ success: true, message: '任务状态更新成功' });
     } catch (error) {
-      logger.error(`[TaskController] 更新任务状态失败: ${(error as any)?.message}`, error as any);
+      const err = error as Error;
+      logger.error(`[TaskController] 更新任务状态失败: ${err.message}`, error);
       next(error);
     }
   }
 
   async adminList(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      if ((req as any).user?.role !== 'admin') {
+      const userRole = (req as AuthenticatedRequest).user?.role;
+      if (userRole !== 'admin') {
         res.status(403).json({ success: false, error: { code: 4003, message: '需要管理员权限' } });
         return;
       }
@@ -146,13 +166,13 @@ class TaskController {
         userId,
         startDate,
         endDate
-      } = req.query as any;
-      const filters: any = {};
+      } = req.query as AdminTaskQuery;
+      const filters: AdminTaskFilters = {};
       if (status) filters.status = status;
       if (type) filters.type = type;
       if (userId) filters.userId = userId;
       if (startDate || endDate) {
-        filters.created_at = function (this: any) {
+        filters.created_at = function (this: Knex.QueryBuilder) {
           if (startDate && endDate) this.whereBetween('created_at', [startDate, endDate]);
           else if (startDate) this.where('created_at', '>=', startDate);
           else if (endDate) this.where('created_at', '<=', endDate);
@@ -164,9 +184,10 @@ class TaskController {
       });
       res.json({ success: true, data: result.data, pagination: result.pageInfo });
     } catch (error) {
+      const err = error as Error;
       logger.error(
-        `[TaskController] 管理员获取任务列表失败: ${(error as any)?.message}`,
-        error as any
+        `[TaskController] 管理员获取任务列表失败: ${err.message}`,
+        error
       );
       next(error);
     }
@@ -174,18 +195,19 @@ class TaskController {
 
   async search(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      if ((req as any).user?.role !== 'admin') {
+      const userRole = (req as AuthenticatedRequest).user?.role;
+      if (userRole !== 'admin') {
         res.status(403).json({ success: false, error: { code: 4003, message: '需要管理员权限' } });
         return;
       }
-      const { q: searchTerm, page = '1', limit = '20', status, type } = req.query as any;
+      const { q: searchTerm, page = '1', limit = '20', status, type } = req.query as TaskSearchQuery;
       if (!searchTerm || String(searchTerm).trim().length === 0) {
         res
           .status(400)
           .json({ success: false, error: { code: 4001, message: '搜索关键词不能为空' } });
         return;
       }
-      const filters: any = {};
+      const filters: AdminTaskFilters = {};
       if (status) filters.status = status;
       if (type) filters.type = type;
       const result = await paginationService.searchTasks(String(searchTerm).trim(), {
@@ -200,23 +222,25 @@ class TaskController {
         searchTerm: String(searchTerm).trim()
       });
     } catch (error) {
-      logger.error(`[TaskController] 任务搜索失败: ${(error as any)?.message}`, error as any);
+      const err = error as Error;
+      logger.error(`[TaskController] 任务搜索失败: ${err.message}`, error);
       next(error);
     }
   }
 
   async getDbPerformance(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      if ((req as any).user?.role !== 'admin') {
+      const userRole = (req as AuthenticatedRequest).user?.role;
+      if (userRole !== 'admin') {
         res.status(403).json({ success: false, error: { code: 4003, message: '需要管理员权限' } });
         return;
       }
-      const { table, status } = req.query as any;
+      const { table, status } = req.query as DbPerformanceQuery;
       if (!table) {
         res.status(400).json({ success: false, error: { code: 4001, message: '缺少表名参数' } });
         return;
       }
-      const where: any = {};
+      const where: Record<string, string> = {};
       if (status) where.status = status;
       const analysis = await paginationService.analyzeQuery(table, where, [
         { column: 'created_at', direction: 'desc' },
@@ -227,9 +251,10 @@ class TaskController {
         data: { table, query: analysis.sql, bindings: analysis.bindings, explain: analysis.explain }
       });
     } catch (error) {
+      const err = error as Error;
       logger.error(
-        `[TaskController] 获取数据库性能分析失败: ${(error as any)?.message}`,
-        error as any
+        `[TaskController] 获取数据库性能分析失败: ${err.message}`,
+        error
       );
       next(error);
     }

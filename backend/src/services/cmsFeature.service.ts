@@ -3,9 +3,21 @@ import cmsCacheService from './cmsCache.service.js';
 import logger from '../utils/logger.js';
 import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
+import type { Knex } from 'knex';
+import type {
+  CmsFeature,
+  FeatureQueryOptions,
+  FeatureListResponse,
+  CreateFeatureData,
+  UpdateFeatureData,
+  FeatureHistoryResponse,
+  HistoryQueryOptions,
+  BatchUpdateResult,
+  CmsCacheService
+} from '../types/cms-feature.types.js';
 
 class CmsFeatureService {
-  async getFeatures(options: any = {}) {
+  async getFeatures(options: FeatureQueryOptions = {}): Promise<FeatureListResponse> {
     const {
       page = 1,
       limit = 20,
@@ -18,7 +30,7 @@ class CmsFeatureService {
     } = options;
 
     try {
-      let query = db('cms_features').select([
+      let query: Knex.QueryBuilder = db('cms_features').select([
         'id',
         'key',
         'name',
@@ -39,7 +51,7 @@ class CmsFeatureService {
       if (status) query = query.where('status', status);
       if (enabled !== undefined) query = query.where('enabled', enabled);
       if (search) {
-        query = query.where(function (this: any) {
+        query = query.where(function (this: Knex.QueryBuilder) {
           this.where('name', 'like', `%${search}%`)
             .orWhere('description', 'like', `%${search}%`)
             .orWhere('key', 'like', `%${search}%`);
@@ -49,16 +61,18 @@ class CmsFeatureService {
       if (sortBy) query = query.orderBy(sortBy, sortOrder);
 
       const offset = (page - 1) * limit;
-      const totalCount = await query.clone().clearSelect().count('* as count');
-      const features = await query.limit(limit).offset(offset);
+      const totalCount = (await query.clone().clearSelect().count('* as count')) as Array<{
+        count: number;
+      }>;
+      const features = (await query.limit(limit).offset(offset)) as CmsFeature[];
 
       return {
         features,
         pagination: {
           current: page,
           pageSize: limit,
-          total: parseInt((totalCount[0] as any).count),
-          totalPages: Math.ceil((totalCount[0] as any).count / limit)
+          total: parseInt(String(totalCount[0].count)),
+          totalPages: Math.ceil(totalCount[0].count / limit)
         }
       };
     } catch (error) {
@@ -67,27 +81,29 @@ class CmsFeatureService {
     }
   }
 
-  async getFeatureById(id: string) {
+  async getFeatureById(id: string): Promise<CmsFeature> {
     try {
-      const feature = await db('cms_features').where('id', id).first();
+      const feature = (await db('cms_features').where('id', id).first()) as CmsFeature | undefined;
       if (!feature) {
         throw AppError.custom(ERROR_CODES.USER_NOT_FOUND, '功能不存在');
       }
       return feature;
     } catch (error) {
-      if (error instanceof Error && (error as any).statusCode) throw error;
+      if (AppError.isAppError?.(error)) throw error;
       logger.error('[CmsFeatureService] Get feature by ID failed:', error);
       throw AppError.custom(ERROR_CODES.INTERNAL_SERVER_ERROR, '获取功能详情失败');
     }
   }
 
-  async getFeatureByKey(key: string) {
+  async getFeatureByKey(key: string): Promise<CmsFeature> {
     const cacheKey = `cms_features:${key}`;
-    return await (cmsCacheService as any).getOrSet(
+    return await (cmsCacheService as unknown as CmsCacheService).getOrSet<CmsFeature>(
       'features',
       cacheKey,
       async () => {
-        const feature = await db('cms_features').where('key', key).first();
+        const feature = (await db('cms_features').where('key', key).first()) as
+          | CmsFeature
+          | undefined;
         if (!feature) {
           throw AppError.custom(ERROR_CODES.USER_NOT_FOUND, '功能不存在');
         }
@@ -97,7 +113,7 @@ class CmsFeatureService {
     );
   }
 
-  async createFeature(featureData: any, userId: string) {
+  async createFeature(featureData: CreateFeatureData, userId: string): Promise<CmsFeature> {
     const {
       key,
       name,
@@ -113,8 +129,11 @@ class CmsFeatureService {
       if (existing) {
         throw AppError.custom(ERROR_CODES.INVALID_PARAMETERS, '功能键已存在');
       }
-      const version = await (cmsCacheService as any).generateVersion('features', key);
-      const [feature] = await db('cms_features')
+      const version = await (cmsCacheService as unknown as CmsCacheService).generateVersion(
+        'features',
+        key
+      );
+      const [feature] = (await db('cms_features')
         .insert({
           key,
           name,
@@ -130,9 +149,9 @@ class CmsFeatureService {
           created_at: new Date(),
           updated_at: new Date()
         })
-        .returning('*');
+        .returning('*')) as CmsFeature[];
 
-      await (cmsCacheService as any).createSnapshot(
+      await (cmsCacheService as unknown as CmsCacheService).createSnapshot(
         'features',
         key,
         feature,
@@ -140,17 +159,21 @@ class CmsFeatureService {
         '创建功能',
         userId
       );
-      await (cmsCacheService as any).invalidate('features', key);
+      await (cmsCacheService as unknown as CmsCacheService).invalidate('features', key);
       logger.info(`[CmsFeatureService] Feature created: ${key} by ${userId}`);
       return feature;
     } catch (error) {
-      if ((error as any)?.statusCode) throw error as any;
+      if (AppError.isAppError?.(error)) throw error;
       logger.error('[CmsFeatureService] Create feature failed:', error);
       throw AppError.custom(ERROR_CODES.INTERNAL_SERVER_ERROR, '创建功能失败');
     }
   }
 
-  async updateFeature(id: string, updateData: any, userId: string) {
+  async updateFeature(
+    id: string,
+    updateData: UpdateFeatureData,
+    userId: string
+  ): Promise<CmsFeature> {
     try {
       const feature = await this.getFeatureById(id);
       const config =
@@ -159,7 +182,7 @@ class CmsFeatureService {
       const metadata =
         updateData.metadata !== undefined ? JSON.stringify(updateData.metadata) : feature.metadata;
 
-      const [updated] = await db('cms_features')
+      const [updated] = (await db('cms_features')
         .where('id', id)
         .update({
           ...updateData,
@@ -169,9 +192,9 @@ class CmsFeatureService {
           updated_by: userId,
           updated_at: new Date()
         })
-        .returning('*');
+        .returning('*')) as CmsFeature[];
 
-      await (cmsCacheService as any).createSnapshot(
+      await (cmsCacheService as unknown as CmsCacheService).createSnapshot(
         'features',
         feature.key,
         updated,
@@ -179,21 +202,21 @@ class CmsFeatureService {
         '更新功能',
         userId
       );
-      await (cmsCacheService as any).invalidate('features', feature.key);
+      await (cmsCacheService as unknown as CmsCacheService).invalidate('features', feature.key);
       logger.info(`[CmsFeatureService] Feature updated: ${feature.key} by ${userId}`);
       return updated;
     } catch (error) {
-      if ((error as any)?.statusCode) throw error as any;
+      if (AppError.isAppError?.(error)) throw error;
       logger.error('[CmsFeatureService] Update feature failed:', error);
       throw AppError.custom(ERROR_CODES.INTERNAL_SERVER_ERROR, '更新功能失败');
     }
   }
 
-  async deleteFeature(id: string, userId: string) {
+  async deleteFeature(id: string, userId: string): Promise<void> {
     try {
       const feature = await this.getFeatureById(id);
       await db('cms_features').where('id', id).del();
-      await (cmsCacheService as any).createSnapshot(
+      await (cmsCacheService as unknown as CmsCacheService).createSnapshot(
         'features',
         feature.key,
         feature,
@@ -201,22 +224,22 @@ class CmsFeatureService {
         '删除功能',
         userId
       );
-      await (cmsCacheService as any).invalidate('features', feature.key);
+      await (cmsCacheService as unknown as CmsCacheService).invalidate('features', feature.key);
       logger.info(`[CmsFeatureService] Feature deleted: ${feature.key} by ${userId}`);
     } catch (error) {
-      if ((error as any)?.statusCode) throw error as any;
+      if (AppError.isAppError?.(error)) throw error;
       logger.error('[CmsFeatureService] Delete feature failed:', error);
       throw AppError.custom(ERROR_CODES.INTERNAL_SERVER_ERROR, '删除功能失败');
     }
   }
 
-  async publishFeature(id: string, userId: string) {
+  async publishFeature(id: string, userId: string): Promise<CmsFeature> {
     try {
       const feature = await this.getFeatureById(id);
-      if ((feature as any).status === 'published') {
+      if (feature.status === 'published') {
         throw AppError.custom(ERROR_CODES.INVALID_REQUEST, '功能已发布');
       }
-      const [publishedFeature] = await db('cms_features')
+      const [publishedFeature] = (await db('cms_features')
         .where('id', id)
         .update({
           status: 'published',
@@ -224,36 +247,36 @@ class CmsFeatureService {
           updated_by: userId,
           updated_at: new Date()
         })
-        .returning('*');
-      await (cmsCacheService as any).createSnapshot(
+        .returning('*')) as CmsFeature[];
+      await (cmsCacheService as unknown as CmsCacheService).createSnapshot(
         'features',
-        (feature as any).key,
+        feature.key,
         publishedFeature,
         'publish',
         '发布功能',
         userId
       );
-      await (cmsCacheService as any).invalidate('features', (feature as any).key);
-      await (cmsCacheService as any).invalidateScope('ui');
-      logger.info(`[CmsFeatureService] Feature published: ${(feature as any).key} by ${userId}`);
+      await (cmsCacheService as unknown as CmsCacheService).invalidate('features', feature.key);
+      await (cmsCacheService as unknown as CmsCacheService).invalidateScope('ui');
+      logger.info(`[CmsFeatureService] Feature published: ${feature.key} by ${userId}`);
       return publishedFeature;
     } catch (error) {
-      if ((error as any)?.statusCode) throw error as any;
+      if (AppError.isAppError?.(error)) throw error;
       logger.error('[CmsFeatureService] Publish feature failed:', error);
       throw AppError.custom(ERROR_CODES.INTERNAL_SERVER_ERROR, '发布功能失败');
     }
   }
 
-  async rollbackFeature(id: string, version: string, userId: string) {
+  async rollbackFeature(id: string, version: string, userId: string): Promise<CmsFeature> {
     try {
       const feature = await this.getFeatureById(id);
-      const rolledBackData = await (cmsCacheService as any).rollback(
+      const rolledBackData = await (cmsCacheService as unknown as CmsCacheService).rollback(
         'features',
-        (feature as any).key,
+        feature.key,
         version,
         userId
       );
-      const [rolledBackFeature] = await db('cms_features')
+      const [rolledBackFeature] = (await db('cms_features')
         .where('id', id)
         .update({
           config: rolledBackData.config,
@@ -263,11 +286,11 @@ class CmsFeatureService {
           updated_by: userId,
           updated_at: new Date()
         })
-        .returning('*');
-      await (cmsCacheService as any).invalidate('features', (feature as any).key);
-      await (cmsCacheService as any).invalidateScope('ui');
+        .returning('*')) as CmsFeature[];
+      await (cmsCacheService as unknown as CmsCacheService).invalidate('features', feature.key);
+      await (cmsCacheService as unknown as CmsCacheService).invalidateScope('ui');
       logger.info(
-        `[CmsFeatureService] Feature rolled back: ${(feature as any).key} to ${version} by ${userId}`
+        `[CmsFeatureService] Feature rolled back: ${feature.key} to ${version} by ${userId}`
       );
       return rolledBackFeature;
     } catch (error) {
@@ -276,27 +299,39 @@ class CmsFeatureService {
     }
   }
 
-  async getFeatureHistory(id: string, options: any = {}) {
+  async getFeatureHistory(
+    id: string,
+    options: HistoryQueryOptions = {}
+  ): Promise<FeatureHistoryResponse> {
     const { page = 1, limit = 20 } = options;
     try {
       const feature = await this.getFeatureById(id);
       const offset = (page - 1) * limit;
-      const totalCount = await db('config_snapshots')
-        .where({ scope: 'features', key: (feature as any).key })
-        .count('* as count');
-      const history = await db('config_snapshots')
-        .where({ scope: 'features', key: (feature as any).key })
+      const totalCount = (await db('config_snapshots')
+        .where({ scope: 'features', key: feature.key })
+        .count('* as count')) as Array<{ count: number }>;
+      const history = (await db('config_snapshots')
+        .where({ scope: 'features', key: feature.key })
         .select(['version', 'action', 'description', 'created_by', 'created_at'])
         .orderBy('created_at', 'desc')
         .limit(limit)
-        .offset(offset);
+        .offset(offset)) as Array<{
+        version: number;
+        action: string;
+        description: string;
+        created_by: string | number;
+        created_at: string;
+      }>;
       return {
-        history,
+        history: history.map((h) => ({
+          ...h,
+          action: h.action as 'create' | 'update' | 'publish' | 'delete' | 'rollback'
+        })),
         pagination: {
           current: page,
           pageSize: limit,
-          total: parseInt((totalCount[0] as any).count),
-          totalPages: Math.ceil((totalCount[0] as any).count / limit)
+          total: parseInt(String(totalCount[0].count)),
+          totalPages: Math.ceil(totalCount[0].count / limit)
         }
       };
     } catch (error) {
@@ -305,15 +340,22 @@ class CmsFeatureService {
     }
   }
 
-  async batchUpdateFeatures(ids: string[], updateData: any, userId: string) {
+  async batchUpdateFeatures(
+    ids: string[],
+    updateData: UpdateFeatureData,
+    userId: string
+  ): Promise<BatchUpdateResult> {
     try {
-      const results: { success: any[]; failed: any[] } = { success: [], failed: [] };
+      const results: BatchUpdateResult = { success: [], failed: [] };
       for (const id of ids) {
         try {
           const updated = await this.updateFeature(id, updateData, userId);
           results.success.push(updated);
-        } catch (error: any) {
-          results.failed.push({ id, error: error.message });
+        } catch (error) {
+          results.failed.push({
+            id,
+            error: error instanceof Error ? error.message : String(error)
+          });
         }
       }
       logger.info(

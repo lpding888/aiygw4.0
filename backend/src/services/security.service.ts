@@ -13,7 +13,7 @@ import { db as knex } from '../db/index.js';
 interface RateLimitConfig {
   windowMs: number;
   maxRequests: number;
-  keyGenerator?: (req: any) => string;
+  keyGenerator?: (req: Record<string, unknown>) => string;
   skipSuccessfulRequests?: boolean;
   skipFailedRequests?: boolean;
   message?: string;
@@ -39,7 +39,7 @@ interface HealthCheck {
   status: 'healthy' | 'unhealthy' | 'warning';
   responseTime: number;
   lastCheck: Date;
-  details?: any;
+  details?: Record<string, unknown>;
   error?: string;
 }
 
@@ -52,7 +52,7 @@ interface SecurityAuditLog {
   userAgent?: string;
   endpoint: string;
   method: string;
-  details: Record<string, any>;
+  details: Record<string, unknown>;
   timestamp: Date;
 }
 
@@ -122,7 +122,7 @@ class SecurityService {
   /**
    * 数据脱敏
    */
-  maskData(data: any, rules: DataMaskingRule[]): any {
+  maskData(data: unknown, rules: DataMaskingRule[]): unknown {
     if (!data || typeof data !== 'object') {
       return data;
     }
@@ -131,7 +131,7 @@ class SecurityService {
     const maskedData = JSON.parse(JSON.stringify(data));
 
     for (const rule of rules) {
-      this.maskField(maskedData, rule);
+      this.maskField(maskedData as Record<string, unknown>, rule);
     }
 
     return maskedData;
@@ -140,7 +140,7 @@ class SecurityService {
   /**
    * 脱敏单个字段
    */
-  private maskField(obj: any, rule: DataMaskingRule, path: string = ''): void {
+  private maskField(obj: Record<string, unknown>, rule: DataMaskingRule, path: string = ''): void {
     if (!obj || typeof obj !== 'object') {
       return;
     }
@@ -158,11 +158,11 @@ class SecurityService {
           obj[key] = this.maskValue(obj[key], rule);
         } else if (typeof obj[key] === 'object' && obj[key] !== null) {
           // 即使匹配到了，如果是对象也要继续递归（处理嵌套路径 user.email）
-          this.maskField(obj[key], rule, currentPath);
+          this.maskField(obj[key] as Record<string, unknown>, rule, currentPath);
         }
       } else if (typeof obj[key] === 'object' && obj[key] !== null) {
         // 没匹配到但是对象，继续递归查找
-        this.maskField(obj[key], rule, currentPath);
+        this.maskField(obj[key] as Record<string, unknown>, rule, currentPath);
       }
     }
   }
@@ -374,7 +374,8 @@ class SecurityService {
       }
 
       return { overall, checks };
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('健康检查失败:', error);
       return {
         overall: 'unhealthy',
@@ -384,7 +385,7 @@ class SecurityService {
             status: 'unhealthy',
             responseTime: 0,
             lastCheck: new Date(),
-            error: error.message
+            error: errorMessage
           }
         ]
       };
@@ -408,13 +409,14 @@ class SecurityService {
         lastCheck: new Date(),
         details: { responseTime }
       };
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         name: 'database',
         status: 'unhealthy',
         responseTime: Date.now() - startTime,
         lastCheck: new Date(),
-        error: error.message
+        error: errorMessage
       };
     }
   }
@@ -436,13 +438,14 @@ class SecurityService {
         lastCheck: new Date(),
         details: { responseTime }
       };
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         name: 'redis',
         status: 'unhealthy',
         responseTime: Date.now() - startTime,
         lastCheck: new Date(),
-        error: error.message
+        error: errorMessage
       };
     }
   }
@@ -481,13 +484,14 @@ class SecurityService {
           totalMemory: (totalMemory / 1024 / 1024).toFixed(2) + 'MB'
         }
       };
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         name: 'memory',
         status: 'unhealthy',
         responseTime: Date.now() - startTime,
         lastCheck: new Date(),
-        error: error.message
+        error: errorMessage
       };
     }
   }
@@ -517,13 +521,14 @@ class SecurityService {
         lastCheck: new Date(),
         details: { status: 'accessible' }
       };
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         name: 'disk',
         status: 'unhealthy',
         responseTime: Date.now() - startTime,
         lastCheck: new Date(),
-        error: error.message
+        error: errorMessage
       };
     }
   }
@@ -545,13 +550,14 @@ class SecurityService {
         lastCheck: new Date(),
         details: { all_services: 'operational' }
       };
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         name: 'external_services',
         status: 'warning',
         responseTime: Date.now() - startTime,
         lastCheck: new Date(),
-        error: error.message
+        error: errorMessage
       };
     }
   }
@@ -687,7 +693,7 @@ class SecurityService {
       }
 
       // 检查失败率
-      const failures = activities.filter((activity: any) => activity.includes('failure')).length;
+      const failures = activities.filter((activity: string) => activity.includes('failure')).length;
       const failureRate = activities.length > 0 ? failures / activities.length : 0;
 
       if (failureRate > 0.5) {
@@ -760,7 +766,7 @@ class SecurityService {
   /**
    * 获取安全统计信息
    */
-  async getSecurityStats(): Promise<any> {
+  async getSecurityStats(): Promise<Record<string, unknown>> {
     try {
       const [auditStats, rateLimitStats, healthStats] = await Promise.all([
         this.getAuditStats(),
@@ -788,7 +794,7 @@ class SecurityService {
   /**
    * 获取审计统计
    */
-  private async getAuditStats(): Promise<any> {
+  private async getAuditStats(): Promise<Record<string, unknown>> {
     try {
       const [typeStats, severityStats, recentCount] = await Promise.all([
         knex('security_audit_logs').select('type').count('* as count').groupBy('type'),
@@ -800,15 +806,20 @@ class SecurityService {
       ]);
 
       return {
-        byType: typeStats.reduce((acc, row) => {
-          acc[row.type] = parseInt(String(row.count));
+        byType: typeStats.reduce((acc: Record<string, unknown>, row: Record<string, unknown>) => {
+          const key = String(row.type);
+          acc[key] = parseInt(String(row.count));
           return acc;
-        }, {} as any),
-        bySeverity: severityStats.reduce((acc, row) => {
-          acc[row.severity] = parseInt(String(row.count));
-          return acc;
-        }, {} as any),
-        last24h: recentCount?.count || 0
+        }, {}),
+        bySeverity: severityStats.reduce(
+          (acc: Record<string, unknown>, row: Record<string, unknown>) => {
+            const key = String(row.severity);
+            acc[key] = parseInt(String(row.count));
+            return acc;
+          },
+          {}
+        ),
+        last24h: (recentCount as Record<string, unknown> | undefined)?.count || 0
       };
     } catch (error) {
       return { byType: {}, bySeverity: {}, last24h: 0 };
@@ -818,7 +829,7 @@ class SecurityService {
   /**
    * 获取限流统计
    */
-  private async getRateLimitStats(): Promise<any> {
+  private async getRateLimitStats(): Promise<Record<string, unknown>> {
     try {
       // 这里应该从Redis获取限流统计
       // 简化实现
@@ -835,19 +846,16 @@ class SecurityService {
   /**
    * 获取健康检查统计
    */
-  private async getHealthStats(): Promise<any> {
+  private async getHealthStats(): Promise<Record<string, unknown>> {
     try {
       const healthResult = await this.performHealthChecks();
 
       const stats = {
         overall: healthResult.overall,
-        checks: healthResult.checks.reduce(
-          (acc, check) => {
-            acc[check.name] = check.status;
-            return acc;
-          },
-          {} as Record<string, string>
-        )
+        checks: healthResult.checks.reduce((acc: Record<string, string>, check) => {
+          acc[check.name] = check.status;
+          return acc;
+        }, {})
       };
 
       return stats;

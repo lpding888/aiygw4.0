@@ -5,6 +5,21 @@ import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
 import crypto from 'crypto';
 import axios from 'axios';
+import type { Knex } from 'knex';
+import type {
+  Provider,
+  ProviderWithSecret,
+  ProviderQueryOptions,
+  ProviderListResponse,
+  CreateProviderData,
+  UpdateProviderData,
+  ProviderSecret,
+  EncryptedData,
+  TestResult,
+  ProviderStats,
+  BatchTestResult,
+  CmsCacheService
+} from '../types/cms-provider.types.js';
 
 class CmsProviderService {
   private readonly ENCRYPTION_ALGORITHM = 'aes-256-gcm';
@@ -12,7 +27,7 @@ class CmsProviderService {
     process.env.PROVIDER_SECRET_KEY || crypto.randomBytes(32).toString('hex');
   private readonly CONNECT_TIMEOUT = 10000;
 
-  async getProviders(options: any = {}) {
+  async getProviders(options: ProviderQueryOptions = {}): Promise<ProviderListResponse> {
     const {
       page = 1,
       limit = 20,
@@ -25,7 +40,7 @@ class CmsProviderService {
     } = options;
 
     try {
-      let query = db('provider_endpoints').select([
+      let query: Knex.QueryBuilder = db('provider_endpoints').select([
         'id',
         'name',
         'description',
@@ -47,19 +62,21 @@ class CmsProviderService {
       if (status) query = query.where('status', status);
       if (enabled !== undefined) query = query.where('enabled', enabled);
       if (search) {
-        query = query.where(function (this: any) {
+        query = query.where(function (this: Knex.QueryBuilder) {
           this.where('name', 'like', `%${search}%`).orWhere('description', 'like', `%${search}%`);
         });
       }
       if (sortBy) query = query.orderBy(sortBy, sortOrder);
 
       const offset = (page - 1) * limit;
-      const totalCount = await query.clone().clearSelect().count('* as count');
-      const providers = await query.limit(limit).offset(offset);
+      const totalCount = (await query.clone().clearSelect().count('* as count')) as Array<{
+        count: number;
+      }>;
+      const providers = (await query.limit(limit).offset(offset)) as Provider[];
 
-      const sanitizedProviders = (providers as any[]).map((p) => ({
+      const sanitizedProviders = providers.map((p) => ({
         ...p,
-        last_test_result: this.sanitizeTestResult(p.last_test_result as any)
+        last_test_result: this.sanitizeTestResult(p.last_test_result)
       }));
 
       return {
@@ -67,8 +84,8 @@ class CmsProviderService {
         pagination: {
           current: page,
           pageSize: limit,
-          total: parseInt((totalCount[0] as any).count),
-          totalPages: Math.ceil((totalCount[0] as any).count / limit)
+          total: parseInt(String(totalCount[0].count)),
+          totalPages: Math.ceil(totalCount[0].count / limit)
         }
       };
     } catch (error) {
@@ -77,32 +94,34 @@ class CmsProviderService {
     }
   }
 
-  async getProviderById(id: string) {
+  async getProviderById(id: string): Promise<ProviderWithSecret> {
     try {
-      const provider = await db('provider_endpoints').where('id', id).first();
+      const provider = (await db('provider_endpoints')
+        .where('id', id)
+        .first()) as Provider | undefined;
       if (!provider) throw AppError.custom(ERROR_CODES.USER_NOT_FOUND, '供应商不存在');
       const secret = await this.getProviderSecret(id);
       return { ...provider, secret: secret ? this.maskSecret(secret) : null };
     } catch (error) {
-      if ((error as any)?.statusCode) throw error as any;
+      if (AppError.isAppError?.(error)) throw error;
       logger.error('[CmsProviderService] Get provider by ID failed:', error);
       throw AppError.custom(ERROR_CODES.INTERNAL_SERVER_ERROR, '获取供应商详情失败');
     }
   }
 
-  async createProvider(data: any, userId: string) {
+  async createProvider(data: CreateProviderData, userId: string): Promise<Provider> {
     try {
-      const [provider] = await db('provider_endpoints')
+      const [provider] = (await db('provider_endpoints')
         .insert({
           ...data,
           created_by: userId,
           created_at: new Date(),
           updated_at: new Date()
         })
-        .returning('*');
-      if (data.secret) await this.saveProviderSecret((provider as any).id, data.secret);
-      await (cmsCacheService as any).invalidateScope('providers');
-      logger.info(`[CmsProviderService] Provider created: ${(provider as any).id}`);
+        .returning('*')) as Provider[];
+      if (data.secret) await this.saveProviderSecret(String(provider.id), data.secret);
+      await (cmsCacheService as unknown as CmsCacheService).invalidateScope('providers');
+      logger.info(`[CmsProviderService] Provider created: ${provider.id}`);
       return provider;
     } catch (error) {
       logger.error('[CmsProviderService] Create provider failed:', error);
@@ -110,17 +129,21 @@ class CmsProviderService {
     }
   }
 
-  async updateProvider(id: string, updateData: any, userId: string) {
+  async updateProvider(
+    id: string,
+    updateData: UpdateProviderData,
+    userId: string
+  ): Promise<Provider> {
     try {
-      const [updated] = await db('provider_endpoints')
+      const [updated] = (await db('provider_endpoints')
         .where('id', id)
         .update({ ...updateData, updated_at: new Date() })
-        .returning('*');
+        .returning('*')) as Provider[];
       if (updateData.secret !== undefined) {
         if (updateData.secret) await this.saveProviderSecret(id, updateData.secret);
         else await this.deleteProviderSecret(id);
       }
-      await (cmsCacheService as any).invalidateScope('providers');
+      await (cmsCacheService as unknown as CmsCacheService).invalidateScope('providers');
       logger.info(`[CmsProviderService] Provider updated: ${id} by ${userId}`);
       return updated;
     } catch (error) {
@@ -129,11 +152,11 @@ class CmsProviderService {
     }
   }
 
-  async deleteProvider(id: string) {
+  async deleteProvider(id: string): Promise<void> {
     try {
       await db('provider_endpoints').where('id', id).del();
       await this.deleteProviderSecret(id);
-      await (cmsCacheService as any).invalidateScope('providers');
+      await (cmsCacheService as unknown as CmsCacheService).invalidateScope('providers');
       logger.info(`[CmsProviderService] Provider deleted: ${id}`);
     } catch (error) {
       logger.error('[CmsProviderService] Delete provider failed:', error);
@@ -141,9 +164,11 @@ class CmsProviderService {
     }
   }
 
-  async testProvider(id: string, userId: string) {
+  async testProvider(id: string, userId: string): Promise<TestResult> {
     try {
-      const provider: any = await db('provider_endpoints').where('id', id).first();
+      const provider = (await db('provider_endpoints')
+        .where('id', id)
+        .first()) as Provider | undefined;
       if (!provider) throw AppError.custom(ERROR_CODES.USER_NOT_FOUND, '供应商不存在');
 
       const start = Date.now();
@@ -156,13 +181,19 @@ class CmsProviderService {
           headers: secret ? { Authorization: `Bearer ${secret}` } : undefined
         });
         success = true;
-      } catch (err: any) {
+      } catch (err) {
+        const error = err as Error;
         success = false;
-        message = err?.message || '连接失败';
+        message = error?.message || '连接失败';
       }
 
       const responseTime = Date.now() - start;
-      const testResult = { success, responseTime, message, timestamp: new Date().toISOString() };
+      const testResult: TestResult = {
+        success,
+        responseTime,
+        message,
+        timestamp: new Date().toISOString()
+      };
 
       await db('provider_endpoints')
         .where('id', id)
@@ -181,11 +212,13 @@ class CmsProviderService {
 
   async getProviderSecret(providerId: string): Promise<string | null> {
     try {
-      const secretRecord = await db('provider_secrets').where('provider_id', providerId).first();
+      const secretRecord = (await db('provider_secrets')
+        .where('provider_id', providerId)
+        .first()) as ProviderSecret | undefined;
 
       if (!secretRecord) return null;
-      const encrypted_secret = (secretRecord as any).encrypted_secret as string;
-      const iv = (secretRecord as any).iv as string;
+      const encrypted_secret = secretRecord.encrypted_secret;
+      const iv = secretRecord.iv;
       return this.decryptSecret(encrypted_secret, iv);
     } catch (error) {
       logger.error('[CmsProviderService] Get provider secret failed:', error);
@@ -193,7 +226,7 @@ class CmsProviderService {
     }
   }
 
-  async saveProviderSecret(providerId: string, secret: string) {
+  async saveProviderSecret(providerId: string, secret: string): Promise<void> {
     try {
       const { encrypted, iv } = this.encryptSecret(secret);
       await db('provider_secrets')
@@ -212,7 +245,7 @@ class CmsProviderService {
     }
   }
 
-  async deleteProviderSecret(providerId: string) {
+  async deleteProviderSecret(providerId: string): Promise<void> {
     try {
       await db('provider_secrets').where('provider_id', providerId).del();
     } catch (error) {
@@ -220,27 +253,31 @@ class CmsProviderService {
     }
   }
 
-  encryptSecret(secret: string) {
+  encryptSecret(secret: string): EncryptedData {
     const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipher(
       this.ENCRYPTION_ALGORITHM,
       Buffer.from(this.ENCRYPTION_KEY, 'hex')
     );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (cipher as any).setAAD(Buffer.from('provider-secret'));
     let encrypted = cipher.update(secret, 'utf8', 'hex');
     encrypted += cipher.final('hex');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tag = (cipher as any).getAuthTag();
     return { encrypted: encrypted + ':' + tag.toString('hex'), iv: iv.toString('hex') };
   }
 
-  decryptSecret(encryptedSecret: string, iv: string) {
+  decryptSecret(encryptedSecret: string, iv: string): string | null {
     try {
       const [encrypted, tag] = encryptedSecret.split(':');
       const decipher = crypto.createDecipher(
         this.ENCRYPTION_ALGORITHM,
         Buffer.from(this.ENCRYPTION_KEY, 'hex')
       );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (decipher as any).setAAD(Buffer.from('provider-secret'));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (decipher as any).setAuthTag(Buffer.from(tag, 'hex'));
       let decrypted = decipher.update(encrypted, 'hex', 'utf8');
       decrypted += decipher.final('utf8');
@@ -251,15 +288,16 @@ class CmsProviderService {
     }
   }
 
-  maskSecret(secret: string | null) {
+  maskSecret(secret: string | null): string | null {
     if (!secret || secret.length < 8) return secret;
     return secret.substring(0, 4) + '****' + secret.substring(secret.length - 4);
   }
 
-  sanitizeTestResult(testResult: any) {
+  sanitizeTestResult(testResult: string | null): TestResult | null {
     if (!testResult) return null;
     try {
-      const result = typeof testResult === 'string' ? JSON.parse(testResult) : testResult;
+      const result: TestResult =
+        typeof testResult === 'string' ? JSON.parse(testResult) : testResult;
       if (result.details && result.details.headers) {
         const headers = { ...result.details.headers };
         delete headers.authorization;
@@ -268,31 +306,38 @@ class CmsProviderService {
       }
       return result;
     } catch (error) {
-      return testResult;
+      return null;
     }
   }
 
-  async getProviderStats() {
+  async getProviderStats(): Promise<ProviderStats> {
     try {
-      const stats = await db('provider_endpoints')
+      const stats = (await db('provider_endpoints')
         .select(
           db.raw('COUNT(*) as total'),
           db.raw('COUNT(CASE WHEN enabled = true THEN 1 END) as enabled'),
           db.raw("COUNT(CASE WHEN status = 'active' THEN 1 END) as active"),
           db.raw("COUNT(CASE WHEN status = 'error' THEN 1 END) as error")
         )
-        .first();
-      return stats;
+        .first()) as ProviderStats | undefined;
+      return (
+        stats || {
+          total: 0,
+          enabled: 0,
+          active: 0,
+          error: 0
+        }
+      );
     } catch (error) {
       logger.error('[CmsProviderService] Get provider stats failed:', error);
       throw AppError.custom(ERROR_CODES.INTERNAL_SERVER_ERROR, '获取供应商统计失败');
     }
   }
 
-  async testAllProviders(userId: string) {
+  async testAllProviders(userId: string): Promise<BatchTestResult> {
     try {
       const providers = await this.getProviders({ limit: 1000 });
-      const results: any = {
+      const results: BatchTestResult = {
         total: providers.providers.length,
         success: 0,
         failed: 0,
@@ -300,22 +345,23 @@ class CmsProviderService {
       };
       for (const provider of providers.providers) {
         try {
-          const testResult = await this.testProvider((provider as any).id, userId);
+          const testResult = await this.testProvider(String(provider.id), userId);
           results.details.push({
-            id: (provider as any).id,
-            name: (provider as any).name,
-            success: (testResult as any).success,
-            responseTime: (testResult as any).responseTime,
-            error: (testResult as any).success ? null : (testResult as any).message
+            id: provider.id,
+            name: provider.name,
+            success: testResult.success,
+            responseTime: testResult.responseTime,
+            error: testResult.success ? null : testResult.message
           });
-          if ((testResult as any).success) results.success++;
+          if (testResult.success) results.success++;
           else results.failed++;
-        } catch (error: any) {
+        } catch (error) {
+          const err = error as Error;
           results.details.push({
-            id: (provider as any).id,
-            name: (provider as any).name,
+            id: provider.id,
+            name: provider.name,
             success: false,
-            error: error.message
+            error: err.message
           });
           results.failed++;
         }

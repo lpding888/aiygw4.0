@@ -17,7 +17,9 @@ export interface UserPayload {
   role: UserRole;
   uid?: string; // token中可能用uid存储id
   jti?: string;
-  [key: string]: any;
+  phone?: string;
+  source?: string;
+  [key: string]: unknown;
 }
 
 /**
@@ -133,10 +135,11 @@ export async function authenticate(
       `[AuthMiddleware] 用户认证成功: userId=${normalizedUser.id}, role=${normalizedUser.role}`
     );
     next();
-  } catch (error: any) {
+  } catch (error) {
+    const err = error as Error;
     logger.error('JWT验证失败:', error);
 
-    if (error.name === 'TokenExpiredError') {
+    if (err.name === 'TokenExpiredError') {
       res.status(401).json({
         success: false,
         error: {
@@ -186,9 +189,10 @@ export async function optionalAuthenticate(
       }
     }
     next();
-  } catch (error: any) {
+  } catch (error) {
+    const err = error as Error;
     // 可选认证失败不阻止请求继续
-    logger.debug('可选认证失败:', error.message);
+    logger.debug('可选认证失败:', err.message);
     next();
   }
 }
@@ -277,7 +281,7 @@ export async function authenticateApiKey(
 
     logger.debug('[AuthMiddleware] API Key认证成功');
     next();
-  } catch (error: any) {
+  } catch (error) {
     logger.error('API Key认证失败:', error);
     res.status(401).json({
       success: false,

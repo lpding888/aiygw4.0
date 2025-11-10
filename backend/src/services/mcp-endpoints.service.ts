@@ -26,7 +26,7 @@ interface MCPEndpoint {
   timeoutMs: number;
   maxRetries: number;
   enabled: boolean;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   createdBy: string;
   updatedBy: string;
   createdAt: Date;
@@ -36,8 +36,8 @@ interface MCPEndpoint {
 interface MCPTool {
   name: string;
   description: string;
-  inputSchema: Record<string, any>;
-  outputSchema?: Record<string, any>;
+  inputSchema: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
   category: string;
   enabled: boolean;
   parameters: MCPParameter[];
@@ -48,12 +48,12 @@ interface MCPParameter {
   type: string;
   required: boolean;
   description: string;
-  defaultValue?: any;
+  defaultValue?: unknown;
   validation?: {
     min?: number;
     max?: number;
     pattern?: string;
-    enum?: any[];
+    enum?: unknown[];
   };
 }
 
@@ -64,6 +64,16 @@ interface MCPTestResult {
   sampleTools: string[];
   error?: string;
   capabilities: string[];
+}
+
+interface MCPInitializeResponse {
+  capabilities?: string[];
+  [key: string]: unknown;
+}
+
+interface MCPToolsResponse {
+  tools?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
 }
 
 class MCPEndpointsService {
@@ -142,7 +152,7 @@ class MCPEndpointsService {
         throw new Error('创建MCP端点后无法读取');
       }
       return endpoint;
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('创建MCP端点失败:', error);
       throw error;
     }
@@ -163,7 +173,7 @@ class MCPEndpointsService {
 
     try {
       const now = new Date();
-      const updateFields: any = {
+      const updateFields: Record<string, unknown> = {
         updated_by: updatedBy,
         updated_at: now
       };
@@ -171,10 +181,10 @@ class MCPEndpointsService {
       const assignIfPresent = (
         property: keyof MCPEndpoint,
         column: string,
-        transform?: (value: any) => any
+        transform?: (value: unknown) => unknown
       ) => {
         if (Object.prototype.hasOwnProperty.call(updateData, property)) {
-          const rawValue = (updateData as any)[property];
+          const rawValue = (updateData as Record<string, unknown>)[property];
           updateFields[column] = transform ? transform(rawValue) : rawValue;
         }
       };
@@ -205,7 +215,7 @@ class MCPEndpointsService {
         throw new Error('更新MCP端点后无法读取');
       }
       return endpoint;
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('更新MCP端点失败:', error);
       throw error;
     }
@@ -239,7 +249,7 @@ class MCPEndpointsService {
 
       logger.info('MCP端点已删除', { endpointId, deletedBy });
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error('删除MCP端点失败:', error);
       throw error;
     }
@@ -268,7 +278,7 @@ class MCPEndpointsService {
           return null;
         }
       );
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error(`获取MCP端点失败: ${endpointId}`, error);
       return null;
     }
@@ -314,7 +324,7 @@ class MCPEndpointsService {
       const mappedEndpoints = endpoints.map((endpoint) => this.mapDbRowToEndpoint(endpoint));
 
       return { endpoints: mappedEndpoints, total };
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error('获取MCP端点列表失败:', error);
       return { endpoints: [], total: 0 };
     }
@@ -358,7 +368,7 @@ class MCPEndpointsService {
       const latency = Date.now() - startTime;
 
       if (response.status === 200) {
-        const serverInfo = response.data;
+        const serverInfo = response.data as MCPInitializeResponse;
 
         // 发现工具
         const tools = await this.discoverTools(endpoint, apiKey);
@@ -389,9 +399,9 @@ class MCPEndpointsService {
       } else {
         throw new Error(`MCP握手失败: ${response.status}`);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       const latency = Date.now() - startTime;
-      const errorMessage = error.message || '连接失败';
+      const errorMessage = error instanceof Error ? error.message : '连接失败';
 
       // 更新端点错误状态
       await this.updateEndpointStatus(endpointId, {
@@ -426,20 +436,21 @@ class MCPEndpointsService {
         }
       });
 
-      if (response.status === 200 && response.data.tools) {
-        return response.data.tools.map((tool: any) => ({
-          name: tool.name,
-          description: tool.description || '',
-          inputSchema: tool.inputSchema || {},
-          outputSchema: tool.outputSchema,
-          category: tool.category || 'general',
+      const toolsData = response.data as MCPToolsResponse;
+      if (response.status === 200 && toolsData.tools) {
+        return toolsData.tools.map((tool: Record<string, unknown>) => ({
+          name: tool.name as string,
+          description: (tool.description as string) || '',
+          inputSchema: (tool.inputSchema as Record<string, unknown>) || {},
+          outputSchema: tool.outputSchema as Record<string, unknown> | undefined,
+          category: (tool.category as string) || 'general',
           enabled: tool.enabled !== false,
-          parameters: this.parseToolParameters(tool.inputSchema || {})
+          parameters: this.parseToolParameters((tool.inputSchema as Record<string, unknown>) || {})
         }));
       }
 
       return [];
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error(`发现MCP工具失败: ${endpoint.id}`, error);
       return [];
     }
@@ -451,9 +462,9 @@ class MCPEndpointsService {
   async executeTool(
     endpointId: string,
     toolName: string,
-    parameters: Record<string, any>,
+    parameters: Record<string, unknown>,
     userId: string
-  ): Promise<any> {
+  ): Promise<unknown> {
     const endpoint = await this.getEndpoint(endpointId);
     if (!endpoint) {
       throw new Error('MCP端点不存在');
@@ -503,11 +514,11 @@ class MCPEndpointsService {
           duration: Date.now() - Date.now()
         });
 
-        return response.data;
+        return response.data as unknown;
       } else {
         throw new Error(`工具执行失败: ${response.status}`);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error(`执行MCP工具失败: ${endpointId}/${toolName}`, error);
       throw error;
     }
@@ -518,27 +529,30 @@ class MCPEndpointsService {
    */
   async testAllEndpoints(): Promise<{
     results: Array<{ id: string; name: string; result: MCPTestResult }>;
-    summary: any;
+    summary: Record<string, unknown>;
   }> {
     const { endpoints } = await this.getEndpoints({ enabled: true });
-    const testPromises = [];
+    const testPromises: Promise<{ id: string; name: string; result: MCPTestResult }>[] = [];
 
     for (const endpoint of endpoints) {
       testPromises.push(
         this.testEndpoint(endpoint.id)
           .then((result) => ({ id: endpoint.id, name: endpoint.name, result }))
-          .catch((error) => ({
-            id: endpoint.id,
-            name: endpoint.name,
-            result: {
-              success: false,
-              latency: 0,
-              toolsCount: 0,
-              sampleTools: [],
-              capabilities: [],
-              error: error.message
-            }
-          }))
+          .catch((error: unknown) => {
+            const errorMessage = error instanceof Error ? error.message : '测试失败';
+            return {
+              id: endpoint.id,
+              name: endpoint.name,
+              result: {
+                success: false,
+                latency: 0,
+                toolsCount: 0,
+                sampleTools: [],
+                capabilities: [],
+                error: errorMessage
+              }
+            };
+          })
       );
     }
 
@@ -589,8 +603,9 @@ class MCPEndpointsService {
       try {
         await this.testEndpoint(endpoint.id);
         updated++;
-      } catch (error: any) {
-        errors.push(`${endpoint.name}: ${error.message}`);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        errors.push(`${endpoint.name}: ${errorMessage}`);
       }
     }
 
@@ -602,7 +617,14 @@ class MCPEndpointsService {
   /**
    * 获取端点统计信息
    */
-  async getStats(): Promise<any> {
+  async getStats(): Promise<{
+    total: number;
+    byStatus: Record<string, number>;
+    totalTools: number;
+    activeTools: number;
+    healthyEndpoints: number;
+    enabledEndpoints: number;
+  }> {
     try {
       const [statusStats, totalEndpoints] = await Promise.all([
         knex('mcp_endpoints').select('status').count('* as count').groupBy('status'),
@@ -616,17 +638,20 @@ class MCPEndpointsService {
         .reduce((sum, ep) => sum + (ep.supportedTools?.length || 0), 0);
 
       return {
-        total: totalEndpoints?.total || 0,
-        byStatus: statusStats.reduce((acc, row) => {
-          acc[row.status] = parseInt(String(row.count));
-          return acc;
-        }, {} as any),
+        total: (totalEndpoints?.total as number) || 0,
+        byStatus: statusStats.reduce(
+          (acc, row: Record<string, unknown>) => {
+            acc[row.status as string] = parseInt(String(row.count));
+            return acc;
+          },
+          {} as Record<string, number>
+        ),
         totalTools,
         activeTools,
         healthyEndpoints: endpoints.filter((ep) => ep.healthy).length,
         enabledEndpoints: endpoints.filter((ep) => ep.enabled).length
       };
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error('获取MCP端点统计失败:', error);
       return {
         total: 0,
@@ -653,7 +678,7 @@ class MCPEndpointsService {
       capabilities?: string[];
     }
   ): Promise<void> {
-    const updateFields: any = {
+    const updateFields: Record<string, unknown> = {
       updated_at: new Date()
     };
 
@@ -675,23 +700,25 @@ class MCPEndpointsService {
   /**
    * 解析工具参数
    */
-  private parseToolParameters(inputSchema: any): MCPParameter[] {
+  private parseToolParameters(inputSchema: Record<string, unknown>): MCPParameter[] {
     const parameters: MCPParameter[] = [];
 
-    if (inputSchema.properties) {
-      for (const [name, schema] of Object.entries(inputSchema.properties as any)) {
-        const s = schema as any;
+    if (inputSchema.properties && typeof inputSchema.properties === 'object') {
+      for (const [name, schema] of Object.entries(
+        inputSchema.properties as Record<string, unknown>
+      )) {
+        const s = schema as Record<string, unknown>;
         parameters.push({
           name,
-          type: s.type || 'string',
-          required: inputSchema.required?.includes(name) || false,
-          description: s.description || '',
+          type: (s.type as string) || 'string',
+          required: (inputSchema.required as unknown[])?.includes(name) || false,
+          description: (s.description as string) || '',
           defaultValue: s.default,
           validation: {
-            min: s.minimum,
-            max: s.maximum,
-            pattern: s.pattern,
-            enum: s.enum
+            min: s.minimum as number | undefined,
+            max: s.maximum as number | undefined,
+            pattern: s.pattern as string | undefined,
+            enum: s.enum as unknown[] | undefined
           }
         });
       }
@@ -703,7 +730,7 @@ class MCPEndpointsService {
   /**
    * 验证工具参数
    */
-  private validateToolParameters(tool: MCPTool, parameters: Record<string, any>): void {
+  private validateToolParameters(tool: MCPTool, parameters: Record<string, unknown>): void {
     for (const param of tool.parameters) {
       const value = parameters[param.name];
 
@@ -755,28 +782,28 @@ class MCPEndpointsService {
   /**
    * 将数据库行映射为MCPEndpoint对象
    */
-  private mapDbRowToEndpoint(row: any): MCPEndpoint {
+  private mapDbRowToEndpoint(row: Record<string, unknown>): MCPEndpoint {
     return {
-      id: row.id,
-      name: row.name,
-      description: row.description,
-      endpointUrl: row.endpoint_url,
-      apiKeyId: row.api_key,
-      protocolVersion: row.protocol_version,
-      capabilities: row.capabilities ? JSON.parse(row.capabilities) : [],
-      supportedTools: row.supported_tools ? JSON.parse(row.supported_tools) : [],
-      status: row.status,
-      lastSyncAt: row.last_sync_at,
-      lastError: row.last_error,
+      id: row.id as string,
+      name: row.name as string,
+      description: row.description as string,
+      endpointUrl: row.endpoint_url as string,
+      apiKeyId: row.api_key as string,
+      protocolVersion: row.protocol_version as string,
+      capabilities: row.capabilities ? JSON.parse(row.capabilities as string) : [],
+      supportedTools: row.supported_tools ? JSON.parse(row.supported_tools as string) : [],
+      status: row.status as 'active' | 'inactive' | 'error',
+      lastSyncAt: row.last_sync_at as Date | undefined,
+      lastError: row.last_error as string | undefined,
       healthy: Boolean(row.healthy),
-      timeoutMs: row.timeout_ms,
-      maxRetries: row.max_retries,
+      timeoutMs: row.timeout_ms as number,
+      maxRetries: row.max_retries as number,
       enabled: Boolean(row.enabled),
-      metadata: row.metadata ? JSON.parse(row.metadata) : {},
-      createdBy: row.created_by,
-      updatedBy: row.updated_by,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
+      metadata: row.metadata ? JSON.parse(row.metadata as string) : {},
+      createdBy: row.created_by as string,
+      updatedBy: row.updated_by as string,
+      createdAt: row.created_at as Date,
+      updatedAt: row.updated_at as Date
     };
   }
 

@@ -10,6 +10,18 @@ import { addIngestJob, getQueueStats } from '../../rag/ingest/worker.js';
 import db from '../../db/index.js';
 import logger from '../../utils/logger.js';
 
+// 扩展Express Request类型以支持自定义属性
+declare global {
+  namespace Express {
+    interface Request {
+      id: string;
+      user: {
+        id: string;
+      };
+    }
+  }
+}
+
 const router = express.Router();
 
 /**
@@ -21,7 +33,7 @@ const validate = (req: Request, res: Response, next: NextFunction) => {
     return res.status(400).json({
       success: false,
       errors: errors.array(),
-      requestId: (req as any).id
+      requestId: req.id
     });
   }
   next();
@@ -45,7 +57,7 @@ router.post(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = (req as any).user.id;
+      const userId = req.user.id;
       const { kbId, title, content, format, sourceUrl } = req.body;
 
       logger.info(`[KBRoute] 创建文档: userId=${userId} kbId=${kbId} title=${title}`);
@@ -76,11 +88,12 @@ router.post(
       res.json({
         success: true,
         data: { documentId, status: 'pending' },
-        requestId: (req as any).id
+        requestId: req.id
       });
-    } catch (error: any) {
-      logger.error('[KBRoute] 创建文档失败:', error);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[KBRoute] 创建文档失败:', err);
+      next(err);
     }
   }
 );
@@ -101,12 +114,13 @@ router.get(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = (req as any).user.id;
+      const userId = req.user.id;
       const { kbId, status, page = 1, limit = 20 } = req.query;
 
       const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
 
-      let query = db('kb_documents').where('user_id', userId);
+      type QueryBuilder = ReturnType<typeof db>;
+      let query: QueryBuilder = db('kb_documents').where('user_id', userId);
 
       if (kbId) {
         query = query.where('kb_id', kbId as string);
@@ -116,7 +130,7 @@ router.get(
         query = query.where('status', status as string);
       }
 
-      const [documents, [{ total }]] = await Promise.all([
+      const [documents, countResult] = await Promise.all([
         query
           .select('*')
           .orderBy('created_at', 'desc')
@@ -124,6 +138,9 @@ router.get(
           .offset(offset),
         query.count('* as total')
       ]);
+
+      type CountResult = { total: number };
+      const total = (countResult as CountResult[])[0]?.total ?? 0;
 
       res.json({
         success: true,
@@ -133,11 +150,12 @@ router.get(
           page: parseInt(page as string),
           limit: parseInt(limit as string)
         },
-        requestId: (req as any).id
+        requestId: req.id
       });
-    } catch (error: any) {
-      logger.error('[KBRoute] 获取文档列表失败:', error);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[KBRoute] 获取文档列表失败:', err);
+      next(err);
     }
   }
 );
@@ -158,13 +176,14 @@ router.post(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = (req as any).user.id;
+      const userId = req.user.id;
       const { query: searchQuery, kbId, topK = 5, filters = {} } = req.body;
 
       logger.info(`[KBRoute] 检索知识库: userId=${userId} query=${searchQuery}`);
 
       // 简化实现：基于文本匹配（实际应使用向量检索）
-      let dbQuery = db('kb_chunks')
+      type QueryBuilder = ReturnType<typeof db>;
+      let dbQuery: QueryBuilder = db('kb_chunks')
         .join('kb_documents', 'kb_chunks.document_id', 'kb_documents.id')
         .where('kb_documents.user_id', userId)
         .where('kb_documents.status', 'completed');
@@ -193,11 +212,12 @@ router.post(
           results,
           count: results.length
         },
-        requestId: (req as any).id
+        requestId: req.id
       });
-    } catch (error: any) {
-      logger.error('[KBRoute] 检索失败:', error);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[KBRoute] 检索失败:', err);
+      next(err);
     }
   }
 );
@@ -216,11 +236,12 @@ router.get(
       res.json({
         success: true,
         data: stats,
-        requestId: (req as any).id
+        requestId: req.id
       });
-    } catch (error: any) {
-      logger.error('[KBRoute] 获取队列统计失败:', error);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[KBRoute] 获取队列统计失败:', err);
+      next(err);
     }
   }
 );

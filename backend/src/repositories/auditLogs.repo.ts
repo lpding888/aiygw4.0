@@ -12,7 +12,7 @@ export interface AuditLog {
   action: 'create' | 'update' | 'delete' | 'publish' | 'unpublish' | 'approve' | 'reject';
   user_id?: number;
   user_name?: string;
-  changes?: any;
+  changes?: unknown;
   reason?: string;
   ip_address?: string;
   user_agent?: string;
@@ -25,7 +25,7 @@ export interface CreateAuditLogInput {
   action: 'create' | 'update' | 'delete' | 'publish' | 'unpublish' | 'approve' | 'reject';
   user_id?: number;
   user_name?: string;
-  changes?: any;
+  changes?: unknown;
   reason?: string;
   ip_address?: string;
   user_agent?: string;

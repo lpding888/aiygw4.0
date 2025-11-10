@@ -2,6 +2,18 @@ import type { Request, Response } from 'express';
 import featureService from '../services/feature.service.js';
 import logger from '../utils/logger.js';
 
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+  };
+}
+
+interface FeatureError {
+  statusCode?: number;
+  errorCode?: number;
+  message?: string;
+}
+
 /**
  * Feature Controller - 功能卡片控制器（TS版）
  * 处理功能卡片相关的HTTP请求
@@ -13,21 +25,23 @@ class FeatureController {
       let features;
 
       // 未登录：返回所有启用的功能（首页展示用）
-      if (!(req as any).user) {
+      if (!(req as unknown as AuthenticatedRequest).user) {
         features = await featureService.getAllEnabledFeatures();
       } else {
         // 已登录：根据权限返回可用功能
-        const userId = (req as any).user.id as string;
+        const userId = (req as unknown as AuthenticatedRequest).user!.id;
         features = await featureService.getAvailableFeatures(userId);
       }
 
       res.json({ success: true, data: features });
-    } catch (error: any) {
-      logger.error(`[FeatureController] 获取功能列表失败: ${error?.message}`, { error });
-      res.status(error?.statusCode ?? 500).json({
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      const featureErr = error as unknown as FeatureError;
+      logger.error(`[FeatureController] 获取功能列表失败: ${featureErr?.message}`, { error });
+      res.status(featureErr?.statusCode ?? 500).json({
         success: false,
-        errorCode: error?.errorCode ?? 5000,
-        message: error?.message ?? '获取功能列表失败'
+        errorCode: featureErr?.errorCode ?? 5000,
+        message: featureErr?.message ?? '获取功能列表失败'
       });
     }
   }
@@ -36,17 +50,18 @@ class FeatureController {
   async getFormSchema(req: Request, res: Response): Promise<void> {
     try {
       const { featureId } = req.params as { featureId: string };
-      const userId = ((req as any).user?.id ?? '') as string;
+      const userId = ((req as unknown as AuthenticatedRequest).user?.id ?? '') as string;
 
       const formSchema = await featureService.getFormSchema(featureId, userId);
 
       res.json({ success: true, ...formSchema });
-    } catch (error: any) {
-      logger.error(`[FeatureController] 获取表单Schema失败: ${error?.message}`, { error });
-      res.status(error?.statusCode ?? 500).json({
+    } catch (error: unknown) {
+      const featureErr = error as unknown as FeatureError;
+      logger.error(`[FeatureController] 获取表单Schema失败: ${featureErr?.message}`, { error });
+      res.status(featureErr?.statusCode ?? 500).json({
         success: false,
-        errorCode: error?.errorCode ?? 5000,
-        message: error?.message ?? '获取表单Schema失败'
+        errorCode: featureErr?.errorCode ?? 5000,
+        message: featureErr?.message ?? '获取表单Schema失败'
       });
     }
   }

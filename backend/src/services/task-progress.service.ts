@@ -3,7 +3,7 @@ import websocketService from './websocket.service.js';
 import { db } from '../config/database.js';
 import cacheService from './cache.service.js';
 
-type AnyObject = Record<string, any>;
+type AnyObject = Record<string, unknown>;
 
 type PushQueueItem = {
   taskId: string;

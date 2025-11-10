@@ -2,12 +2,21 @@ import type { Request, Response, NextFunction } from 'express';
 import uiSchemaService from '../services/ui-schema.service.js';
 import logger from '../utils/logger.js';
 
+/**
+ * 增强请求对象类型 - 添加UI schema特定字段
+ */
+interface EnhancedRequest extends Request {
+  userRole?: string;
+  userPermissions?: Record<string, unknown>;
+  id?: string;
+}
+
 class UiSchemaController {
   async getMenus(req: Request, res: Response, next: NextFunction) {
     try {
-      const userRole = (req as any).userRole || req.user?.role || 'viewer';
-      const menus = await (uiSchemaService as any).getMenus(userRole);
-      res.json({ success: true, data: menus, requestId: req.id });
+      const userRole = (req as EnhancedRequest).userRole || req.user?.role || 'viewer';
+      const menus = await uiSchemaService.getMenus(userRole);
+      res.json({ success: true, data: menus, requestId: (req as EnhancedRequest).id });
     } catch (error) {
       logger.error('[UiSchemaController] Get menus failed:', error);
       next(error);
@@ -16,9 +25,9 @@ class UiSchemaController {
 
   async getUiSchema(req: Request, res: Response, next: NextFunction) {
     try {
-      const userRole = (req as any).userRole || req.user?.role || 'viewer';
-      const schema = await (uiSchemaService as any).getUISchema(userRole);
-      res.json({ success: true, data: schema, requestId: req.id });
+      const userRole = (req as EnhancedRequest).userRole || req.user?.role || 'viewer';
+      const schema = await uiSchemaService.getUISchema(userRole);
+      res.json({ success: true, data: schema, requestId: (req as EnhancedRequest).id });
     } catch (error) {
       logger.error('[UiSchemaController] Get UI schema failed:', error);
       next(error);
@@ -28,9 +37,9 @@ class UiSchemaController {
   async getFeatureUiConfig(req: Request, res: Response, next: NextFunction) {
     try {
       const { featureKey } = req.params as { featureKey: string };
-      const userRole = (req as any).userRole || req.user?.role || 'viewer';
-      const config = await (uiSchemaService as any).getFeatureUiConfig(featureKey, userRole);
-      res.json({ success: true, data: config, requestId: req.id });
+      const userRole = (req as EnhancedRequest).userRole || req.user?.role || 'viewer';
+      const config = await uiSchemaService.getFeatureUiConfig(featureKey, userRole);
+      res.json({ success: true, data: config, requestId: (req as EnhancedRequest).id });
     } catch (error) {
       logger.error('[UiSchemaController] Get feature UI config failed:', error);
       next(error);
@@ -39,7 +48,7 @@ class UiSchemaController {
 
   async invalidateCache(_req: Request, res: Response, next: NextFunction) {
     try {
-      await (uiSchemaService as any).invalidateCache();
+      await uiSchemaService.invalidateCache();
       res.json({
         success: true,
         message: 'UI缓存已失效',
@@ -53,11 +62,11 @@ class UiSchemaController {
 
   async getUserRole(req: Request, res: Response, next: NextFunction) {
     try {
-      const role = req.user?.role || (req as any).userRole || 'viewer';
+      const role = req.user?.role || (req as EnhancedRequest).userRole || 'viewer';
       res.json({
         success: true,
-        data: { role, permissions: (req as any).userPermissions || {} },
-        requestId: req.id
+        data: { role, permissions: (req as EnhancedRequest).userPermissions || {} },
+        requestId: (req as EnhancedRequest).id
       });
     } catch (error) {
       logger.error('[UiSchemaController] Get user role failed:', error);

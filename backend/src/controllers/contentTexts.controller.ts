@@ -7,6 +7,16 @@ import { Request, Response, NextFunction } from 'express';
 import * as textRepo from '../repositories/contentTexts.repo.js';
 import type { CreateTextInput } from '../repositories/contentTexts.repo.js';
 
+/**
+ * Express请求对象扩展类型定义
+ */
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: number;
+    [key: string]: unknown;
+  };
+}
+
 export class ContentTextsController {
   /**
    * 列出文案（管理端）
@@ -32,9 +42,10 @@ export class ContentTextsController {
           offset: parseInt(offset as string)
         }
       });
-    } catch (error: any) {
-      console.error('[TextsController] 列出文案失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[TextsController] 列出文案失败:', err.message);
+      next(err);
     }
   }
 
@@ -55,9 +66,10 @@ export class ContentTextsController {
         success: true,
         data: texts
       });
-    } catch (error: any) {
-      console.error('[TextsController] 获取页面文案失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[TextsController] 获取页面文案失败:', err.message);
+      next(err);
     }
   }
 
@@ -78,9 +90,10 @@ export class ContentTextsController {
       }
 
       res.json({ success: true, data: text });
-    } catch (error: any) {
-      console.error('[TextsController] 获取文案失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[TextsController] 获取文案失败:', err.message);
+      next(err);
     }
   }
 
@@ -91,7 +104,7 @@ export class ContentTextsController {
     try {
       const input: CreateTextInput = {
         ...req.body,
-        created_by: (req as any).user?.id
+        created_by: (req as AuthenticatedRequest).user?.id
       };
 
       // 艹，基础校验
@@ -122,9 +135,10 @@ export class ContentTextsController {
       const text = await textRepo.createText(input);
 
       res.status(201).json({ success: true, data: text });
-    } catch (error: any) {
-      console.error('[TextsController] 创建文案失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[TextsController] 创建文案失败:', err.message);
+      next(err);
     }
   }
 
@@ -136,22 +150,23 @@ export class ContentTextsController {
       const id = parseInt(req.params.id);
       const updates = {
         ...req.body,
-        updated_by: (req as any).user?.id
+        updated_by: (req as AuthenticatedRequest).user?.id
       };
 
       const text = await textRepo.updateText(id, updates);
 
       res.json({ success: true, data: text });
-    } catch (error: any) {
-      if (error.message.includes('不存在')) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      if (err.message.includes('不存在')) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: error.message }
+          error: { code: 'NOT_FOUND', message: err.message }
         });
         return;
       }
-      console.error('[TextsController] 更新文案失败:', error.message);
-      next(error);
+      console.error('[TextsController] 更新文案失败:', err.message);
+      next(err);
     }
   }
 
@@ -172,9 +187,10 @@ export class ContentTextsController {
       }
 
       res.json({ success: true, message: '文案已删除' });
-    } catch (error: any) {
-      console.error('[TextsController] 删除文案失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[TextsController] 删除文案失败:', err.message);
+      next(err);
     }
   }
 
@@ -185,7 +201,7 @@ export class ContentTextsController {
   async batchUpsertTexts(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { texts } = req.body;
-      const updated_by = (req as any).user?.id;
+      const updated_by = (req as AuthenticatedRequest).user?.id;
 
       if (!Array.isArray(texts) || texts.length === 0) {
         res.status(400).json({
@@ -202,9 +218,10 @@ export class ContentTextsController {
         data: result,
         message: `批量导入成功: 创建${result.created}条, 更新${result.updated}条`
       });
-    } catch (error: any) {
-      console.error('[TextsController] 批量导入文案失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[TextsController] 批量导入文案失败:', err.message);
+      next(err);
     }
   }
 }

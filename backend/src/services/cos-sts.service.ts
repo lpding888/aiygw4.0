@@ -114,7 +114,18 @@ class CosSTSService {
       );
 
       // 调用STS API
-      const stsResult = await new Promise<any>((resolve, reject) => {
+      interface STSResult {
+        credentials: {
+          tmpSecretId: string;
+          tmpSecretKey: string;
+          sessionToken: string;
+        };
+        expiredTime: number;
+        expiration: string;
+        startTime: number;
+      }
+
+      const stsResult = await new Promise<STSResult>((resolve, reject) => {
         STS.getCredential(
           {
             secretId: this.secretId,
@@ -123,12 +134,11 @@ class CosSTSService {
             durationSeconds: validDuration,
             policy
           },
-          // @ts-ignore - 艹，qcloud-cos-sts库的回调类型定义有问题！
-          (err: Error | null, credential: any) => {
+          (err: Error | null, credential: unknown) => {
             if (err) {
               reject(err);
             } else {
-              resolve(credential);
+              resolve(credential as STSResult);
             }
           }
         );
@@ -179,10 +189,22 @@ class CosSTSService {
   }
 
   /**
+   * COS策略接口
+   */
+  interface COSPolicyStatement {
+    version: string;
+    statement: Array<{
+      effect: string;
+      action: string[];
+      resource: string[];
+    }>;
+  }
+
+  /**
    * 构建COS权限策略
    * @private
    */
-  private buildPolicy(policy: STSPolicy): any {
+  private buildPolicy(policy: STSPolicy): COSPolicyStatement {
     const { action, bucket, region, prefix } = policy;
 
     return {

@@ -15,7 +15,7 @@ interface PipelineNode {
   id: string;
   type: string;
   name: string;
-  config: Record<string, any>;
+  config: Record<string, unknown>;
   inputs: string[];
   outputs: string[];
   position?: { x: number; y: number };
@@ -40,7 +40,7 @@ interface PipelineSchema {
   nodes: PipelineNode[];
   edges: PipelineEdge[];
   variables: PipelineVariable[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 interface ValidationResult {
@@ -394,11 +394,12 @@ class PipelineValidatorService {
         try {
           // 这里可以添加条件表达式的验证逻辑
           this.validateConditionExpression(edge.condition, edge.source, edge.target, errors);
-        } catch (error: any) {
+        } catch (error: unknown) {
           // 艹，TypeScript的error类型是unknown，需要转换！
+          const err = error instanceof Error ? error.message : String(error);
           errors.push({
             type: 'invalid_condition_expression',
-            message: `条件表达式无效: ${error.message}`,
+            message: `条件表达式无效: ${err}`,
             nodeId: edge.source,
             severity: 'error'
           });

@@ -42,7 +42,7 @@ export const loggerStream = {
 };
 
 // 兼容旧代码直接访问 logger.stream
-(logger as any).stream = loggerStream;
+(logger as unknown as Record<string, unknown>).stream = loggerStream;
 
 export type Logger = typeof logger;
 

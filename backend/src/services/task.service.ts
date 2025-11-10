@@ -6,27 +6,42 @@ import featureService from './feature.service.js';
 import pipelineEngine from './pipelineEngine.service.js';
 import { checkFeatureRateLimit } from '../middlewares/rateLimiter.middleware.js';
 import logger from '../utils/logger.js';
-import websocketService from './websocket.service.js'; // P1-011: WebSocket服务
+import websocketService from './websocket.service.js';
+import type {
+  Task,
+  TaskCreateResult,
+  TaskDetailResponse,
+  TaskListOptions,
+  TaskListResponse,
+  TaskUpdateData,
+  TaskParams,
+  TaskInputData,
+  RateLimitResult,
+  FeatureDefinition,
+  VideoGenerateResult,
+  TaskWebSocketData,
+  TaskError
+} from '../types/task.types.js';
 
 /**
  * 任务服务 - TypeScript 版本
- * 这个SB服务负责任务创建/查询/状态更新，别tm改业务语义！
+ * 这个SB服务负责任务创建/查询/状态更新,别tm改业务语义!
  */
 class TaskService {
   /**
-   * 创建任务（旧三种类型）
+   * 创建任务(旧三种类型)
    */
   async create(
     userId: string,
     type: string,
     inputImageUrl: string,
-    params: any = {}
-  ): Promise<any> {
+    params: TaskParams = {}
+  ): Promise<TaskCreateResult> {
     let taskId: string | undefined;
     try {
       const validTypes = ['basic_clean', 'model_pose12', 'video_generate'];
       if (!validTypes.includes(type)) {
-        throw { errorCode: 4001, message: '无效的任务类型' };
+        throw { errorCode: 4001, message: '无效的任务类型' } as TaskError;
       }
 
       const quotaCost = this.getQuotaCost(type);
@@ -52,7 +67,7 @@ class TaskService {
         return {
           taskId,
           type,
-          status: 'pending',
+          status: 'pending' as const,
           createdAt: now.toISOString()
         };
       });
@@ -62,61 +77,66 @@ class TaskService {
       );
 
       if (type === 'video_generate') {
-        // 异步，不阻塞响应
-        this.processVideoGenerateTask(taskId!, inputImageUrl, params).catch((err: any) => {
+        // 异步,不阻塞响应
+        this.processVideoGenerateTask(taskId!, inputImageUrl, params).catch((err: Error) => {
           logger.error(`[TaskService] 视频任务异步处理失败: ${err.message}`, { taskId });
           this.handleVideoTaskFailure(taskId!, userId, err.message);
         });
       }
 
       return result;
-    } catch (error: any) {
-      logger.error(`[TaskService] 创建任务失败: ${error.message}`, { userId, type, error });
+    } catch (error) {
+      const err = error as Error;
+      logger.error(`[TaskService] 创建任务失败: ${err.message}`, { userId, type, error });
       throw error;
     }
   }
 
   /**
-   * 基于功能卡片创建任务（新架构）
+   * 基于功能卡片创建任务(新架构)
    */
-  async createByFeature(userId: string, featureId: string, inputData: any = {}): Promise<any> {
+  async createByFeature(
+    userId: string,
+    featureId: string,
+    inputData: TaskInputData = {}
+  ): Promise<TaskCreateResult> {
     let taskId: string | undefined;
     try {
       // 1) 获取功能定义
-      const feature = await db('feature_definitions')
+      const feature = (await db('feature_definitions')
         .where('feature_id', featureId)
         .whereNull('deleted_at')
-        .first();
+        .first()) as FeatureDefinition | undefined;
 
-      if (!feature) throw { errorCode: 4004, message: '功能不存在' };
-      if (!feature.is_enabled) throw { errorCode: 4003, message: '功能已禁用' };
+      if (!feature) throw { errorCode: 4004, message: '功能不存在' } as TaskError;
+      if (!feature.is_enabled) throw { errorCode: 4003, message: '功能已禁用' } as TaskError;
 
       // 2) 权限校验
-      const hasAccess = await featureService.checkUserAccess(userId, feature as any);
-      if (!hasAccess) throw { errorCode: 4003, message: '无权使用该功能' };
+      const hasAccess = await featureService.checkUserAccess(userId, feature);
+      if (!hasAccess) throw { errorCode: 4003, message: '无权使用该功能' } as TaskError;
 
       // 3) 限流校验
-      const rateLimitResult = await checkFeatureRateLimit(
+      const rateLimitResult = (await checkFeatureRateLimit(
         featureId,
-        (feature as any).rate_limit_policy,
+        feature.rate_limit_policy,
         userId
-      );
-      if (!(rateLimitResult as any).allowed) {
+      )) as RateLimitResult;
+      if (!rateLimitResult.allowed) {
         throw {
           errorCode: 4029,
-          message: '请求过于频繁，请稍后再试',
+          message: '请求过于频繁,请稍后再试',
           rateLimitInfo: {
-            resetAt: (rateLimitResult as any).resetAt,
-            remaining: (rateLimitResult as any).remaining
+            resetAt: rateLimitResult.resetAt || '',
+            remaining: rateLimitResult.remaining || 0
           }
-        };
+        } as TaskError;
       }
 
-      // 4) Saga 预留配额（先拿个taskId）
+      // 4) Saga 预留配额(先拿个taskId)
       taskId = nanoid();
-      await quotaService.reserve(userId, taskId, (feature as any).quota_cost);
+      await quotaService.reserve(userId, taskId, feature.quota_cost);
 
-      // 5) 创建任务记录（兼容旧字段）
+      // 5) 创建任务记录(兼容旧字段)
       const now = new Date();
       await db('tasks').insert({
         id: taskId,
@@ -130,24 +150,24 @@ class TaskService {
         updated_at: now,
         // 兼容旧表结构
         type: featureId,
-        inputUrl: (inputData as any).imageUrl || '',
+        inputUrl: inputData.imageUrl || '',
         params: null
       });
 
-      const result = {
+      const result: TaskCreateResult = {
         taskId,
         featureId,
         status: 'pending',
         createdAt: now.toISOString(),
-        quotaCost: (feature as any).quota_cost
+        quotaCost: feature.quota_cost
       };
 
       logger.info(
-        `[TaskService] Feature任务创建成功 taskId=${taskId} userId=${userId} featureId=${featureId} quotaCost=${(feature as any).quota_cost}`
+        `[TaskService] Feature任务创建成功 taskId=${taskId} userId=${userId} featureId=${featureId} quotaCost=${feature.quota_cost}`
       );
 
-      // 6) 异步执行 Pipeline（不阻塞响应）
-      pipelineEngine.executePipeline(taskId!, featureId, inputData).catch((err: any) => {
+      // 6) 异步执行 Pipeline(不阻塞响应)
+      pipelineEngine.executePipeline(taskId!, featureId, inputData).catch((err: Error) => {
         logger.error(`[TaskService] Pipeline执行异常 taskId=${taskId} error=${err.message}`, {
           taskId,
           featureId,
@@ -156,8 +176,9 @@ class TaskService {
       });
 
       return result;
-    } catch (error: any) {
-      logger.error(`[TaskService] 创建Feature任务失败: ${error.message}`, {
+    } catch (error) {
+      const err = error as Error;
+      logger.error(`[TaskService] 创建Feature任务失败: ${err.message}`, {
         userId,
         featureId,
         error
@@ -167,17 +188,17 @@ class TaskService {
   }
 
   /**
-   * 获取任务详情（按当前控制器用法，不校验 userId）
+   * 获取任务详情(按当前控制器用法,不校验 userId)
    */
-  async get(taskId: string): Promise<any> {
+  async get(taskId: string): Promise<TaskDetailResponse> {
     try {
-      const task = await db('tasks').where('id', taskId).first();
-      if (!task) throw { errorCode: 4004, message: '任务不存在' };
+      const task = (await db('tasks').where('id', taskId).first()) as Task | undefined;
+      if (!task) throw { errorCode: 4004, message: '任务不存在' } as TaskError;
 
-      const params = task.params ? JSON.parse(task.params) : {};
-      const resultUrls = task.resultUrls ? JSON.parse(task.resultUrls) : [];
+      const params: TaskParams = task.params ? JSON.parse(task.params) : {};
+      const resultUrls: string[] = task.resultUrls ? JSON.parse(task.resultUrls) : [];
 
-      // 艹！内部字段别暴露
+      // 艹!内部字段别暴露
       return {
         id: task.id,
         type: task.type,
@@ -193,8 +214,9 @@ class TaskService {
         updatedAt: task.updated_at,
         completedAt: task.completed_at
       };
-    } catch (error: any) {
-      logger.error(`[TaskService] 获取任务失败: ${error.message}`, { taskId, error });
+    } catch (error) {
+      const err = error as Error;
+      logger.error(`[TaskService] 获取任务失败: ${err.message}`, { taskId, error });
       throw error;
     }
   }
@@ -202,10 +224,14 @@ class TaskService {
   /**
    * 更新任务状态 (P1-011: 添加WebSocket推送)
    */
-  async updateStatus(taskId: string, status: string, data: any = {}): Promise<void> {
+  async updateStatus(
+    taskId: string,
+    status: string,
+    data: { resultUrls?: string[]; errorMessage?: string } = {}
+  ): Promise<void> {
     try {
-      const updateData: any = {
-        status,
+      const updateData: TaskUpdateData = {
+        status: status as 'pending' | 'processing' | 'success' | 'failed',
         updated_at: new Date()
       };
       if (status === 'success' || status === 'failed') {
@@ -219,11 +245,11 @@ class TaskService {
       logger.info(`[TaskService] 任务状态更新 taskId=${taskId} status=${status}`);
 
       // P1-011: 获取任务详情用于WebSocket推送
-      const task = await db('tasks').where('id', taskId).first();
+      const task = (await db('tasks').where('id', taskId).first()) as Task | undefined;
       if (task) {
         // P1-011: 推送任务状态变更
         try {
-          const taskData = {
+          const taskData: TaskWebSocketData = {
             id: task.id,
             type: task.type,
             status: task.status,
@@ -237,13 +263,14 @@ class TaskService {
 
           // 推送WebSocket任务状态变更事件
           websocketService.pushTaskStatusChange(task.userId, taskId, status, taskData);
-        } catch (wsError: any) {
+        } catch (wsError) {
           // WebSocket推送失败不影响主流程
-          logger.warn(`[TaskService] WebSocket推送失败: ${wsError.message}`, { taskId });
+          const err = wsError as Error;
+          logger.warn(`[TaskService] WebSocket推送失败: ${err.message}`, { taskId });
         }
       }
 
-      // 如果任务失败,取消配额预留（艹！使用cancel方法返还配额）
+      // 如果任务失败,取消配额预留(艹!使用cancel方法返还配额)
       if (status === 'failed' && task && task.eligible_for_refund && !task.refunded) {
         try {
           await quotaService.cancel(taskId);
@@ -252,12 +279,14 @@ class TaskService {
           logger.info(
             `[TaskService] 任务失败,配额已返还 taskId=${taskId} userId=${task.userId} amount=${refundAmount}`
           );
-        } catch (cancelError: any) {
-          logger.error(`[TaskService] 配额返还失败: ${cancelError.message}`, { taskId });
+        } catch (cancelError) {
+          const err = cancelError as Error;
+          logger.error(`[TaskService] 配额返还失败: ${err.message}`, { taskId });
         }
       }
-    } catch (error: any) {
-      logger.error(`[TaskService] 更新任务状态失败: ${error.message}`, { taskId, status, error });
+    } catch (error) {
+      const err = error as Error;
+      logger.error(`[TaskService] 更新任务状态失败: ${err.message}`, { taskId, status, error });
       throw error;
     }
   }
@@ -265,25 +294,27 @@ class TaskService {
   /**
    * 获取任务列表
    */
-  async list(userId: string, options: any = {}): Promise<any> {
+  async list(userId: string, options: TaskListOptions = {}): Promise<TaskListResponse> {
     try {
       const { limit = 10, offset = 0, status = null, type = null } = options ?? {};
       let query = db('tasks').where('userId', userId).orderBy('created_at', 'desc');
       if (status) query = query.where('status', status);
       if (type) query = query.where('type', type);
 
-      const tasks = await query.limit(Number(limit)).offset(Number(offset));
+      const tasks = (await query.limit(Number(limit)).offset(Number(offset))) as Task[];
 
       let countQuery = db('tasks').where('userId', userId);
       if (status) countQuery = countQuery.where('status', status);
       if (type) countQuery = countQuery.where('type', type);
-      const [{ count }] = await countQuery.count('* as count');
+      const countResult = (await countQuery.count('* as count')) as Array<{ count: number }>;
+      const count = countResult[0].count;
 
-      const formatted = tasks.map((task: any) => ({
+      const formatted: TaskDetailResponse[] = tasks.map((task) => ({
         id: task.id,
         type: task.type,
         status: task.status,
         inputImageUrl: task.inputImageUrl,
+        params: {},
         resultUrls: task.resultUrls ? JSON.parse(task.resultUrls) : [],
         createdAt: task.created_at,
         updatedAt: task.updated_at,
@@ -296,36 +327,38 @@ class TaskService {
         limit: Number(limit),
         offset: Number(offset)
       };
-    } catch (error: any) {
-      logger.error(`[TaskService] 获取任务列表失败: ${error.message}`, { userId, error });
+    } catch (error) {
+      const err = error as Error;
+      logger.error(`[TaskService] 获取任务列表失败: ${err.message}`, { userId, error });
       throw error;
     }
   }
 
   /**
-   * 异步：处理视频生成任务
+   * 异步:处理视频生成任务
    */
   async processVideoGenerateTask(
     taskId: string,
     inputImageUrl: string,
-    params: any
+    params: TaskParams
   ): Promise<void> {
     try {
       logger.info(`[TaskService] 开始处理视频生成任务 taskId=${taskId}`);
-      await this.updateStatus(taskId, 'processing', {} as any);
-      const videoResult = await videoGenerateService.processVideoTask(
+      await this.updateStatus(taskId, 'processing', {});
+      const videoResult = (await videoGenerateService.processVideoTask(
         taskId,
         inputImageUrl,
         params
-      );
+      )) as VideoGenerateResult;
       await db('tasks')
         .where('id', taskId)
-        .update({ vendorTaskId: (videoResult as any).vendorTaskId, updated_at: new Date() });
+        .update({ vendorTaskId: videoResult.vendorTaskId, updated_at: new Date() });
       logger.info(
-        `[TaskService] 视频生成任务处理完成 taskId=${taskId} vendorTaskId=${(videoResult as any).vendorTaskId}`
+        `[TaskService] 视频生成任务处理完成 taskId=${taskId} vendorTaskId=${videoResult.vendorTaskId}`
       );
-    } catch (error: any) {
-      logger.error(`[TaskService] 视频生成任务处理失败 taskId=${taskId} error=${error.message}`);
+    } catch (error) {
+      const err = error as Error;
+      logger.error(`[TaskService] 视频生成任务处理失败 taskId=${taskId} error=${err.message}`);
       throw error;
     }
   }
@@ -341,8 +374,9 @@ class TaskService {
     try {
       await this.updateStatus(taskId, 'failed', { errorMessage });
       logger.info(`[TaskService] 视频任务失败处理完成 taskId=${taskId} userId=${userId}`);
-    } catch (error: any) {
-      logger.error(`[TaskService] 视频任务失败处理异常 taskId=${taskId} error=${error.message}`);
+    } catch (error) {
+      const err = error as Error;
+      logger.error(`[TaskService] 视频任务失败处理异常 taskId=${taskId} error=${err.message}`);
     }
   }
 
@@ -352,7 +386,7 @@ class TaskService {
     return Number.parseInt(process.env[key] || '1', 10);
   }
 
-  /** 获取任务类型中文名（兼容旧逻辑） */
+  /** 获取任务类型中文名(兼容旧逻辑) */
   getTaskTypeLabel(type: string): string {
     const labels: Record<string, string> = {
       basic_clean: '基础修图',
@@ -362,13 +396,13 @@ class TaskService {
     return labels[type] || type;
   }
 
-  /** 清理超时 pending 任务（10min） */
+  /** 清理超时 pending 任务(10min) */
   async cleanupTimeoutTasks(): Promise<number> {
     try {
       const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-      const timeoutTasks = await db('tasks')
+      const timeoutTasks = (await db('tasks')
         .where('status', 'pending')
-        .where('created_at', '<', tenMinutesAgo);
+        .where('created_at', '<', tenMinutesAgo)) as Task[];
       for (const task of timeoutTasks) {
         await this.updateStatus(task.id, 'failed', { errorMessage: '任务超时(10分钟未处理)' });
       }
@@ -376,14 +410,21 @@ class TaskService {
         logger.info(`[TaskService] 清理超时任务完成 count=${timeoutTasks.length}`);
       }
       return timeoutTasks.length;
-    } catch (error: any) {
-      logger.error(`[TaskService] 清理超时任务失败: ${error.message}`, error);
+    } catch (error) {
+      const err = error as Error;
+      logger.error(`[TaskService] 清理超时任务失败: ${err.message}`, error);
       throw error;
     }
   }
 
-  /** 返还配额（保留旧接口） */
-  async refundQuota(taskId: string, userId: string, amount: number, reason: string): Promise<any> {
+  /** 返还配额(保留旧接口) */
+  async refundQuota(
+    taskId: string,
+    userId: string,
+    amount: number,
+    reason: string
+  ): Promise<unknown> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return await (quotaService as any).refund?.(taskId, userId, amount, reason);
   }
 }

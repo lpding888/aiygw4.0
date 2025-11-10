@@ -1,10 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import Redis from 'ioredis';
 import type { Redis as RedisInstance } from 'ioredis';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
 
-type RedisConstructor = new (...args: any[]) => RedisInstance;
+type RedisConstructor = new (...args: unknown[]) => RedisInstance;
 const RedisCtor = Redis as unknown as RedisConstructor;
 
 type CacheStats = {
@@ -17,7 +16,7 @@ type CacheStats = {
   errors: number;
 };
 
-type MemoryCacheEntry<T = any> = {
+type MemoryCacheEntry<T = unknown> = {
   value: T;
   expiresAt: number;
   createdAt: number;
@@ -117,9 +116,9 @@ class CacheService {
    * 获取缓存
    * @param {string} key - 缓存键
    * @param {Object} options - 选项
-   * @returns {Promise<any>} 缓存值
+   * @returns {Promise<T>} 缓存值
    */
-  async get<T = any>(key: string, options: CacheGetOptions = {}): Promise<T | null> {
+  async get<T = unknown>(key: string, options: CacheGetOptions = {}): Promise<T | null> {
     try {
       const startTime = Date.now();
 
@@ -176,11 +175,11 @@ class CacheService {
   /**
    * 设置缓存
    * @param {string} key - 缓存键
-   * @param {any} value - 缓存值
+   * @param {T} value - 缓存值
    * @param {number|Object} ttlOrOptions - TTL或选项
    * @returns {Promise<boolean>} 是否成功
    */
-  async set<T = any>(
+  async set<T = unknown>(
     key: string,
     value: T,
     ttlOrOptions: number | CacheSetOptions = {}
@@ -304,9 +303,9 @@ class CacheService {
    * @param {string} namespace - 命名空间
    * @param {string} key - 缓存键
    * @param {Object} options - 选项
-   * @returns {Promise<any>} 缓存值
+   * @returns {Promise<T>} 缓存值
    */
-  async getWithVersion<T = any>(
+  async getWithVersion<T = unknown>(
     namespace: string,
     key: string,
     options: CacheGetOptions = {}
@@ -327,11 +326,11 @@ class CacheService {
    * 版本化缓存设置
    * @param {string} namespace - 命名空间
    * @param {string} key - 缓存键
-   * @param {any} value - 缓存值
+   * @param {T} value - 缓存值
    * @param {number|Object} ttlOrOptions - TTL或选项
    * @returns {Promise<boolean>} 是否成功
    */
-  async setWithVersion<T = any>(
+  async setWithVersion<T = unknown>(
     namespace: string,
     key: string,
     value: T,
@@ -404,10 +403,10 @@ class CacheService {
   /**
    * 发布消息到频道
    * @param {string} channel - 频道名
-   * @param {any} message - 消息内容
+   * @param {Record<string, unknown>} message - 消息内容
    * @returns {Promise<number>} 接收者数量
    */
-  async publish(channel: string, message: Record<string, any>): Promise<number> {
+  async publish(channel: string, message: Record<string, unknown>): Promise<number> {
     try {
       const messageStr = JSON.stringify({
         id: crypto.randomUUID(),
@@ -429,11 +428,11 @@ class CacheService {
    * 订阅频道
    * @param {string} channel - 频道名
    * @param {Function} callback - 回调函数
-   * @returns {Promise<void>}
+   * @returns {Promise<RedisInstance>}
    */
   async subscribe(
     channel: string,
-    callback: (channel: string, payload: Record<string, any>) => void
+    callback: (channel: string, payload: Record<string, unknown>) => void
   ): Promise<RedisInstance> {
     try {
       const subscriber = new RedisCtor({
@@ -449,7 +448,7 @@ class CacheService {
 
       subscriber.on('message', (chan: string, message: string) => {
         try {
-          const data = JSON.parse(message) as Record<string, any>;
+          const data = JSON.parse(message) as Record<string, unknown>;
           callback(chan, data);
         } catch (error: unknown) {
           logger.error(`[CacheService] 消息解析失败: ${channel}`, error);
@@ -470,7 +469,7 @@ class CacheService {
    * @returns {Promise<number>} 成功数量
    */
   async preload(
-    preloadItems: Array<{ key: string; value: any; ttl?: number | CacheSetOptions }>
+    preloadItems: Array<{ key: string; value: unknown; ttl?: number | CacheSetOptions }>
   ): Promise<number> {
     if (!Array.isArray(preloadItems) || preloadItems.length === 0) {
       return 0;
@@ -587,11 +586,11 @@ class CacheService {
   /**
    * 设置内存缓存
    * @param {string} key - 键
-   * @param {any} value - 值
+   * @param {T} value - 值
    * @param {number} ttl - 生存时间（毫秒）
    * @private
    */
-  setMemoryCache<T = any>(key: string, value: T, ttl: number = this.memoryCacheTTL): void {
+  setMemoryCache<T = unknown>(key: string, value: T, ttl: number = this.memoryCacheTTL): void {
     // 检查缓存大小限制
     if (this.memoryCache.size >= this.memoryCacheMaxSize) {
       // 删除最旧的缓存项（LRU）

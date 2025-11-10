@@ -43,7 +43,7 @@ export interface User {
  */
 export interface FormSchema {
   schema_id: string;
-  fields: any;
+  fields: Record<string, unknown>;
 }
 
 /**
@@ -51,7 +51,16 @@ export interface FormSchema {
  */
 export interface PipelineSchema {
   pipeline_id: string;
-  [key: string]: any;
+  [key: string]: unknown;
+}
+
+/**
+ * 错误对象
+ */
+interface ErrorObject {
+  message?: string;
+  statusCode?: number;
+  errorCode?: number;
 }
 
 /**
@@ -84,8 +93,9 @@ export class FeatureService {
 
       logger.info(`[FeatureService] 获取所有启用功能 count=${allFeatures.length}`);
       return allFeatures;
-    } catch (error: any) {
-      logger.error(`[FeatureService] 获取所有启用功能失败: ${error.message}`, { error });
+    } catch (error: unknown) {
+      const err = error as ErrorObject;
+      logger.error(`[FeatureService] 获取所有启用功能失败: ${err.message}`, { error });
       throw error;
     }
   }
@@ -143,8 +153,9 @@ export class FeatureService {
         `[FeatureService] 获取用户可用功能 userId=${userId} count=${formattedFeatures.length}`
       );
       return formattedFeatures;
-    } catch (error: any) {
-      logger.error(`[FeatureService] 获取可用功能失败: ${error.message}`, { userId, error });
+    } catch (error: unknown) {
+      const err = error as ErrorObject;
+      logger.error(`[FeatureService] 获取可用功能失败: ${err.message}`, { userId, error });
       throw error;
     }
   }
@@ -194,8 +205,9 @@ export class FeatureService {
         schema_id: formSchema.schema_id,
         fields: formSchema.fields
       };
-    } catch (error: any) {
-      logger.error(`[FeatureService] 获取表单Schema失败: ${error.message}`, {
+    } catch (error: unknown) {
+      const err = error as ErrorObject;
+      logger.error(`[FeatureService] 获取表单Schema失败: ${err.message}`, {
         featureId,
         userId,
         error
@@ -238,8 +250,9 @@ export class FeatureService {
     try {
       const allowedAccounts = JSON.parse(allowedAccountsJson);
       return allowedAccounts.includes(userId);
-    } catch (error: any) {
-      logger.error(`[FeatureService] 解析白名单失败: ${error.message}`);
+    } catch (error: unknown) {
+      const err = error as ErrorObject;
+      logger.error(`[FeatureService] 解析白名单失败: ${err.message}`);
       return false;
     }
   }
@@ -279,8 +292,9 @@ export class FeatureService {
       }
 
       return this.checkFeatureAccess(user, userId, feature);
-    } catch (error: any) {
-      logger.error(`[FeatureService] 检查用户权限失败: ${error.message}`, { userId, error });
+    } catch (error: unknown) {
+      const err = error as ErrorObject;
+      logger.error(`[FeatureService] 检查用户权限失败: ${err.message}`, { userId, error });
       return false;
     }
   }
@@ -304,8 +318,9 @@ export class FeatureService {
       }
 
       return feature;
-    } catch (error: any) {
-      logger.error(`[FeatureService] 获取功能定义失败: ${error.message}`, { featureId, error });
+    } catch (error: unknown) {
+      const err = error as ErrorObject;
+      logger.error(`[FeatureService] 获取功能定义失败: ${err.message}`, { featureId, error });
       throw error;
     }
   }
@@ -325,8 +340,9 @@ export class FeatureService {
       }
 
       return pipeline;
-    } catch (error: any) {
-      logger.error(`[FeatureService] 获取Pipeline Schema失败: ${error.message}`, {
+    } catch (error: unknown) {
+      const err = error as ErrorObject;
+      logger.error(`[FeatureService] 获取Pipeline Schema失败: ${err.message}`, {
         pipelineId,
         error
       });

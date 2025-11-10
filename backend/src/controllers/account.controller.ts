@@ -14,7 +14,7 @@ export class AccountController {
    */
   async getQuota(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req.user as any)?.userId;
+      const userId = req.user?.id;
 
       if (!userId) {
         res.status(401).json({
@@ -42,7 +42,7 @@ export class AccountController {
    */
   async consumeQuota(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req.user as any)?.userId;
+      const userId = req.user?.id;
       const { action_type, quota_cost } = req.body;
 
       if (!userId) {

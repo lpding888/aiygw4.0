@@ -35,7 +35,11 @@ class KuaiService {
     logger.info('[KuaiService] KUAI服务初始化成功');
   }
 
-  async createVideoTask(script: string, imageUrl: string, params: Record<string, unknown> = {}) {
+  async createVideoTask(
+    script: string,
+    imageUrl: string,
+    params: Record<string, unknown> = {}
+  ): Promise<{ vendorTaskId: string; status: string; enhancedPrompt?: string }> {
     this.initialize();
 
     try {
@@ -81,15 +85,15 @@ class KuaiService {
       }
 
       throw new Error('KUAI API返回格式异常');
-    } catch (error) {
-      const err = error as Error & { response?: { data?: unknown; status?: number } };
+    } catch (error: unknown) {
+      const err = error as Error & { response?: { data?: unknown; status?: number }; code?: string };
       logger.error('[KuaiService] 创建视频任务失败', {
         imageUrl,
         error: err.message,
         response: err.response?.data
       });
 
-      if ((err as any).code === 'ECONNABORTED') {
+      if (err.code === 'ECONNABORTED') {
         throw new Error('KUAI API调用超时');
       }
       if (err.response?.status === 401) {
@@ -103,7 +107,13 @@ class KuaiService {
     }
   }
 
-  async queryVideoStatus(vendorTaskId: string) {
+  async queryVideoStatus(vendorTaskId: string): Promise<{
+    vendorTaskId: string;
+    status: string;
+    videoUrl?: string;
+    errorMessage?: string;
+    statusUpdateTime?: string;
+  }> {
     this.initialize();
 
     try {
@@ -137,15 +147,15 @@ class KuaiService {
       }
 
       throw new Error('KUAI API返回格式异常');
-    } catch (error) {
-      const err = error as Error & { response?: { data?: unknown } };
+    } catch (error: unknown) {
+      const err = error as Error & { response?: { data?: unknown }; code?: string };
       logger.error('[KuaiService] 查询视频状态失败', {
         vendorTaskId,
         error: err.message,
         response: err.response?.data
       });
 
-      if ((err as any).code === 'ECONNABORTED') {
+      if (err.code === 'ECONNABORTED') {
         throw new Error('KUAI API调用超时');
       }
 

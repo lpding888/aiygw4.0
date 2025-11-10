@@ -13,6 +13,18 @@ import { body, param, query } from 'express-validator';
 import { validate } from '../../middlewares/validate.middleware.js';
 import logger from '../../utils/logger.js';
 
+// 扩展Express Request类型以支持自定义属性
+declare global {
+  namespace Express {
+    interface Request {
+      id: string;
+      user: {
+        id: string;
+      };
+    }
+  }
+}
+
 const router = express.Router();
 
 // 频率限制
@@ -126,11 +138,12 @@ router.get(
       res.json({
         success: true,
         data: result,
-        requestId: (req as any).id
+        requestId: req.id
       });
-    } catch (error: any) {
-      logger.error('获取供应商列表失败:', error);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('获取供应商列表失败:', err);
+      next(err);
     }
   }
 );
@@ -155,18 +168,19 @@ router.get(
             code: 4040,
             message: '供应商不存在'
           },
-          requestId: (req as any).id
+          requestId: req.id
         });
       }
 
       res.json({
         success: true,
         data: provider,
-        requestId: (req as any).id
+        requestId: req.id
       });
-    } catch (error: any) {
-      logger.error(`获取供应商详情失败: ${req.params.id}`, error);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`获取供应商详情失败: ${req.params.id}`, err);
+      next(err);
     }
   }
 );
@@ -219,13 +233,13 @@ router.post(
           apiKey,
           handlerKey
         },
-        (req as any).user.id
+        req.user.id
       );
 
       logger.info('供应商已创建', {
         providerId: provider.id,
         name: provider.name,
-        createdBy: (req as any).user.id,
+        createdBy: req.user.id,
         ip: req.ip
       });
 
@@ -233,11 +247,12 @@ router.post(
         success: true,
         data: provider,
         message: '供应商创建成功',
-        requestId: (req as any).id
+        requestId: req.id
       });
-    } catch (error: any) {
-      logger.error('创建供应商失败:', error);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('创建供应商失败:', err);
+      next(err);
     }
   }
 );
@@ -262,12 +277,12 @@ router.put(
       const provider = await providerManagementService.updateProvider(
         id,
         updateData,
-        (req as any).user.id
+        req.user.id
       );
 
       logger.info('供应商已更新', {
         providerId: id,
-        updatedBy: (req as any).user.id,
+        updatedBy: req.user.id,
         ip: req.ip
       });
 
@@ -275,11 +290,12 @@ router.put(
         success: true,
         data: provider,
         message: '供应商更新成功',
-        requestId: (req as any).id
+        requestId: req.id
       });
-    } catch (error: any) {
-      logger.error(`更新供应商失败: ${req.params.id}`, error);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`更新供应商失败: ${req.params.id}`, err);
+      next(err);
     }
   }
 );
@@ -305,18 +321,19 @@ router.post(
         providerId: id,
         success: result.success,
         latency: result.latency,
-        testedBy: (req as any).user.id,
+        testedBy: req.user.id,
         ip: req.ip
       });
 
       res.json({
         success: true,
         data: result,
-        requestId: (req as any).id
+        requestId: req.id
       });
-    } catch (error: any) {
-      logger.error(`测试供应商连接失败: ${req.params.id}`, error);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`测试供应商连接失败: ${req.params.id}`, err);
+      next(err);
     }
   }
 );
@@ -334,7 +351,16 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { providerIds } = req.body;
-      const testPromises: Promise<any>[] = [];
+      type ProviderTestResult = {
+        id: string;
+        name?: string;
+        result: {
+          success: boolean;
+          error?: string;
+          latency?: number;
+        };
+      };
+      const testPromises: Promise<ProviderTestResult>[] = [];
 
       if (providerIds && Array.isArray(providerIds)) {
         // 测试指定的供应商
@@ -343,7 +369,10 @@ router.post(
             providerManagementService
               .testConnection(id)
               .then((result) => ({ id, result }))
-              .catch((error: any) => ({ id, result: { success: false, error: error.message } }))
+              .catch((error: unknown) => {
+                const err = error instanceof Error ? error : new Error(String(error));
+                return { id, result: { success: false, error: err.message } };
+              })
           );
         }
       } else {
@@ -354,11 +383,14 @@ router.post(
             providerManagementService
               .testConnection(provider.id)
               .then((result) => ({ id: provider.id, name: provider.name, result }))
-              .catch((error: any) => ({
-                id: provider.id,
-                name: provider.name,
-                result: { success: false, error: error.message }
-              }))
+              .catch((error: unknown) => {
+                const err = error instanceof Error ? error : new Error(String(error));
+                return {
+                  id: provider.id,
+                  name: provider.name,
+                  result: { success: false, error: err.message }
+                };
+              })
           );
         }
       }
@@ -378,7 +410,7 @@ router.post(
         totalCount,
         successCount,
         failedCount: totalCount - successCount,
-        testedBy: (req as any).user.id,
+        testedBy: req.user.id,
         ip: req.ip
       });
 
@@ -393,11 +425,12 @@ router.post(
             successRate: totalCount > 0 ? ((successCount / totalCount) * 100).toFixed(2) : 0
           }
         },
-        requestId: (req as any).id
+        requestId: req.id
       });
-    } catch (error: any) {
-      logger.error('批量测试供应商连接失败:', error);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('批量测试供应商连接失败:', err);
+      next(err);
     }
   }
 );
@@ -425,7 +458,7 @@ router.patch(
       logger.info('供应商状态已切换', {
         providerId: id,
         enabled,
-        updatedBy: (req as any).user.id,
+        updatedBy: req.user.id,
         ip: req.ip
       });
 
@@ -433,11 +466,12 @@ router.patch(
         success: true,
         data: { id, enabled },
         message: enabled ? '供应商已启用' : '供应商已禁用',
-        requestId: (req as any).id
+        requestId: req.id
       });
-    } catch (error: any) {
-      logger.error(`切换供应商状态失败: ${req.params.id}`, error);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`切换供应商状态失败: ${req.params.id}`, err);
+      next(err);
     }
   }
 );
@@ -462,18 +496,19 @@ router.delete(
       // 暂时返回成功
       logger.warn('供应商删除功能待实现', {
         providerId: id,
-        deletedBy: (req as any).user.id,
+        deletedBy: req.user.id,
         ip: req.ip
       });
 
       res.json({
         success: true,
         message: '供应商删除成功',
-        requestId: (req as any).id
+        requestId: req.id
       });
-    } catch (error: any) {
-      logger.error(`删除供应商失败: ${req.params.id}`, error);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`删除供应商失败: ${req.params.id}`, err);
+      next(err);
     }
   }
 );

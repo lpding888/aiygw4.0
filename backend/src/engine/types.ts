@@ -55,7 +55,7 @@ export interface NodeConfig {
   id: string; // 节点ID
   type: NodeType; // 节点类型
   name: string; // 节点名称
-  config: Record<string, any>; // 节点配置（特定于节点类型）
+  config: Record<string, unknown>; // 节点配置（特定于节点类型）
   inputs?: NodeInput[]; // 输入连接
   outputs?: NodeOutput[]; // 输出连接
   retryPolicy?: RetryPolicy; // 重试策略
@@ -77,7 +77,7 @@ export interface NodeInput {
  */
 export interface NodeOutput {
   name: string; // 输出名称
-  value?: any; // 输出值
+  value?: unknown; // 输出值
 }
 
 /**
@@ -97,8 +97,8 @@ export interface FlowContext {
   flowId: string; // 流程ID
   executionId: string; // 执行ID
   userId: string; // 用户ID
-  state: Record<string, any>; // 流程状态（变量存储）
-  metadata: Record<string, any>; // 元数据
+  state: Record<string, unknown>; // 流程状态（变量存储）
+  metadata: Record<string, unknown>; // 元数据
   createdAt: Date; // 创建时间
   updatedAt: Date; // 更新时间
 }
@@ -109,7 +109,7 @@ export interface FlowContext {
 export interface NodeExecutionContext {
   node: NodeConfig; // 节点配置
   flowContext: FlowContext; // 流程上下文
-  inputs: Record<string, any>; // 节点输入数据
+  inputs: Record<string, unknown>; // 节点输入数据
   attempt: number; // 当前尝试次数
 }
 
@@ -118,10 +118,10 @@ export interface NodeExecutionContext {
  */
 export interface NodeExecutionResult {
   success: boolean; // 是否成功
-  outputs?: Record<string, any>; // 输出数据
+  outputs?: Record<string, unknown>; // 输出数据
   error?: NodeError; // 错误信息
   duration: number; // 执行时长（毫秒）
-  metadata?: Record<string, any>; // 执行元数据
+  metadata?: Record<string, unknown>; // 执行元数据
 }
 
 /**
@@ -131,7 +131,7 @@ export interface NodeError {
   code: string; // 错误码
   message: string; // 错误信息
   type: NodeErrorType; // 错误类型
-  details?: Record<string, any>; // 错误详情
+  details?: Record<string, unknown>; // 错误详情
   stack?: string; // 错误堆栈
 }
 
@@ -167,7 +167,7 @@ export interface FlowExecutor {
    * @param inputs - 输入数据
    * @returns 执行结果
    */
-  execute(flowConfig: FlowConfig, inputs: Record<string, any>): Promise<FlowExecutionResult>;
+  execute(flowConfig: FlowConfig, inputs: Record<string, unknown>): Promise<FlowExecutionResult>;
 
   /**
    * 暂停流程
@@ -197,7 +197,7 @@ export interface FlowConfig {
   description?: string; // 流程描述
   nodes: NodeConfig[]; // 节点列表
   edges: FlowEdge[]; // 边（连接）列表
-  variables?: Record<string, any>; // 流程变量
+  variables?: Record<string, unknown>; // 流程变量
   settings?: FlowSettings; // 流程设置
 }
 
@@ -233,11 +233,11 @@ export interface FlowSettings {
 export interface FlowExecutionResult {
   success: boolean; // 是否成功
   executionId: string; // 执行ID
-  outputs?: Record<string, any>; // 输出数据
+  outputs?: Record<string, unknown>; // 输出数据
   error?: NodeError; // 错误信息
   duration: number; // 执行时长（毫秒）
   nodeResults: Record<string, NodeExecutionResult>; // 各节点执行结果
-  metadata?: Record<string, any>; // 执行元数据
+  metadata?: Record<string, unknown>; // 执行元数据
 }
 
 /**
@@ -269,7 +269,7 @@ export interface VariableResolver {
    * @param context - 上下文数据
    * @returns 解析后的值
    */
-  resolve(template: string, context: Record<string, any>): any;
+  resolve(template: string, context: Record<string, unknown>): unknown;
 
   /**
    * 批量解析
@@ -277,5 +277,5 @@ export interface VariableResolver {
    * @param context - 上下文数据
    * @returns 解析后的数据对象
    */
-  resolveAll(data: Record<string, any>, context: Record<string, any>): Record<string, any>;
+  resolveAll(data: Record<string, unknown>, context: Record<string, unknown>): Record<string, unknown>;
 }

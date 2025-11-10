@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import jwt, { type JwtPayload, type SignOptions } from 'jsonwebtoken';
 import type { Redis as RedisInstance } from 'ioredis';
 import Redis from 'ioredis';
@@ -32,7 +31,7 @@ export type UserForToken = {
   phone?: string;
 };
 
-type RedisConstructor = new (...args: any[]) => RedisInstance;
+type RedisConstructor = new (...args: unknown[]) => RedisInstance;
 const RedisCtor = Redis as unknown as RedisConstructor;
 
 const getErrorMessage = (error: unknown): string =>

@@ -14,6 +14,18 @@ import cosSTSService from '../../services/cos-sts.service.js';
 import { authenticate as authenticateToken } from '../../middlewares/auth.middleware.js';
 import logger from '../../utils/logger.js';
 
+// 扩展Express Request类型以支持自定义属性
+declare global {
+  namespace Express {
+    interface Request {
+      id: string;
+      user: {
+        id: string;
+      };
+    }
+  }
+}
+
 const router = express.Router();
 
 /**
@@ -25,7 +37,7 @@ const validate = (req: Request, res: Response, next: NextFunction) => {
     return res.status(400).json({
       success: false,
       errors: errors.array(),
-      requestId: (req as any).id
+      requestId: req.id
     });
   }
   next();
@@ -58,7 +70,7 @@ router.post(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = (req as any).user.id;
+      const userId = req.user.id;
       const { action = 'upload', prefix, durationSeconds } = req.body;
 
       logger.info(`[UploadRoute] 获取STS临时密钥: userId=${userId} action=${action}`);
@@ -73,11 +85,12 @@ router.post(
       res.json({
         success: true,
         data: credentials,
-        requestId: (req as any).id
+        requestId: req.id
       });
-    } catch (error: any) {
-      logger.error('[UploadRoute] 获取STS临时密钥失败:', error);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[UploadRoute] 获取STS临时密钥失败:', err);
+      next(err);
     }
   }
 );
@@ -105,7 +118,7 @@ router.post(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = (req as any).user.id;
+      const userId = req.user.id;
       const { key, size, etag, metadata = {} } = req.body;
 
       logger.info(`[UploadRoute] 上传回调: userId=${userId} key=${key} size=${size}`);
@@ -131,11 +144,12 @@ router.post(
           uploaded: true,
           record: uploadRecord
         },
-        requestId: (req as any).id
+        requestId: req.id
       });
-    } catch (error: any) {
-      logger.error('[UploadRoute] 上传回调失败:', error);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[UploadRoute] 上传回调失败:', err);
+      next(err);
     }
   }
 );
@@ -164,14 +178,15 @@ router.get(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = (req as any).user.id;
+      const userId = req.user.id;
       const { prefix = `user-${userId}/`, maxKeys = 100, marker = '' } = req.query;
 
       logger.info(`[UploadRoute] 获取文件列表: userId=${userId} prefix=${prefix}`);
 
       // 这里可以调用cos-storage.service获取文件列表
       // 简化实现，返回空列表
-      const files: any[] = [];
+      type FileInfo = Record<string, unknown>;
+      const files: FileInfo[] = [];
       const isTruncated = false;
       const nextMarker = '';
 
@@ -183,11 +198,12 @@ router.get(
           nextMarker,
           total: files.length
         },
-        requestId: (req as any).id
+        requestId: req.id
       });
-    } catch (error: any) {
-      logger.error('[UploadRoute] 获取文件列表失败:', error);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[UploadRoute] 获取文件列表失败:', err);
+      next(err);
     }
   }
 );
@@ -208,11 +224,12 @@ router.get('/health', async (req: Request, res: Response, next: NextFunction) =>
         sts: stsHealth,
         timestamp: new Date().toISOString()
       },
-      requestId: (req as any).id
+      requestId: req.id
     });
-  } catch (error: any) {
-    logger.error('[UploadRoute] 健康检查失败:', error);
-    next(error);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    logger.error('[UploadRoute] 健康检查失败:', err);
+    next(err);
   }
 });
 
@@ -240,7 +257,7 @@ router.post(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = (req as any).user.id;
+      const userId = req.user.id;
       const { key, type, expires = 3600 } = req.body;
 
       logger.info(`[UploadRoute] 生成签名URL: userId=${userId} key=${key} type=${type}`);
@@ -258,11 +275,12 @@ router.post(
           expires,
           expiresAt: new Date(Date.now() + expires * 1000).toISOString()
         },
-        requestId: (req as any).id
+        requestId: req.id
       });
-    } catch (error: any) {
-      logger.error('[UploadRoute] 生成签名URL失败:', error);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[UploadRoute] 生成签名URL失败:', err);
+      next(err);
     }
   }
 );

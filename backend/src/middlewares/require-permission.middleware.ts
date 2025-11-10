@@ -21,6 +21,15 @@ interface PermissionInfo {
   actions: Action[];
 }
 
+interface PermissionRequest extends Request {
+  user?: {
+    id: string;
+    role: UserRole;
+    [key: string]: unknown;
+  };
+  userPermissions?: PermissionInfo;
+}
+
 const routeToResource = (route: string): Resource => {
   if (route.startsWith('/admin/features')) return 'features';
   if (route.startsWith('/admin/providers')) return 'providers';
@@ -78,7 +87,8 @@ const buildAuditLog = (
 export function requirePermission(options: PermissionOptions) {
   return (req: Request, res: Response, next: NextFunction): void => {
     try {
-      if (!req.user) {
+      const permReq = req as PermissionRequest;
+      if (!permReq.user) {
         res.status(401).json({
           success: false,
           error: { code: 4010, message: '用户未认证，请先登录' },
@@ -93,8 +103,8 @@ export function requirePermission(options: PermissionOptions) {
 
       const hasAccess =
         options.resource && options.actions
-          ? actions.some((action) => hasPermission(req.user!.role, resource, action))
-          : checkRoutePermission(req.user!.role, req.method, req.route?.path ?? req.path);
+          ? actions.some((action) => hasPermission(permReq.user!.role, resource, action))
+          : checkRoutePermission(permReq.user!.role, req.method, req.route?.path ?? req.path);
 
       logPermissionAccess(buildAuditLog(req, resource, methodAction, hasAccess, '权限不足'));
 
@@ -107,8 +117,8 @@ export function requirePermission(options: PermissionOptions) {
         return;
       }
 
-      (req as any).userPermissions = {
-        role: req.user.role,
+      permReq.userPermissions = {
+        role: permReq.user.role,
         resource,
         actions: actions ?? [methodAction]
       };

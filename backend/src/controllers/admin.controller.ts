@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import type { Knex } from 'knex';
 import { db } from '../config/database.js';
 import logger from '../utils/logger.js';
 import encryptionUtils from '../utils/encryption.js';
@@ -66,7 +67,7 @@ const toError = (error: unknown): Error =>
     ? error
     : new Error(typeof error === 'string' ? error : JSON.stringify(error));
 
-const fetchCount = async (query: any): Promise<number> => {
+const fetchCount = async (query: Knex.QueryBuilder<unknown, unknown>): Promise<number> => {
   const rows = (await query.count('* as count')) as Array<{ count: CountValue }>;
   return rows.length > 0 ? normalizeCount(rows[0]?.count) : 0;
 };

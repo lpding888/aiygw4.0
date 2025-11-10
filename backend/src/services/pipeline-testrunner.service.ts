@@ -18,15 +18,15 @@ interface TestExecution {
   startTime: Date;
   endTime?: Date;
   currentNode?: string;
-  context: Record<string, any>;
+  context: Record<string, unknown>;
   results: Array<{
     nodeId: string;
     stepName: string;
     status: 'pending' | 'running' | 'completed' | 'failed';
     startTime: Date;
     endTime?: Date;
-    input?: any;
-    output?: any;
+    input?: unknown;
+    output?: unknown;
     error?: string;
     logs: string[];
     metrics: {
@@ -44,14 +44,34 @@ interface TestExecution {
 }
 
 interface MockNodeResult {
-  output: any;
+  output: unknown;
   duration: number;
   logs: string[];
   error?: string;
 }
 
+interface PipelineNode {
+  id: string;
+  type: string;
+  name: string;
+  inputs?: string[];
+  outputs?: string[];
+  [key: string]: unknown;
+}
+
+interface MockPipeline {
+  id: string;
+  nodes: PipelineNode[];
+  edges: Array<{
+    id: string;
+    source: string;
+    target: string;
+    condition?: string;
+  }>;
+}
+
 class PipelineTestRunnerService extends EventEmitter {
-  private activeExecutions = new Map<string, any>();
+  private activeExecutions = new Map<string, TestExecution>();
   private mockData = new Map<string, MockNodeResult>();
 
   constructor() {
@@ -127,7 +147,7 @@ class PipelineTestRunnerService extends EventEmitter {
   async startTest(pipelineId: string, mode: 'mock' | 'real' = 'mock'): Promise<string> {
     const executionId = this.generateExecutionId();
 
-    const execution: any = {
+    const execution: TestExecution = {
       id: executionId,
       pipelineId,
       mode,
@@ -211,14 +231,15 @@ class PipelineTestRunnerService extends EventEmitter {
           timestamp: new Date()
         }
       );
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       execution.status = 'failed';
       execution.endTime = new Date();
       execution.summary.totalDuration = execution.endTime.getTime() - execution.startTime.getTime();
 
       this.emitExecutionEvent(executionId, 'error', {
         message: 'Pipeline试跑过程中发生错误',
-        error: error.message,
+        error: err.message,
         timestamp: new Date()
       });
     }
@@ -227,11 +248,11 @@ class PipelineTestRunnerService extends EventEmitter {
   /**
    * 执行单个节点
    */
-  private async executeNode(executionId: string, node: any): Promise<void> {
+  private async executeNode(executionId: string, node: PipelineNode): Promise<void> {
     const execution = this.activeExecutions.get(executionId);
     if (!execution || execution.status === 'cancelled') return;
 
-    const stepResult: any = {
+    const stepResult: TestExecution['results'][0] = {
       nodeId: node.id,
       stepName: node.name,
       status: 'pending',
@@ -298,11 +319,12 @@ class PipelineTestRunnerService extends EventEmitter {
           timestamp: new Date()
         }
       );
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       stepResult.status = 'failed';
       stepResult.endTime = new Date();
-      stepResult.error = error.message;
-      stepResult.logs.push(`❌ 节点执行失败: ${error.message}`);
+      stepResult.error = err.message;
+      stepResult.logs.push(`❌ 节点执行失败: ${err.message}`);
       stepResult.metrics.duration = Date.now() - stepResult.startTime.getTime();
 
       execution.summary.failedSteps++;
@@ -310,7 +332,7 @@ class PipelineTestRunnerService extends EventEmitter {
       this.emitExecutionEvent(executionId, 'node_failed', {
         nodeId: node.id,
         nodeName: node.name,
-        error: error.message,
+        error: err.message,
         timestamp: new Date()
       });
     }
@@ -319,7 +341,7 @@ class PipelineTestRunnerService extends EventEmitter {
   /**
    * 执行Mock节点
    */
-  private async executeMockNode(node: any): Promise<MockNodeResult> {
+  private async executeMockNode(node: PipelineNode): Promise<MockNodeResult> {
     const mockResult = this.mockData.get(node.type) || this.mockData.get('TRANSFORM');
     if (!mockResult) {
       throw new Error(`未找到节点类型 ${node.type} 的Mock数据`);
@@ -339,7 +361,7 @@ class PipelineTestRunnerService extends EventEmitter {
   /**
    * 执行真实节点
    */
-  private async executeRealNode(node: any, context: Record<string, any>): Promise<MockNodeResult> {
+  private async executeRealNode(node: PipelineNode, context: Record<string, unknown>): Promise<MockNodeResult> {
     const startTime = Date.now();
     const logs: string[] = [];
 
@@ -349,7 +371,7 @@ class PipelineTestRunnerService extends EventEmitter {
       // 这里应该根据节点类型调用相应的服务
       // 例如：图片处理、AI分析、数据转换等
 
-      let output: any;
+      let output: unknown;
 
       switch (node.type) {
         case 'IMAGE_PROCESS':
@@ -373,15 +395,16 @@ class PipelineTestRunnerService extends EventEmitter {
         duration,
         logs
       };
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       const duration = Date.now() - startTime;
-      logs.push(`[真实模式] 节点执行失败: ${error.message}`);
+      logs.push(`[真实模式] 节点执行失败: ${err.message}`);
 
       return {
         output: null,
         duration,
         logs,
-        error: error.message
+        error: err.message
       };
     }
   }
@@ -389,7 +412,7 @@ class PipelineTestRunnerService extends EventEmitter {
   /**
    * 执行图片处理节点
    */
-  private async executeImageProcessNode(node: any, context: Record<string, any>): Promise<any> {
+  private async executeImageProcessNode(node: PipelineNode, context: Record<string, unknown>): Promise<unknown> {
     // 模拟图片处理逻辑
     await this.delay(Math.random() * 2000 + 1000);
 
@@ -408,7 +431,7 @@ class PipelineTestRunnerService extends EventEmitter {
   /**
    * 执行AI分析节点
    */
-  private async executeAIAnalysisNode(node: any, context: Record<string, any>): Promise<any> {
+  private async executeAIAnalysisNode(node: PipelineNode, context: Record<string, unknown>): Promise<unknown> {
     // 模拟AI分析逻辑
     await this.delay(Math.random() * 3000 + 2000);
 
@@ -426,7 +449,7 @@ class PipelineTestRunnerService extends EventEmitter {
   /**
    * 执行数据转换节点
    */
-  private async executeDataTransformNode(node: any, context: Record<string, any>): Promise<any> {
+  private async executeDataTransformNode(node: PipelineNode, context: Record<string, unknown>): Promise<unknown> {
     // 模拟数据转换逻辑
     await this.delay(Math.random() * 500 + 200);
 
@@ -441,7 +464,7 @@ class PipelineTestRunnerService extends EventEmitter {
   /**
    * 执行通用节点
    */
-  private async executeGenericNode(node: any, context: Record<string, any>): Promise<any> {
+  private async executeGenericNode(node: PipelineNode, context: Record<string, unknown>): Promise<unknown> {
     // 通用节点处理逻辑
     await this.delay(Math.random() * 1000 + 500);
 
@@ -522,7 +545,7 @@ class PipelineTestRunnerService extends EventEmitter {
   /**
    * 发送执行事件
    */
-  private emitExecutionEvent(executionId: string, eventType: string, data: any): void {
+  private emitExecutionEvent(executionId: string, eventType: string, data: Record<string, unknown>): void {
     // 通过WebSocket发送事件
     websocketService.sendTaskEvent(executionId, {
       event: eventType,
@@ -543,7 +566,7 @@ class PipelineTestRunnerService extends EventEmitter {
   /**
    * 获取模拟Pipeline配置
    */
-  private getMockPipeline(pipelineId: string): any {
+  private getMockPipeline(pipelineId: string): MockPipeline {
     // 返回模拟的Pipeline配置
     return {
       id: pipelineId,

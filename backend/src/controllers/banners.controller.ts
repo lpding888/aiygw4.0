@@ -8,6 +8,27 @@ import * as bannerRepo from '../repositories/banners.repo.js';
 import type { CreateBannerInput } from '../repositories/banners.repo.js';
 import * as cosService from '../services/cos.service.js';
 
+/**
+ * Express请求对象扩展类型定义
+ */
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: number;
+    [key: string]: unknown;
+  };
+  file?: {
+    originalname: string;
+    buffer: Buffer;
+    mimetype: string;
+    [key: string]: unknown;
+  };
+}
+
+/**
+ * 目标受众类型
+ */
+type TargetAudience = string | string[] | undefined;
+
 export class BannersController {
   /**
    * 列出轮播图（管理端）
@@ -30,9 +51,10 @@ export class BannersController {
           offset: parseInt(offset as string)
         }
       });
-    } catch (error: any) {
-      console.error('[BannersController] 列出轮播图失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[BannersController] 列出轮播图失败:', err.message);
+      next(err);
     }
   }
 
@@ -44,16 +66,17 @@ export class BannersController {
       const { target_audience } = req.query;
 
       const banners = await bannerRepo.getActiveBanners({
-        target_audience: target_audience as any
+        target_audience: target_audience as TargetAudience
       });
 
       res.json({
         success: true,
         data: banners
       });
-    } catch (error: any) {
-      console.error('[BannersController] 获取有效轮播图失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[BannersController] 获取有效轮播图失败:', err.message);
+      next(err);
     }
   }
 
@@ -74,9 +97,10 @@ export class BannersController {
       }
 
       res.json({ success: true, data: banner });
-    } catch (error: any) {
-      console.error('[BannersController] 获取轮播图失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[BannersController] 获取轮播图失败:', err.message);
+      next(err);
     }
   }
 
@@ -87,7 +111,7 @@ export class BannersController {
     try {
       const input: CreateBannerInput = {
         ...req.body,
-        created_by: (req as any).user?.id
+        created_by: (req as AuthenticatedRequest).user?.id
       };
 
       // 艹，基础校验
@@ -110,9 +134,10 @@ export class BannersController {
       const banner = await bannerRepo.createBanner(input);
 
       res.status(201).json({ success: true, data: banner });
-    } catch (error: any) {
-      console.error('[BannersController] 创建轮播图失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[BannersController] 创建轮播图失败:', err.message);
+      next(err);
     }
   }
 
@@ -127,16 +152,17 @@ export class BannersController {
       const banner = await bannerRepo.updateBanner(id, updates);
 
       res.json({ success: true, data: banner });
-    } catch (error: any) {
-      if (error.message.includes('不存在')) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      if (err.message.includes('不存在')) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: error.message }
+          error: { code: 'NOT_FOUND', message: err.message }
         });
         return;
       }
-      console.error('[BannersController] 更新轮播图失败:', error.message);
-      next(error);
+      console.error('[BannersController] 更新轮播图失败:', err.message);
+      next(err);
     }
   }
 
@@ -170,9 +196,10 @@ export class BannersController {
       await bannerRepo.updateBannersSortOrder(sortOrders);
 
       res.json({ success: true, message: '排序更新成功' });
-    } catch (error: any) {
-      console.error('[BannersController] 更新排序失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[BannersController] 更新排序失败:', err.message);
+      next(err);
     }
   }
 
@@ -193,9 +220,10 @@ export class BannersController {
       }
 
       res.json({ success: true, message: '轮播图已删除' });
-    } catch (error: any) {
-      console.error('[BannersController] 删除轮播图失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[BannersController] 删除轮播图失败:', err.message);
+      next(err);
     }
   }
 
@@ -237,9 +265,10 @@ export class BannersController {
         success: true,
         data: credentials
       });
-    } catch (error: any) {
-      console.error('[BannersController] 获取上传凭证失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[BannersController] 获取上传凭证失败:', err.message);
+      next(err);
     }
   }
 
@@ -260,7 +289,7 @@ export class BannersController {
 
       // 这里需要使用multer等中间件处理文件上传
       // 暂时假设文件已经通过body传过来（需要配置multer）
-      const file = (req as any).file;
+      const file = (req as AuthenticatedRequest).file;
 
       if (!file) {
         res.status(400).json({
@@ -284,9 +313,10 @@ export class BannersController {
         success: true,
         data: { url, key }
       });
-    } catch (error: any) {
-      console.error('[BannersController] 上传图片失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[BannersController] 上传图片失败:', err.message);
+      next(err);
     }
   }
 }

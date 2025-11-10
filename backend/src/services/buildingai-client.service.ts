@@ -50,27 +50,33 @@ interface HealthStatus {
 
 interface MCPToolCall {
   tool: string;
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
 }
 
 interface MCPToolResponse {
   tool: string;
-  result: any;
+  result: unknown;
   error?: string;
 }
 
 interface KnowledgeBaseQuery {
   query: string;
   topK?: number;
-  filters?: Record<string, any>;
+  filters?: Record<string, unknown>;
 }
 
 interface KnowledgeBaseResult {
   chunks: Array<{
     content: string;
     score: number;
-    metadata: Record<string, any>;
+    metadata: Record<string, unknown>;
   }>;
+}
+
+interface NormalizedError extends Error {
+  code?: string;
+  httpStatus?: number;
+  details?: Record<string, unknown>;
 }
 
 class BuildingAIClientService {
@@ -290,29 +296,34 @@ class BuildingAIClientService {
   /**
    * 统一错误格式
    */
-  private normalizeError(error: any): Error {
-    if (error.response) {
-      // BuildingAI返回的错误
-      const { status, data } = error.response;
-      const message = data?.message || data?.error || 'BuildingAI service error';
+  private normalizeError(error: unknown): NormalizedError {
+    const err = error as Record<string, unknown>;
 
-      const normalizedError = new Error(message);
-      (normalizedError as any).code = data?.code || `BUILDINGAI_${status}`;
-      (normalizedError as any).httpStatus = status;
-      (normalizedError as any).details = data;
+    if (err?.response) {
+      // BuildingAI返回的错误
+      const response = err.response as Record<string, unknown>;
+      const status = response.status as number;
+      const data = response.data as Record<string, unknown>;
+      const message = (data?.message as string) || (data?.error as string) || 'BuildingAI service error';
+
+      const normalizedError = new Error(message) as NormalizedError;
+      normalizedError.code = (data?.code as string) || `BUILDINGAI_${status}`;
+      normalizedError.httpStatus = status;
+      normalizedError.details = data;
 
       return normalizedError;
-    } else if (error.request) {
+    } else if (err?.request) {
       // 请求发送但无响应
       const message = 'BuildingAI service unavailable';
-      const normalizedError = new Error(message);
-      (normalizedError as any).code = 'BUILDINGAI_UNAVAILABLE';
-      (normalizedError as any).httpStatus = 503;
+      const normalizedError = new Error(message) as NormalizedError;
+      normalizedError.code = 'BUILDINGAI_UNAVAILABLE';
+      normalizedError.httpStatus = 503;
 
       return normalizedError;
     } else {
       // 其他错误
-      return error;
+      const errorInstance = error instanceof Error ? error : new Error(String(error));
+      return errorInstance as NormalizedError;
     }
   }
 }
@@ -330,5 +341,6 @@ export type {
   MCPToolCall,
   MCPToolResponse,
   KnowledgeBaseQuery,
-  KnowledgeBaseResult
+  KnowledgeBaseResult,
+  NormalizedError
 };

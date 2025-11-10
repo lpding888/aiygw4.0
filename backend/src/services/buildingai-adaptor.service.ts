@@ -118,7 +118,7 @@ class BuildingAIAdaptorService {
 
       this.initialized = true;
       logger.info('[BuildingAIAdaptor] BuildingAI adaptor service initialized successfully');
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error('[BuildingAIAdaptor] Failed to initialize BuildingAI adaptor service:', error);
       throw error;
     }
@@ -172,7 +172,7 @@ class BuildingAIAdaptorService {
     try {
       await this.httpClient.get('/v1/ping');
       logger.info('[BuildingAIAdaptor] Connection test successful');
-    } catch (error) {
+    } catch (error: unknown) {
       logger.warn('[BuildingAIAdaptor] Connection test failed, continuing anyway', error);
     }
   }
@@ -209,7 +209,7 @@ class BuildingAIAdaptorService {
       try {
         const response = await httpClient.request<BuildingAIResponse<T>>(config);
         return this.mapResponse(response, feature);
-      } catch (error) {
+      } catch (error: unknown) {
         const axiosError = error as AxiosError;
         const shouldRetry = this.shouldRetry(axiosError, attempt, retries);
         if (!shouldRetry) {
@@ -410,7 +410,7 @@ class BuildingAIAdaptorService {
     try {
       this.initialized = false;
       logger.info('[BuildingAIAdaptor] BuildingAI adaptor service closed');
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error('[BuildingAIAdaptor] Error closing BuildingAI adaptor service:', error);
     }
   }

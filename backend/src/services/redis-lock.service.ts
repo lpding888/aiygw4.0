@@ -43,9 +43,10 @@ class RedisLockService {
         if (i < retry) {
           await this.sleep(retryDelay);
         }
-      } catch (error: any) {
-        logger.error(`[REDIS-LOCK] ❌ 获取锁异常: ${lockKey}`, error);
-        throw error;
+      } catch (error: unknown) {
+        const err = error as Error;
+        logger.error(`[REDIS-LOCK] ❌ 获取锁异常: ${lockKey}`, err);
+        throw err;
       }
     }
 
@@ -79,9 +80,10 @@ class RedisLockService {
         logger.warn(`[REDIS-LOCK] ⚠️  释放锁失败(锁不存在或已过期): ${lockKey}`);
         return false;
       }
-    } catch (error: any) {
-      logger.error(`[REDIS-LOCK] ❌ 释放锁异常: ${lockKey}`, error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error as Error;
+      logger.error(`[REDIS-LOCK] ❌ 释放锁异常: ${lockKey}`, err);
+      throw err;
     }
   }
 
@@ -158,9 +160,10 @@ class RedisLockService {
         logger.warn(`[REDIS-LOCK] ⚠️  续租锁失败(锁不存在或已过期): ${lockKey}`);
         return false;
       }
-    } catch (error: any) {
-      logger.error(`[REDIS-LOCK] ❌ 续租锁异常: ${lockKey}`, error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error as Error;
+      logger.error(`[REDIS-LOCK] ❌ 续租锁异常: ${lockKey}`, err);
+      throw err;
     }
   }
 

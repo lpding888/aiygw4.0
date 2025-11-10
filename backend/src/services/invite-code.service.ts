@@ -11,6 +11,104 @@ type CountRow = {
   count?: string | number | bigint | null;
 };
 
+type GenerateCodesOptions = {
+  count?: number;
+  type?: string;
+  maxUses?: number;
+  validDays?: number;
+  batchName?: string | null;
+  description?: string | null;
+  createdBy?: string;
+};
+
+type InviteCode = {
+  id: string;
+  code: string;
+  type: string;
+  status: InviteCodeStatus;
+  creator_id: string | null;
+  creator_type: string;
+  max_uses: number;
+  used_count: number;
+  expires_at: Date | string;
+  batch_id: string;
+  inviter_id: string | null;
+  invitee_id: string | null;
+  created_by: string;
+  created_at: Date | string;
+  updated_at: Date | string;
+  last_used_at?: Date | string;
+};
+
+type InviteCodeBatch = {
+  id: string;
+  batch_name: string;
+  description: string;
+  type: string;
+  count: number;
+  valid_days: number;
+  max_uses_per_code: number;
+  created_by: string;
+  generation_config: Record<string, unknown>;
+};
+
+type UsageData = {
+  inviteeId?: string | null;
+  inviterId?: string | null;
+  inviteeEmail?: string | null;
+  inviteePhone?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+type UseInviteCodeResult = {
+  success: boolean;
+  inviteCode: {
+    id: string;
+    type: string;
+    remainingUses: number;
+  };
+};
+
+type GetCodesOptions = {
+  status?: string;
+  type?: string;
+  creatorId?: string;
+  inviterId?: string;
+  inviteeId?: string;
+  batchId?: string;
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+};
+
+type UserInviteStats = {
+  user_id: string;
+  total_invites: number;
+  successful_invites: number;
+  pending_invites: number;
+  failed_invites: number;
+  total_rewards: number;
+  last_invite_date: string | null;
+  monthly_stats: Record<string, unknown>;
+  created_at?: Date | string;
+  updated_at?: Date | string;
+};
+
+type InviteStats = {
+  total: number;
+  active: number;
+  used: number;
+  expired: number;
+  disabled: number;
+  byType: Record<string, number>;
+  initialized: boolean;
+  cachePrefix: string;
+  cacheTTL: number;
+};
+
 const parseCount = (row?: CountRow): number => {
   if (!row || row.count === undefined || row.count === null) {
     return 0;
@@ -58,7 +156,7 @@ class InviteCodeService {
     return code;
   }
 
-  async generateInviteCodes(options: Record<string, any> = {}): Promise<any[]> {
+  async generateInviteCodes(options: GenerateCodesOptions = {}): Promise<InviteCode[]> {
     const {
       count = 10,
       type = 'general',
@@ -69,7 +167,7 @@ class InviteCodeService {
       createdBy = 'system'
     } = options;
 
-    const codes: any[] = [];
+    const codes: InviteCode[] = [];
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + validDays);
 
@@ -140,7 +238,7 @@ class InviteCodeService {
     return Boolean(existing);
   }
 
-  async validateInviteCode(code: string): Promise<any> {
+  async validateInviteCode(code: string): Promise<InviteCode> {
     const normalizedCode = code.toUpperCase().trim();
 
     if (!this.codePattern.test(normalizedCode)) {
@@ -193,7 +291,7 @@ class InviteCodeService {
     return inviteCode;
   }
 
-  async useInviteCode(code: string, usageData: Record<string, any> = {}): Promise<any> {
+  async useInviteCode(code: string, usageData: UsageData = {}): Promise<UseInviteCodeResult> {
     const normalizedCode = code.toUpperCase().trim();
 
     return db.transaction(async (trx) => {
@@ -294,7 +392,7 @@ class InviteCodeService {
     });
   }
 
-  async getInviteCodes(options: Record<string, any> = {}): Promise<any[]> {
+  async getInviteCodes(options: GetCodesOptions = {}): Promise<InviteCode[]> {
     const {
       status,
       type,
@@ -382,7 +480,7 @@ class InviteCodeService {
     });
   }
 
-  async getUserInviteStats(userId: string): Promise<any> {
+  async getUserInviteStats(userId: string): Promise<UserInviteStats> {
     const stats = await db('user_invite_stats').where('user_id', userId).first();
     return (
       stats ?? {
@@ -398,7 +496,7 @@ class InviteCodeService {
     );
   }
 
-  async getInviteUsageLogs(options: InviteUsageLogOptions = {}): Promise<any[]> {
+  async getInviteUsageLogs(options: InviteUsageLogOptions = {}): Promise<Record<string, unknown>[]> {
     const {
       inviteCodeId,
       inviterId,
@@ -469,7 +567,7 @@ class InviteCodeService {
     }
   }
 
-  async getStats(): Promise<any> {
+  async getStats(): Promise<InviteStats> {
     try {
       const [totalCodes, activeCodes, usedCodes, expiredCodes, disabledCodes] = await Promise.all([
         db('invite_codes').count<CountRow[]>('*'),
@@ -514,7 +612,7 @@ class InviteCodeService {
     }
   }
 
-  async getInviteCodeStats(): Promise<any> {
+  async getInviteCodeStats(): Promise<InviteStats> {
     return this.getStats();
   }
 

@@ -28,14 +28,14 @@ export class RedisManager {
   private readonly redisUrl: string = process.env.REDIS_URL ?? 'redis://localhost:6379';
   private readonly baseOptions: RedisOptions = {
     lazyConnect: true,
-    maxRetriesPerRequest: null as unknown as number,
+    maxRetriesPerRequest: null as unknown as number | null,
     enableReadyCheck: true
   };
 
   private createClient(label: keyof ManagedClients): Redis {
     const client = new Redis(this.redisUrl, this.baseOptions);
 
-    client.on('error', (error: any) => {
+    client.on('error', (error: unknown) => {
       logger.error(`[Redis] ${label} 客户端错误`, { error });
     });
 

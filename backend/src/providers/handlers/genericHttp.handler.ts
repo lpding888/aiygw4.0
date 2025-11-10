@@ -23,7 +23,7 @@ export interface HttpRequestTemplate {
   headers?: Record<string, string>;
 
   /** 请求体（支持{{var}}变量替换） */
-  body?: any;
+  body?: unknown;
 
   /** 查询参数（支持{{var}}变量替换） */
   params?: Record<string, string>;
@@ -43,7 +43,7 @@ export interface GenericHttpInput {
   req_template: HttpRequestTemplate;
 
   /** 变量字典（用于替换模板中的{{var}}） */
-  variables?: Record<string, any>;
+  variables?: Record<string, unknown>;
 }
 
 /**
@@ -59,7 +59,7 @@ export class GenericHttpProvider extends BaseProvider {
    * @param input - 输入数据
    * @returns 校验错误信息，null表示校验通过
    */
-  public validate(input: any): string | null {
+  public validate(input: unknown): string | null {
     if (!input || typeof input !== 'object') {
       return '输入参数必须是对象';
     }
@@ -124,7 +124,7 @@ export class GenericHttpProvider extends BaseProvider {
 
       // 2. 构建axios配置
       const axiosConfig: AxiosRequestConfig = {
-        method: method as any,
+        method: method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS',
         url,
         headers,
         params,
@@ -139,7 +139,7 @@ export class GenericHttpProvider extends BaseProvider {
       // 4. 支持AbortSignal（用于超时取消）
       if (context.signal) {
         // 艹，Axios的CancelToken已废弃，使用AbortSignal
-        axiosConfig.signal = context.signal as any;
+        (axiosConfig as Record<string, unknown>).signal = context.signal;
       }
 
       // 5. 执行HTTP请求
@@ -173,11 +173,12 @@ export class GenericHttpProvider extends BaseProvider {
           fullResponse: response.data // 保留完整响应（用于调试）
         }
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 艹，HTTP请求失败了！
+      const err = error instanceof Error ? error : new Error(String(error));
       this.logger.error(`[${this.key}] HTTP请求失败`, {
         taskId: context.taskId,
-        error: error.message,
+        error: err.message,
         url: req_template.url
       });
 
@@ -187,7 +188,10 @@ export class GenericHttpProvider extends BaseProvider {
       }
 
       // 处理AbortError（超时）
-      if (error.name === 'AbortError' || error.name === 'CanceledError') {
+      if (
+        (typeof error === 'object' && error !== null && 'name' in error && (error as Record<string, unknown>).name === 'AbortError') ||
+        (typeof error === 'object' && error !== null && 'name' in error && (error as Record<string, unknown>).name === 'CanceledError')
+      ) {
         return {
           success: false,
           error: {
@@ -205,8 +209,8 @@ export class GenericHttpProvider extends BaseProvider {
         success: false,
         error: {
           code: ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED,
-          message: error.message || 'HTTP请求执行失败',
-          details: { stack: error.stack }
+          message: err.message || 'HTTP请求执行失败',
+          details: { stack: err instanceof Error ? err.stack : undefined }
         }
       };
     }

@@ -30,8 +30,9 @@ export function parseRateLimitPolicy(policy?: string | null): ParsedPolicy | nul
         return null;
     }
     return { window: windowSeconds, limit };
-  } catch (error: any) {
-    logger.error(`[RateLimiter] 解析限流策略失败: ${error.message}`, { policy });
+  } catch (error) {
+    const err = error as Error;
+    logger.error(`[RateLimiter] 解析限流策略失败: ${err.message}`, { policy });
     return null;
   }
 }
@@ -42,11 +43,11 @@ export async function checkFeatureRateLimit(
   userId: string
 ): Promise<RateLimitResult | { allowed: true; remaining: number }> {
   if (!rateLimitPolicy) {
-    return { allowed: true, remaining: Infinity } as any;
+    return { allowed: true, remaining: Infinity };
   }
   const policy = parseRateLimitPolicy(rateLimitPolicy);
   if (!policy) {
-    return { allowed: true, remaining: Infinity } as any;
+    return { allowed: true, remaining: Infinity };
   }
   const key = `rate_limit:${userId}:${featureId}:${Math.floor(Date.now() / (policy.window * 1000))}`;
   try {
@@ -55,9 +56,10 @@ export async function checkFeatureRateLimit(
       `[RateLimiter] 限流检查 userId=${userId} featureId=${featureId} current=${result.current} limit=${policy.limit} allowed=${result.allowed}`
     );
     return result;
-  } catch (error: any) {
-    logger.error(`[RateLimiter] 限流检查失败: ${error.message}`, { userId, featureId, error });
-    return { allowed: true, remaining: policy.limit } as any;
+  } catch (error) {
+    const err = error as Error;
+    logger.error(`[RateLimiter] 限流检查失败: ${err.message}`, { userId, featureId, error });
+    return { allowed: true, remaining: policy.limit };
   }
 }
 

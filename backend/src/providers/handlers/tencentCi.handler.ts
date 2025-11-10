@@ -46,7 +46,7 @@ export interface TencentCiInput {
   objectKey: string;
 
   /** 操作参数（必填，根据action不同而不同） */
-  params: Record<string, any>;
+  params: Record<string, unknown>;
 
   /** 认证配置（可选，如果不传则使用环境变量） */
   auth?: {
@@ -72,7 +72,7 @@ export class TencentCiProvider extends BaseProvider {
    * @param input - 输入数据
    * @returns 校验错误信息，null表示校验通过
    */
-  public validate(input: any): string | null {
+  public validate(input: unknown): string | null {
     if (!input || typeof input !== 'object') {
       return '输入参数必须是对象';
     }
@@ -174,27 +174,28 @@ export class TencentCiProvider extends BaseProvider {
           // 例如：processedUrl, taskId, status等
         }
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 艹，腾讯云CI任务失败了！
+      const err = error instanceof Error ? error : new Error(String(error));
       this.logger.error(`[${this.key}] 腾讯云CI任务失败`, {
         taskId: context.taskId,
         action,
-        error: error.message
+        error: err.message
       });
 
       return {
         success: false,
         error: {
           code: ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED,
-          message: `腾讯云CI任务失败: ${error.message}`,
+          message: `腾讯云CI任务失败: ${err.message}`,
           details: {
             taskId: context.taskId,
             action,
             bucket,
             region,
             objectKey,
-            originalError: error.message,
-            stack: error.stack
+            originalError: err.message,
+            stack: err instanceof Error ? err.stack : undefined
           }
         }
       };

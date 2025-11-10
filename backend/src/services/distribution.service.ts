@@ -4,7 +4,7 @@ import { generateId } from '../utils/generator.js';
 import encryptionUtils from '../utils/encryption.js';
 import type { Knex } from 'knex';
 
-type AnyObject = Record<string, any>;
+type AnyObject = Record<string, unknown>;
 
 type CountRow = {
   count?: string | number | bigint | null;

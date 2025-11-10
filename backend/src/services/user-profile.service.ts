@@ -1,9 +1,103 @@
-// @ts-nocheck
 import logger from '../utils/logger.js';
 import { db } from '../config/database.js';
 import cacheService from './cache.service.js';
 import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
+
+/**
+ * 用户信息对象
+ */
+interface UserRecord {
+  id: string;
+  username: string;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+  banner_url: string | null;
+  bio: string | null;
+  verification_level: number;
+  profile_updated_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
+  email: string | null;
+  phone: string | null;
+  birth_date: Date | null;
+  gender: string | null;
+  country: string | null;
+  city: string | null;
+  occupation: string | null;
+  company: string | null;
+  industry: string | null;
+  education_level: string | null;
+  university: string | null;
+  interests: string | null;
+  language: string | null;
+  account_status: string;
+  login_count: number;
+  last_login_at: Date | null;
+  profile_public: boolean;
+  show_email: boolean;
+  show_phone: boolean;
+  privacy_settings: Record<string, unknown> | null;
+  notification_preferences: Record<string, unknown> | null;
+  ui_preferences: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
+/**
+ * 完整度权重配置
+ */
+interface CompletenessWeights {
+  basicInfo: number;
+  contactInfo: number;
+  education: number;
+  work: number;
+  skills: number;
+  social: number;
+}
+
+/**
+ * 完整度得分对象
+ */
+interface CompletenessScores {
+  basicInfo: number;
+  contactInfo: number;
+  education: number;
+  work: number;
+  skills: number;
+  social: number;
+}
+
+/**
+ * 缺失字段对象
+ */
+interface MissingField {
+  category: string;
+  field: string;
+  label: string;
+}
+
+/**
+ * 建议对象
+ */
+interface Suggestion {
+  type: string;
+  priority: 'high' | 'medium' | 'low';
+  title: string;
+  description: string;
+  action: string;
+}
+
+/**
+ * 完整度计算结果
+ */
+interface CompletenessResult {
+  scores: CompletenessScores;
+  totalScore: number;
+  completenessPercentage: number;
+  missingFields: MissingField[];
+  suggestions: Suggestion[];
+}
 
 /**
  * 用户资料服务类
@@ -17,6 +111,11 @@ import { ERROR_CODES } from '../config/error-codes.js';
  * - 隐私设置控制
  */
 class UserProfileService {
+  private initialized: boolean;
+  private cachePrefix: string;
+  private cacheTTL: number;
+  private completenessWeights: CompletenessWeights;
+
   constructor() {
     this.initialized = false;
     this.cachePrefix = 'user_profile:';
@@ -34,7 +133,7 @@ class UserProfileService {
   /**
    * 初始化用户资料服务
    */
-  async initialize() {
+  async initialize(): Promise<void> {
     if (this.initialized) {
       return;
     }
@@ -55,11 +154,14 @@ class UserProfileService {
 
   /**
    * 获取用户完整资料
-   * @param {string} userId - 用户ID
-   * @param {string} viewerId - 查看者ID（可选）
-   * @returns {Object} 用户完整资料
+   * @param userId - 用户ID
+   * @param viewerId - 查看者ID（可选）
+   * @returns 用户完整资料
    */
-  async getUserFullProfile(userId, viewerId = null) {
+  async getUserFullProfile(
+    userId: string,
+    viewerId: string | null = null
+  ): Promise<Record<string, unknown>> {
     try {
       const cacheKey = `${this.cachePrefix}full:${userId}:${viewerId || 'public'}`;
       const cached = await cacheService.get(cacheKey);
@@ -106,11 +208,14 @@ class UserProfileService {
 
   /**
    * 获取用户基础信息
-   * @param {string} userId - 用户ID
-   * @param {string} viewerId - 查看者ID（可选）
-   * @returns {Object} 用户基础信息
+   * @param userId - 用户ID
+   * @param viewerId - 查看者ID（可选）
+   * @returns 用户基础信息
    */
-  async getUserBasicInfo(userId, viewerId = null) {
+  async getUserBasicInfo(
+    userId: string,
+    viewerId: string | null = null
+  ): Promise<Record<string, unknown>> {
     try {
       const user = await db('users').where('id', userId).first();
 
@@ -167,11 +272,14 @@ class UserProfileService {
 
   /**
    * 更新用户基础信息
-   * @param {string} userId - 用户ID
-   * @param {Object} updateData - 更新数据
-   * @returns {Object} 更新后的用户信息
+   * @param userId - 用户ID
+   * @param updateData - 更新数据
+   * @returns 更新后的用户信息
    */
-  async updateUserBasicInfo(userId, updateData) {
+  async updateUserBasicInfo(
+    userId: string,
+    updateData: Record<string, unknown>
+  ): Promise<UserRecord> {
     try {
       // 验证更新数据
       const validFields = [
@@ -247,11 +355,14 @@ class UserProfileService {
 
   /**
    * 添加教育经历
-   * @param {string} userId - 用户ID
-   * @param {Object} educationData - 教育经历数据
-   * @returns {Object} 添加的教育经历
+   * @param userId - 用户ID
+   * @param educationData - 教育经历数据
+   * @returns 添加的教育经历
    */
-  async addEducation(userId, educationData) {
+  async addEducation(
+    userId: string,
+    educationData: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
     try {
       const {
         school_name,
@@ -304,12 +415,16 @@ class UserProfileService {
 
   /**
    * 更新教育经历
-   * @param {string} userId - 用户ID
-   * @param {string} educationId - 教育经历ID
-   * @param {Object} updateData - 更新数据
-   * @returns {Object} 更新后的教育经历
+   * @param userId - 用户ID
+   * @param educationId - 教育经历ID
+   * @param updateData - 更新数据
+   * @returns 更新后的教育经历
    */
-  async updateEducation(userId, educationId, updateData) {
+  async updateEducation(
+    userId: string,
+    educationId: string,
+    updateData: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
     try {
       const education = await db('user_education')
         .where({
@@ -349,11 +464,11 @@ class UserProfileService {
 
   /**
    * 删除教育经历
-   * @param {string} userId - 用户ID
-   * @param {string} educationId - 教育经历ID
-   * @returns {boolean} 是否删除成功
+   * @param userId - 用户ID
+   * @param educationId - 教育经历ID
+   * @returns 是否删除成功
    */
-  async deleteEducation(userId, educationId) {
+  async deleteEducation(userId: string, educationId: string): Promise<boolean> {
     try {
       const deleted = await db('user_education')
         .where({
@@ -377,11 +492,14 @@ class UserProfileService {
 
   /**
    * 添加工作经历
-   * @param {string} userId - 用户ID
-   * @param {Object} workData - 工作经历数据
-   * @returns {Object} 添加的工作经历
+   * @param userId - 用户ID
+   * @param workData - 工作经历数据
+   * @returns 添加的工作经历
    */
-  async addWorkExperience(userId, workData) {
+  async addWorkExperience(
+    userId: string,
+    workData: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
     try {
       const {
         company_name,
@@ -441,11 +559,14 @@ class UserProfileService {
 
   /**
    * 添加技能
-   * @param {string} userId - 用户ID
-   * @param {Object} skillData - 技能数据
-   * @returns {Object} 添加的技能
+   * @param userId - 用户ID
+   * @param skillData - 技能数据
+   * @returns 添加的技能
    */
-  async addSkill(userId, skillData) {
+  async addSkill(
+    userId: string,
+    skillData: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
     try {
       const { skill_name, skill_level, experience_years, description, certifications, is_public } =
         skillData;
@@ -492,11 +613,14 @@ class UserProfileService {
 
   /**
    * 获取用户社交媒体链接
-   * @param {string} userId - 用户ID
-   * @param {string} viewerId - 查看者ID（可选）
-   * @returns {Array} 社交媒体链接列表
+   * @param userId - 用户ID
+   * @param viewerId - 查看者ID（可选）
+   * @returns 社交媒体链接列表
    */
-  async getUserSocialLinks(userId, viewerId = null) {
+  async getUserSocialLinks(
+    userId: string,
+    viewerId: string | null = null
+  ): Promise<Array<Record<string, unknown>>> {
     try {
       const isOwner = viewerId === userId;
 
@@ -527,11 +651,14 @@ class UserProfileService {
 
   /**
    * 获取用户教育经历
-   * @param {string} userId - 用户ID
-   * @param {string} viewerId - 查看者ID（可选）
-   * @returns {Array} 教育经历列表
+   * @param userId - 用户ID
+   * @param viewerId - 查看者ID（可选）
+   * @returns 教育经历列表
    */
-  async getUserEducation(userId, viewerId = null) {
+  async getUserEducation(
+    userId: string,
+    viewerId: string | null = null
+  ): Promise<Array<Record<string, unknown>>> {
     try {
       const isOwner = viewerId === userId;
 
@@ -550,11 +677,14 @@ class UserProfileService {
 
   /**
    * 获取用户工作经历
-   * @param {string} userId - 用户ID
-   * @param {string} viewerId - 查看者ID（可选）
-   * @returns {Array} 工作经历列表
+   * @param userId - 用户ID
+   * @param viewerId - 查看者ID（可选）
+   * @returns 工作经历列表
    */
-  async getUserWorkExperience(userId, viewerId = null) {
+  async getUserWorkExperience(
+    userId: string,
+    viewerId: string | null = null
+  ): Promise<Array<Record<string, unknown>>> {
     try {
       const isOwner = viewerId === userId;
 
@@ -573,11 +703,14 @@ class UserProfileService {
 
   /**
    * 获取用户技能
-   * @param {string} userId - 用户ID
-   * @param {string} viewerId - 查看者ID（可选）
-   * @returns {Array} 技能列表
+   * @param userId - 用户ID
+   * @param viewerId - 查看者ID（可选）
+   * @returns 技能列表
    */
-  async getUserSkills(userId, viewerId = null) {
+  async getUserSkills(
+    userId: string,
+    viewerId: string | null = null
+  ): Promise<Array<Record<string, unknown>>> {
     try {
       const isOwner = viewerId === userId;
 
@@ -596,11 +729,14 @@ class UserProfileService {
 
   /**
    * 获取用户兴趣标签
-   * @param {string} userId - 用户ID
-   * @param {string} viewerId - 查看者ID（可选）
-   * @returns {Array} 兴趣标签列表
+   * @param userId - 用户ID
+   * @param viewerId - 查看者ID（可选）
+   * @returns 兴趣标签列表
    */
-  async getUserInterests(userId, viewerId = null) {
+  async getUserInterests(
+    userId: string,
+    viewerId: string | null = null
+  ): Promise<Array<Record<string, unknown>>> {
     try {
       const isOwner = viewerId === userId;
 
@@ -619,10 +755,10 @@ class UserProfileService {
 
   /**
    * 计算用户资料完整度
-   * @param {string} userId - 用户ID
-   * @returns {Object} 完整度信息
+   * @param userId - 用户ID
+   * @returns 完整度信息
    */
-  async calculateProfileCompleteness(userId) {
+  async calculateProfileCompleteness(userId: string): Promise<CompletenessResult> {
     try {
       const user = await db('users').where('id', userId).first();
       if (!user) {
@@ -699,10 +835,10 @@ class UserProfileService {
 
   /**
    * 获取用户资料完整度
-   * @param {string} userId - 用户ID
-   * @returns {Object} 完整度信息
+   * @param userId - 用户ID
+   * @returns 完整度信息
    */
-  async getUserProfileCompleteness(userId) {
+  async getUserProfileCompleteness(userId: string): Promise<CompletenessResult> {
     try {
       const completeness = await db('user_profile_completeness').where('user_id', userId).first();
 
@@ -719,11 +855,15 @@ class UserProfileService {
 
   /**
    * 记录资料查看日志
-   * @param {string} profileUserId - 被查看用户ID
-   * @param {string} viewerId - 查看者ID
-   * @param {Object} viewData - 查看数据
+   * @param profileUserId - 被查看用户ID
+   * @param viewerId - 查看者ID
+   * @param viewData - 查看数据
    */
-  async recordProfileView(profileUserId, viewerId, viewData = {}) {
+  async recordProfileView(
+    profileUserId: string,
+    viewerId: string,
+    viewData: Record<string, unknown> = {}
+  ): Promise<void> {
     try {
       await db('user_profile_views').insert({
         profile_user_id: profileUserId,
@@ -742,12 +882,16 @@ class UserProfileService {
 
   /**
    * 更新工作经历
-   * @param {string} userId - 用户ID
-   * @param {string} workId - 工作经历ID
-   * @param {Object} updateData - 更新数据
-   * @returns {Object} 更新后的工作经历
+   * @param userId - 用户ID
+   * @param workId - 工作经历ID
+   * @param updateData - 更新数据
+   * @returns 更新后的工作经历
    */
-  async updateWorkExperience(userId, workId, updateData) {
+  async updateWorkExperience(
+    userId: string,
+    workId: string,
+    updateData: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
     try {
       const work = await db('user_work_experience')
         .where({
@@ -787,11 +931,11 @@ class UserProfileService {
 
   /**
    * 删除工作经历
-   * @param {string} userId - 用户ID
-   * @param {string} workId - 工作经历ID
-   * @returns {boolean} 是否删除成功
+   * @param userId - 用户ID
+   * @param workId - 工作经历ID
+   * @returns 是否删除成功
    */
-  async deleteWorkExperience(userId, workId) {
+  async deleteWorkExperience(userId: string, workId: string): Promise<boolean> {
     try {
       const deleted = await db('user_work_experience')
         .where({
@@ -815,11 +959,11 @@ class UserProfileService {
 
   /**
    * 获取下一个显示顺序
-   * @param {string} userId - 用户ID
-   * @param {string} type - 类型
-   * @returns {number} 下一个显示顺序
+   * @param userId - 用户ID
+   * @param type - 类型
+   * @returns 下一个显示顺序
    */
-  async getNextDisplayOrder(userId, type) {
+  async getNextDisplayOrder(userId: string, type: string): Promise<number> {
     try {
       let tableName;
       switch (type) {
@@ -847,10 +991,10 @@ class UserProfileService {
 
   /**
    * 计算基础信息得分
-   * @param {Object} user - 用户信息
-   * @returns {number} 得分
+   * @param user - 用户信息
+   * @returns 得分
    */
-  async calculateBasicInfoScore(user) {
+  async calculateBasicInfoScore(user: UserRecord): Promise<number> {
     const requiredFields = ['first_name', 'last_name', 'bio', 'avatar_url'];
     const optionalFields = ['birth_date', 'gender', 'occupation', 'company', 'industry'];
 
@@ -859,15 +1003,17 @@ class UserProfileService {
     const optionalWeight = this.completenessWeights.basicInfo * 0.4;
 
     // 必需字段
-    const requiredFilled = requiredFields.filter(
-      (field) => user[field] && user[field].trim()
-    ).length;
+    const requiredFilled = requiredFields.filter((field) => {
+      const value = user[field as keyof UserRecord];
+      return value && String(value).trim();
+    }).length;
     score += (requiredFilled / requiredFields.length) * requiredWeight;
 
     // 可选字段
-    const optionalFilled = optionalFields.filter(
-      (field) => user[field] && user[field].trim()
-    ).length;
+    const optionalFilled = optionalFields.filter((field) => {
+      const value = user[field as keyof UserRecord];
+      return value && String(value).trim();
+    }).length;
     score += (optionalFilled / optionalFields.length) * optionalWeight;
 
     return Math.round(score);
@@ -875,21 +1021,24 @@ class UserProfileService {
 
   /**
    * 计算联系信息得分
-   * @param {Object} user - 用户信息
-   * @returns {number} 得分
+   * @param user - 用户信息
+   * @returns 得分
    */
-  async calculateContactInfoScore(user) {
+  async calculateContactInfoScore(user: UserRecord): Promise<number> {
     const fields = ['phone', 'country', 'state', 'city'];
-    const filled = fields.filter((field) => user[field] && user[field].trim()).length;
+    const filled = fields.filter((field) => {
+      const value = user[field as keyof UserRecord];
+      return value && String(value).trim();
+    }).length;
     return Math.round((filled / fields.length) * this.completenessWeights.contactInfo);
   }
 
   /**
    * 计算教育信息得分
-   * @param {string} userId - 用户ID
-   * @returns {number} 得分
+   * @param userId - 用户ID
+   * @returns 得分
    */
-  async calculateEducationScore(userId) {
+  async calculateEducationScore(userId: string): Promise<number> {
     try {
       const educationCount = await db('user_education')
         .where('user_id', userId)
@@ -910,10 +1059,10 @@ class UserProfileService {
 
   /**
    * 计算工作经历得分
-   * @param {string} userId - 用户ID
-   * @returns {number} 得分
+   * @param userId - 用户ID
+   * @returns 得分
    */
-  async calculateWorkScore(userId) {
+  async calculateWorkScore(userId: string): Promise<number> {
     try {
       const workCount = await db('user_work_experience')
         .where('user_id', userId)
@@ -934,10 +1083,10 @@ class UserProfileService {
 
   /**
    * 计算技能得分
-   * @param {string} userId - 用户ID
-   * @returns {number} 得分
+   * @param userId - 用户ID
+   * @returns 得分
    */
-  async calculateSkillsScore(userId) {
+  async calculateSkillsScore(userId: string): Promise<number> {
     try {
       const skillCount = await db('user_skills')
         .where('user_id', userId)
@@ -958,10 +1107,10 @@ class UserProfileService {
 
   /**
    * 计算社交信息得分
-   * @param {string} userId - 用户ID
-   * @returns {number} 得分
+   * @param userId - 用户ID
+   * @returns 得分
    */
-  async calculateSocialScore(userId) {
+  async calculateSocialScore(userId: string): Promise<number> {
     try {
       const socialCount = await db('user_social_links')
         .where('user_id', userId)
@@ -982,17 +1131,18 @@ class UserProfileService {
 
   /**
    * 识别缺失字段
-   * @param {Object} user - 用户信息
-   * @param {string} userId - 用户ID
-   * @returns {Array} 缺失字段列表
+   * @param user - 用户信息
+   * @param userId - 用户ID
+   * @returns 缺失字段列表
    */
-  async identifyMissingFields(user, userId) {
-    const missing = [];
+  async identifyMissingFields(user: UserRecord, userId: string): Promise<MissingField[]> {
+    const missing: MissingField[] = [];
 
     // 基础信息
     const basicFields = ['first_name', 'last_name', 'bio', 'avatar_url'];
     basicFields.forEach((field) => {
-      if (!user[field] || !user[field].trim()) {
+      const value = user[field as keyof UserRecord];
+      if (!value || !String(value).trim()) {
         missing.push({ category: 'basic', field, label: this.getFieldLabel(field) });
       }
     });
@@ -1000,29 +1150,35 @@ class UserProfileService {
     // 联系信息
     const contactFields = ['phone', 'country', 'city'];
     contactFields.forEach((field) => {
-      if (!user[field] || !user[field].trim()) {
+      const value = user[field as keyof UserRecord];
+      if (!value || !String(value).trim()) {
         missing.push({ category: 'contact', field, label: this.getFieldLabel(field) });
       }
     });
 
     // 检查是否有教育、工作、技能、社交信息
-    const [educationCount, workCount, skillCount, socialCount] = await Promise.all([
+    const [educationCountRow, workCountRow, skillCountRow, socialCountRow] = await Promise.all([
       db('user_education').where('user_id', userId).count('* as count').first(),
       db('user_work_experience').where('user_id', userId).count('* as count').first(),
       db('user_skills').where('user_id', userId).count('* as count').first(),
       db('user_social_links').where('user_id', userId).count('* as count').first()
     ]);
 
-    if (parseInt(educationCount.count) === 0) {
+    const educationCount = parseInt(String(educationCountRow?.count ?? 0)) ?? 0;
+    const workCount = parseInt(String(workCountRow?.count ?? 0)) ?? 0;
+    const skillCount = parseInt(String(skillCountRow?.count ?? 0)) ?? 0;
+    const socialCount = parseInt(String(socialCountRow?.count ?? 0)) ?? 0;
+
+    if (educationCount === 0) {
       missing.push({ category: 'education', field: 'education', label: '教育经历' });
     }
-    if (parseInt(workCount.count) === 0) {
+    if (workCount === 0) {
       missing.push({ category: 'work', field: 'work_experience', label: '工作经历' });
     }
-    if (parseInt(skillCount.count) === 0) {
+    if (skillCount === 0) {
       missing.push({ category: 'skills', field: 'skills', label: '技能标签' });
     }
-    if (parseInt(socialCount.count) === 0) {
+    if (socialCount === 0) {
       missing.push({ category: 'social', field: 'social_links', label: '社交媒体链接' });
     }
 
@@ -1031,12 +1187,15 @@ class UserProfileService {
 
   /**
    * 生成资料完善建议
-   * @param {Array} missingFields - 缺失字段
-   * @param {Object} scores - 各项得分
-   * @returns {Array} 建议列表
+   * @param missingFields - 缺失字段
+   * @param scores - 各项得分
+   * @returns 建议列表
    */
-  async generateProfileSuggestions(missingFields, scores) {
-    const suggestions = [];
+  async generateProfileSuggestions(
+    missingFields: MissingField[],
+    scores: CompletenessScores
+  ): Promise<Suggestion[]> {
+    const suggestions: Suggestion[] = [];
 
     // 根据缺失字段生成建议
     if (missingFields.some((field) => field.category === 'basic')) {
@@ -1091,18 +1250,18 @@ class UserProfileService {
     }
 
     return suggestions.sort((a, b) => {
-      const priorityOrder = { high: 3, medium: 2, low: 1 };
+      const priorityOrder: Record<string, number> = { high: 3, medium: 2, low: 1 };
       return priorityOrder[b.priority] - priorityOrder[a.priority];
     });
   }
 
   /**
    * 获取字段标签
-   * @param {string} field - 字段名
-   * @returns {string} 字段标签
+   * @param field - 字段名
+   * @returns 字段标签
    */
-  getFieldLabel(field) {
-    const labels = {
+  getFieldLabel(field: string): string {
+    const labels: Record<string, string> = {
       first_name: '名',
       last_name: '姓',
       bio: '个人简介',
@@ -1124,10 +1283,10 @@ class UserProfileService {
 
   /**
    * 获取隐私设置
-   * @param {Object} user - 用户信息
-   * @returns {Object} 隐私设置
+   * @param user - 用户信息
+   * @returns 隐私设置
    */
-  getPrivacySettings(user) {
+  getPrivacySettings(user: UserRecord): Record<string, unknown> {
     return {
       profile_public: user.profile_public,
       show_email: user.show_email,
@@ -1138,12 +1297,11 @@ class UserProfileService {
 
   /**
    * 清除用户资料缓存
-   * @param {string} userId - 用户ID
+   * @param userId - 用户ID
    */
-  async clearUserProfileCache(userId) {
+  async clearUserProfileCache(userId: string): Promise<void> {
     try {
-      const pattern = `${this.cachePrefix}*`;
-      await cacheService.delPattern(`${this.cachePrefix}*${userId}*`);
+      await cacheService.deletePattern(`${this.cachePrefix}*${userId}*`);
     } catch (error) {
       logger.error('[UserProfileService] Failed to clear user profile cache:', error);
     }
@@ -1152,7 +1310,7 @@ class UserProfileService {
   /**
    * 关闭服务
    */
-  async close() {
+  async close(): Promise<void> {
     try {
       this.initialized = false;
       logger.info('[UserProfileService] User profile service closed');
@@ -1162,6 +1320,6 @@ class UserProfileService {
   }
 }
 
-const userProfileService: any = new UserProfileService();
+const userProfileService: UserProfileService = new UserProfileService();
 
 export default userProfileService;

@@ -126,7 +126,7 @@ const queryValidation = [
   query('sortOrder').optional().isIn(['asc', 'desc']).withMessage('无效的排序方向'),
   query('tags')
     .optional()
-    .custom((value: any) => {
+    .custom((value: unknown) => {
       if (typeof value === 'string') {
         return true; // 单个标签
       }
@@ -189,18 +189,28 @@ router.get(
         tags
       } = req.query;
 
-      const filters: any = {
+      type TemplateFilters = {
+        page: number;
+        limit: number;
+        status?: string;
+        category?: string;
+        complexity?: string;
+        sortBy?: string;
+        sortOrder?: string;
+        tags?: string[];
+      };
+      const filters: TemplateFilters = {
         page: parseInt(page as string),
         limit: parseInt(limit as string)
       };
 
-      if (status) filters.status = status;
-      if (category) filters.category = category;
-      if (complexity) filters.complexity = complexity;
-      if (sortBy) filters.sortBy = sortBy;
-      if (sortOrder) filters.sortOrder = sortOrder;
+      if (status) filters.status = status as string;
+      if (category) filters.category = category as string;
+      if (complexity) filters.complexity = complexity as string;
+      if (sortBy) filters.sortBy = sortBy as string;
+      if (sortOrder) filters.sortOrder = sortOrder as string;
       if (tags) {
-        filters.tags = Array.isArray(tags) ? tags : [tags];
+        filters.tags = Array.isArray(tags) ? tags : [tags as string];
       }
 
       const result = await promptTemplateService.getTemplates(filters);
@@ -229,10 +239,15 @@ router.get(
     try {
       const { q: query, category, limit = '10', tags } = req.query;
 
-      const filters: any = { limit: parseInt(limit as string) };
-      if (category) filters.category = category;
+      type SearchFilters = {
+        limit: number;
+        category?: string;
+        tags?: string[];
+      };
+      const filters: SearchFilters = { limit: parseInt(limit as string) };
+      if (category) filters.category = category as string;
       if (tags) {
-        filters.tags = Array.isArray(tags) ? tags : [tags];
+        filters.tags = Array.isArray(tags) ? tags : [tags as string];
       }
 
       const templates = await promptTemplateService.searchTemplates(query as string, filters);

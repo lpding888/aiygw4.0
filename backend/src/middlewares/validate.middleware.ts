@@ -11,6 +11,26 @@ import { createErrorResponse } from '../utils/response.js';
 import logger from '../utils/logger.js';
 
 /**
+ * Joi错误详情接口
+ */
+interface JoiErrorDetail {
+  path: (string | number)[];
+  message: string;
+  type?: string;
+  context?: Record<string, unknown>;
+}
+
+/**
+ * Express-validator错误接口
+ */
+interface ValidationError {
+  path?: string;
+  param?: string;
+  msg: string;
+  [key: string]: unknown;
+}
+
+/**
  * Express-validator的通用验证中间件
  * 艹，这个是处理express-validator验证结果的！
  */
@@ -22,7 +42,7 @@ export const validate = (req: Request, res: Response, next: NextFunction): void 
       createErrorResponse(
         'VALIDATION_ERROR',
         '数据验证失败',
-        errors.array().map((err: any) => ({
+        errors.array().map((err: ValidationError) => ({
           field: err.path || err.param,
           message: err.msg
         }))
@@ -78,7 +98,7 @@ export const validateMcpEndpoint = (req: Request, res: Response, next: NextFunct
       createErrorResponse(
         'VALIDATION_ERROR',
         '数据验证失败',
-        error.details.map((detail: any) => ({
+        error.details.map((detail: JoiErrorDetail) => ({
           field: detail.path.join('.'),
           message: detail.message
         }))
@@ -118,7 +138,7 @@ export const validateProvider = (req: Request, res: Response, next: NextFunction
       createErrorResponse(
         'VALIDATION_ERROR',
         '数据验证失败',
-        error.details.map((detail: any) => ({
+        error.details.map((detail: JoiErrorDetail) => ({
           field: detail.path.join('.'),
           message: detail.message
         }))
@@ -170,7 +190,7 @@ export const validateFeature = (req: Request, res: Response, next: NextFunction)
       createErrorResponse(
         'VALIDATION_ERROR',
         '数据验证失败',
-        error.details.map((detail: any) => ({
+        error.details.map((detail: JoiErrorDetail) => ({
           field: detail.path.join('.'),
           message: detail.message
         }))
@@ -228,7 +248,7 @@ export const validatePipeline = (req: Request, res: Response, next: NextFunction
       createErrorResponse(
         'VALIDATION_ERROR',
         '数据验证失败',
-        error.details.map((detail: any) => ({
+        error.details.map((detail: JoiErrorDetail) => ({
           field: detail.path.join('.'),
           message: detail.message
         }))
@@ -287,7 +307,7 @@ export const validatePromptTemplate = (req: Request, res: Response, next: NextFu
       createErrorResponse(
         'VALIDATION_ERROR',
         '数据验证失败',
-        error.details.map((detail: any) => ({
+        error.details.map((detail: JoiErrorDetail) => ({
           field: detail.path.join('.'),
           message: detail.message
         }))

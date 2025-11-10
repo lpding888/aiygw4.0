@@ -3,7 +3,58 @@ import path from 'path';
 import fs from 'fs';
 import logger from '../utils/logger.js';
 
-type AnyObject = Record<string, any>;
+type AnyObject = Record<string, unknown>;
+
+interface SwaggerConfig extends Record<string, unknown> {
+  definition: { info: { title: string; version: string } };
+  apis: string[];
+  outputFormats: string[];
+  generateDocs: boolean;
+  autoGenerate: boolean;
+  watchMode: boolean;
+  updateInterval: number;
+  lastUpdate: number;
+  updateTimer?: NodeJS.Timeout | null;
+}
+
+interface SwaggerStats {
+  totalEndpoints: number;
+  totalSchemas: number;
+  generatedAt: Date | null;
+  lastUpdate: number | null;
+  updateCount: number;
+}
+
+interface GenerateDocsResult {
+  success: boolean;
+  spec: AnyObject;
+  stats: SwaggerStats | Record<string, unknown>;
+  outputPath: string;
+}
+
+interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+  spec?: AnyObject;
+}
+
+interface SwaggerEndpoint {
+  path: string;
+  method: string;
+  operationId?: unknown;
+  summary?: unknown;
+  description?: unknown;
+  tags: unknown[];
+  parameters: unknown[];
+  responses: Record<string, unknown>;
+}
+
+interface SchemaEntry {
+  name: string;
+  schema: unknown;
+  required: unknown[];
+  properties: Record<string, unknown>;
+}
 
 class SwaggerService {
   private initialized = false;
@@ -16,7 +67,7 @@ class SwaggerService {
   private outputFile = path.join(this.outputDir, 'swagger.json');
   private htmlFile = path.join(this.outputDir, 'index.html');
 
-  private config: AnyObject = {
+  private config: SwaggerConfig = {
     definition: {
       info: { title: 'API文档', version: '1.0.0' }
     },
@@ -34,11 +85,11 @@ class SwaggerService {
     lastUpdate: 0
   };
 
-  private stats = {
+  private stats: SwaggerStats = {
     totalEndpoints: 0,
     totalSchemas: 0,
-    generatedAt: null as any,
-    lastUpdate: null as any,
+    generatedAt: null,
+    lastUpdate: null,
     updateCount: 0
   };
 
@@ -56,21 +107,16 @@ class SwaggerService {
       if (this.config.watchMode) this.startAutoUpdate();
       this.initialized = true;
       logger.info('[Swagger] Swagger文档服务初始化成功');
-    } catch (error: any) {
+    } catch (error) {
       logger.error('[Swagger] Swagger服务初始化失败:', error);
       throw error;
     }
   }
 
-  async generateDocs(): Promise<{
-    success: boolean;
-    spec: AnyObject;
-    stats: AnyObject;
-    outputPath: string;
-  }> {
+  async generateDocs(): Promise<GenerateDocsResult> {
     try {
       logger.info('[Swagger] 开始生成API文档...');
-      this.generatedSpec = swaggerJsdoc(this.config as any) as AnyObject;
+      this.generatedSpec = swaggerJsdoc(this.config as Record<string, unknown>) as AnyObject;
       this.updateStats();
       if (this.config.generateDocs) await this.writeDocs();
       this.stats.generatedAt = new Date();
@@ -85,7 +131,8 @@ class SwaggerService {
         stats: this.stats,
         outputPath: this.outputDir
       };
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as Error;
       logger.error('[Swagger] 生成API文档失败:', error);
       throw error;
     }
@@ -95,70 +142,79 @@ class SwaggerService {
     return this.generatedSpec || null;
   }
 
-  getEndpoints(): AnyObject[] {
+  getEndpoints(): SwaggerEndpoint[] {
     if (!this.generatedSpec || !this.generatedSpec.paths) return [];
-    const endpoints: AnyObject[] = [];
+    const endpoints: SwaggerEndpoint[] = [];
     for (const [p, methods] of Object.entries(this.generatedSpec.paths)) {
-      for (const [method, spec] of Object.entries(methods as AnyObject)) {
+      for (const [method, spec] of Object.entries(methods as Record<string, unknown>)) {
+        const specRecord = spec as Record<string, unknown>;
         endpoints.push({
           path: p,
           method: method.toUpperCase(),
-          operationId: (spec as any).operationId,
-          summary: (spec as any).summary,
-          description: (spec as any).description,
-          tags: (spec as any).tags || [],
-          parameters: (spec as any).parameters || [],
-          responses: (spec as any).responses || {}
+          operationId: specRecord.operationId,
+          summary: specRecord.summary,
+          description: specRecord.description,
+          tags: (specRecord.tags || []) as unknown[],
+          parameters: (specRecord.parameters || []) as unknown[],
+          responses: (specRecord.responses || {}) as Record<string, unknown>
         });
       }
     }
     return endpoints;
   }
 
-  getEndpointsByTag(): Record<string, AnyObject[]> {
-    const grouped: Record<string, AnyObject[]> = {};
+  getEndpointsByTag(): Record<string, SwaggerEndpoint[]> {
+    const grouped: Record<string, SwaggerEndpoint[]> = {};
     this.getEndpoints().forEach((e) => {
-      (e.tags as string[]).forEach((tag) => {
-        (grouped[tag] ||= []).push(e);
+      (e.tags as unknown[]).forEach((tag) => {
+        const tagStr = String(tag);
+        (grouped[tagStr] ||= []).push(e);
       });
     });
     return grouped;
   }
 
-  getSchemas(): AnyObject[] {
-    const spec = this.generatedSpec as any;
+  getSchemas(): SchemaEntry[] {
+    const spec = this.generatedSpec as Record<string, unknown>;
     if (!spec?.components?.schemas) return [];
-    return Object.entries(spec.components.schemas).map(([name, schema]) => ({
-      name,
-      schema,
-      required: (schema as any).required || [],
-      properties: (schema as any).properties || {}
-    }));
+    return Object.entries(spec.components.schemas as Record<string, unknown>).map(([name, schema]) => {
+      const schemaRecord = schema as Record<string, unknown>;
+      return {
+        name,
+        schema,
+        required: (schemaRecord.required || []) as unknown[],
+        properties: (schemaRecord.properties || {}) as Record<string, unknown>
+      };
+    });
   }
 
-  validateDocs(): { valid: boolean; errors: string[]; spec?: AnyObject } {
+  validateDocs(): ValidationResult {
     try {
       const spec = this.getSpec();
       if (!spec) return { valid: false, errors: ['未找到API规范'] };
       const errors: string[] = [];
-      if (!(spec as any).openapi) errors.push('缺少OpenAPI版本');
-      if (!(spec as any).info) errors.push('缺少API信息');
-      if (!(spec as any).paths || Object.keys((spec as any).paths).length === 0)
+      const specRecord = spec as Record<string, unknown>;
+      if (!specRecord.openapi) errors.push('缺少OpenAPI版本');
+      if (!specRecord.info) errors.push('缺少API信息');
+      const paths = specRecord.paths as Record<string, unknown> | undefined;
+      if (!paths || Object.keys(paths).length === 0)
         errors.push('未定义API路径');
-      for (const [p, methods] of Object.entries((spec as any).paths || {})) {
-        for (const [method, mSpec] of Object.entries(methods as AnyObject)) {
-          if (!(mSpec as any).summary) errors.push(`${method.toUpperCase()} ${p} 缺少摘要`);
-          if (!(mSpec as any).responses) errors.push(`${method.toUpperCase()} ${p} 缺少响应定义`);
+      for (const [p, methods] of Object.entries(paths || {})) {
+        for (const [method, mSpec] of Object.entries(methods as Record<string, unknown>)) {
+          const mSpecRecord = mSpec as Record<string, unknown>;
+          if (!mSpecRecord.summary) errors.push(`${method.toUpperCase()} ${p} 缺少摘要`);
+          if (!mSpecRecord.responses) errors.push(`${method.toUpperCase()} ${p} 缺少响应定义`);
         }
       }
-      return { valid: errors.length === 0, errors, spec: spec as AnyObject };
-    } catch (error: any) {
+      return { valid: errors.length === 0, errors, spec };
+    } catch (error) {
+      const err = error as Error;
       logger.error('[Swagger] 验证API文档失败:', error);
-      return { valid: false, errors: [`验证过程出错: ${error.message}`] };
+      return { valid: false, errors: [`验证过程出错: ${err.message}`] };
     }
   }
 
-  getStats(): AnyObject {
+  getStats(): Record<string, unknown> {
     return {
       ...this.stats,
       outputDir: this.outputDir,
@@ -170,12 +226,7 @@ class SwaggerService {
     };
   }
 
-  async regenerateDocs(): Promise<{
-    success: boolean;
-    spec: AnyObject;
-    stats: AnyObject;
-    outputPath: string;
-  }> {
+  async regenerateDocs(): Promise<GenerateDocsResult> {
     logger.info('[Swagger] 手动重新生成API文档');
     return await this.generateDocs();
   }
@@ -205,16 +256,28 @@ class SwaggerService {
   }
 
   private async generateHtmlDoc(): Promise<void> {
-    const spec = this.generatedSpec as any;
-    const htmlTemplate = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${spec.info.title} - API文档</title><link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@4.15.5/swagger-ui.css"></head><body><div class="header"><h1>${spec.info.title}</h1><p>${spec.info.description ?? ''}</p><div class="stats"><strong>文档统计:</strong> 端点数量: ${this.stats.totalEndpoints} | 模型数量: ${this.stats.totalSchemas} | 生成时间: ${new Date(this.stats.generatedAt).toLocaleString()}</div></div><div id="swagger-ui"></div><div class="footer"><p>API文档生成时间: ${new Date().toLocaleString()}</p><p> powered by Swagger</p></div><script src="https://unpkg.com/swagger-ui-dist@4.15.5/swagger-ui-bundle.js"></script><script src="https://unpkg.com/swagger-ui-dist@4.15.5/swagger-ui-standalone-preset.js"></script><script>window.onload=function(){SwaggerUIBundle({url:'./swagger.json',dom_id:'#swagger-ui',deepLinking:true,presets:[SwaggerUIBundle.presets.apis,SwaggerUIStandalonePreset],plugins:[SwaggerUIBundle.plugins.DownloadUrl]});}</script></body></html>`;
+    const spec = this.generatedSpec as Record<string, unknown>;
+    const specInfo = spec.info as Record<string, unknown>;
+    const generatedAtDate = this.stats.generatedAt || new Date();
+    const htmlTemplate = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${specInfo.title} - API文档</title><link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@4.15.5/swagger-ui.css"></head><body><div class="header"><h1>${specInfo.title}</h1><p>${specInfo.description ?? ''}</p><div class="stats"><strong>文档统计:</strong> 端点数量: ${this.stats.totalEndpoints} | 模型数量: ${this.stats.totalSchemas} | 生成时间: ${new Date(generatedAtDate).toLocaleString()}</div></div><div id="swagger-ui"></div><div class="footer"><p>API文档生成时间: ${new Date().toLocaleString()}</p><p> powered by Swagger</p></div><script src="https://unpkg.com/swagger-ui-dist@4.15.5/swagger-ui-bundle.js"></script><script src="https://unpkg.com/swagger-ui-dist@4.15.5/swagger-ui-standalone-preset.js"></script><script>window.onload=function(){SwaggerUIBundle({url:'./swagger.json',dom_id:'#swagger-ui',deepLinking:true,presets:[SwaggerUIBundle.presets.apis,SwaggerUIStandalonePreset],plugins:[SwaggerUIBundle.plugins.DownloadUrl]});}</script></body></html>`;
     fs.writeFileSync(this.htmlFile, htmlTemplate);
   }
 
   private async generateYamlDoc(): Promise<void> {
-    const spec = this.generatedSpec as any;
-    const yamlContent = `openapi: 3.0.0\ninfo:\n  title: ${spec.info.title}\n  version: ${spec.info.version}\n  description: ${spec.info.description}\nservers:\n${(spec.servers || []).map((s: any) => `  - url: ${s.url}\n    description: ${s.description}`).join('\n')}\n\ntags:\n${(spec.tags || []).map((t: any) => `  - name: ${t.name}\n    description: ${t.description}`).join('\n')}\n\npaths:\n${JSON.stringify(spec.paths, null, 2)}\n\ncomponents:\n  securitySchemes:\n    bearerAuth:\n      type: http\n      scheme: bearer\n      bearerFormat: JWT\n  schemas:\n${Object.entries(
-      spec.components?.schemas ?? {}
-    )
+    const spec = this.generatedSpec as Record<string, unknown>;
+    interface ServerEntry {
+      url: string;
+      description: string;
+    }
+    interface TagEntry {
+      name: string;
+      description: string;
+    }
+    const servers = (spec.servers || []) as ServerEntry[];
+    const tags = (spec.tags || []) as TagEntry[];
+    const specInfo = spec.info as Record<string, unknown>;
+    const componentSchemas = (spec.components as Record<string, unknown> | undefined)?.schemas ?? {};
+    const yamlContent = `openapi: 3.0.0\ninfo:\n  title: ${specInfo.title}\n  version: ${specInfo.version}\n  description: ${specInfo.description}\nservers:\n${servers.map((s) => `  - url: ${s.url}\n    description: ${s.description}`).join('\n')}\n\ntags:\n${tags.map((t) => `  - name: ${t.name}\n    description: ${t.description}`).join('\n')}\n\npaths:\n${JSON.stringify(spec.paths, null, 2)}\n\ncomponents:\n  securitySchemes:\n    bearerAuth:\n      type: http\n      scheme: bearer\n      bearerFormat: JWT\n  schemas:\n${Object.entries(componentSchemas as Record<string, unknown>)
       .map(([name, schema]) => `    ${name}:\n${JSON.stringify(schema, null, 4)}`)
       .join('\n')}\n`;
     const yamlFile = this.outputFile.replace('.json', '.yaml');
@@ -222,17 +285,19 @@ class SwaggerService {
   }
 
   private updateStats(): void {
-    const spec = this.generatedSpec as any;
+    const spec = this.generatedSpec as Record<string, unknown>;
     let endpointCount = 0;
-    if (spec?.paths)
-      endpointCount = Object.values(spec.paths).reduce(
-        (acc: number, methods: any) => acc + Object.keys(methods).length,
+    if (spec?.paths) {
+      const paths = spec.paths as Record<string, unknown>;
+      endpointCount = Object.values(paths).reduce(
+        (acc: number, methods: unknown) => acc + Object.keys(methods as Record<string, unknown>).length,
         0
       );
+    }
     this.stats.totalEndpoints = endpointCount;
-    this.stats.totalSchemas = spec?.components?.schemas
-      ? Object.keys(spec.components.schemas).length
-      : 0;
+    const components = spec?.components as Record<string, unknown> | undefined;
+    const schemas = components?.schemas as Record<string, unknown> | undefined;
+    this.stats.totalSchemas = schemas ? Object.keys(schemas).length : 0;
   }
 
   private startAutoUpdate(): void {
@@ -242,7 +307,8 @@ class SwaggerService {
     this.config.updateTimer = setInterval(async () => {
       try {
         await this.generateDocs();
-      } catch (error: any) {
+      } catch (error) {
+      const err = error as Error;
         logger.error('[Swagger] 自动更新文档失败:', error);
       }
     }, this.config.updateInterval);

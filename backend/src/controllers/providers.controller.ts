@@ -8,6 +8,26 @@ import * as providerRepo from '../repositories/providerEndpoints.repo.js';
 import type { ProviderEndpointInput } from '../repositories/providerEndpoints.repo.js';
 
 /**
+ * Express请求对象扩展类型定义
+ */
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: number;
+    [key: string]: unknown;
+  };
+}
+
+/**
+ * 审计日志条目类型
+ */
+interface AuditLogEntry {
+  action: string;
+  provider_ref: string;
+  user_id: number | null;
+  details: Record<string, unknown>;
+}
+
+/**
  * Provider管理控制器
  */
 export class ProvidersController {
@@ -42,9 +62,10 @@ export class ProvidersController {
           offset: parseInt(offset as string)
         }
       });
-    } catch (error: any) {
-      console.error(`[ProvidersController] 列出Provider失败: ${error.message}`);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error(`[ProvidersController] 列出Provider失败: ${err.message}`);
+      next(err);
     }
   }
 
@@ -73,9 +94,10 @@ export class ProvidersController {
         success: true,
         data: provider
       });
-    } catch (error: any) {
-      console.error(`[ProvidersController] 获取Provider失败: ${error.message}`);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error(`[ProvidersController] 获取Provider失败: ${err.message}`);
+      next(err);
     }
   }
 
@@ -120,7 +142,7 @@ export class ProvidersController {
       await this.recordAuditLog({
         action: 'CREATE',
         provider_ref: created.provider_ref,
-        user_id: (req as any).user?.id || null,
+        user_id: (req as AuthenticatedRequest).user?.id || null,
         details: { provider_name: created.provider_name }
       });
 
@@ -128,9 +150,10 @@ export class ProvidersController {
         success: true,
         data: created
       });
-    } catch (error: any) {
-      console.error(`[ProvidersController] 创建Provider失败: ${error.message}`);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error(`[ProvidersController] 创建Provider失败: ${err.message}`);
+      next(err);
     }
   }
 
@@ -164,7 +187,7 @@ export class ProvidersController {
         await this.recordAuditLog({
           action: 'UPDATE',
           provider_ref: updated.provider_ref,
-          user_id: (req as any).user?.id || null,
+          user_id: (req as AuthenticatedRequest).user?.id || null,
           details: updates
         });
 
@@ -172,22 +195,24 @@ export class ProvidersController {
           success: true,
           data: updated
         });
-      } catch (error: any) {
-        if (error.message.includes('不存在')) {
+      } catch (error: unknown) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        if (err.message.includes('不存在')) {
           res.status(404).json({
             success: false,
             error: {
               code: 'NOT_FOUND',
-              message: error.message
+              message: err.message
             }
           });
           return;
         }
-        throw error;
+        throw err;
       }
-    } catch (error: any) {
-      console.error(`[ProvidersController] 更新Provider失败: ${error.message}`);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error(`[ProvidersController] 更新Provider失败: ${err.message}`);
+      next(err);
     }
   }
 
@@ -216,7 +241,7 @@ export class ProvidersController {
       await this.recordAuditLog({
         action: 'DELETE',
         provider_ref,
-        user_id: (req as any).user?.id || null,
+        user_id: (req as AuthenticatedRequest).user?.id || null,
         details: {}
       });
 
@@ -224,9 +249,10 @@ export class ProvidersController {
         success: true,
         message: 'Provider端点已删除'
       });
-    } catch (error: any) {
-      console.error(`[ProvidersController] 删除Provider失败: ${error.message}`);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error(`[ProvidersController] 删除Provider失败: ${err.message}`);
+      next(err);
     }
   }
 
@@ -261,7 +287,7 @@ export class ProvidersController {
       await this.recordAuditLog({
         action: 'TEST_CONNECTION',
         provider_ref,
-        user_id: (req as any).user?.id || null,
+        user_id: (req as AuthenticatedRequest).user?.id || null,
         details: { healthy, message }
       });
 
@@ -273,9 +299,10 @@ export class ProvidersController {
           tested_at: new Date().toISOString()
         }
       });
-    } catch (error: any) {
-      console.error(`[ProvidersController] 测试连接失败: ${error.message}`);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error(`[ProvidersController] 测试连接失败: ${err.message}`);
+      next(err);
     }
   }
 
@@ -342,12 +369,7 @@ export class ProvidersController {
    * 记录审计日志
    * 艹，这个tm很重要，所有操作都要记录！
    */
-  private async recordAuditLog(log: {
-    action: string;
-    provider_ref: string;
-    user_id: number | null;
-    details: any;
-  }): Promise<void> {
+  private async recordAuditLog(log: AuditLogEntry): Promise<void> {
     try {
       // 艹，这里应该写入provider_audit_logs表
       // 但先用console.log代替（后续实现审计日志表后再完善）
@@ -364,8 +386,9 @@ export class ProvidersController {
       //   details: JSON.stringify(log.details),
       //   created_at: new Date(),
       // });
-    } catch (error: any) {
-      console.error('[AUDIT] 记录审计日志失败:', error.message);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[AUDIT] 记录审计日志失败:', err.message);
       // 艹，审计日志失败不应该影响主流程
     }
   }

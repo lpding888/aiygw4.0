@@ -1,14 +1,42 @@
 import type { Request, Response, NextFunction } from 'express';
 import distributionService from '../services/distribution.service.js';
 
+interface ApplyRequest extends Request {
+  userId?: string;
+  user?: { id: string };
+}
+
+interface ApplyBody {
+  realName?: string;
+  idCard?: string;
+  contact?: string;
+  channel?: unknown;
+}
+
+interface ReferralsQuery {
+  status?: string;
+  limit?: string | number;
+  offset?: string | number;
+}
+
+interface WithdrawalBody {
+  amount?: string | number;
+  method?: string;
+  accountInfo?: unknown;
+}
+
 /**
  * 分销代理控制器（TS版）
  */
 class DistributionController {
-  async apply(req: Request, res: Response, next: NextFunction): Promise<void> {
+  private getUserId(req: ApplyRequest): string {
+    return (req.userId ?? req.user?.id) as string;
+  }
+
+  async apply(req: ApplyRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).userId ?? (req as any).user?.id;
-      const { realName, idCard, contact, channel } = req.body ?? {};
+      const userId = this.getUserId(req);
+      const { realName, idCard, contact, channel } = (req.body ?? {}) as ApplyBody;
       if (!realName || !idCard || !contact) {
         res
           .status(400)
@@ -27,9 +55,9 @@ class DistributionController {
     }
   }
 
-  async getStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getStatus(req: ApplyRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).userId ?? (req as any).user?.id;
+      const userId = this.getUserId(req);
       const status = await distributionService.getDistributorStatus(userId);
       res.json({ success: true, data: status });
     } catch (error) {
@@ -37,9 +65,9 @@ class DistributionController {
     }
   }
 
-  async getDetail(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getDetail(req: ApplyRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).userId ?? (req as any).user?.id;
+      const userId = this.getUserId(req);
       const detail = await distributionService.getDistributorDetail(userId);
       res.json({ success: true, data: detail });
     } catch (error) {
@@ -47,9 +75,9 @@ class DistributionController {
     }
   }
 
-  async getDashboard(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getDashboard(req: ApplyRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).userId ?? (req as any).user?.id;
+      const userId = this.getUserId(req);
       const dashboard = await distributionService.getDashboard(userId);
       res.json({ success: true, data: dashboard });
     } catch (error) {
@@ -57,12 +85,12 @@ class DistributionController {
     }
   }
 
-  async getReferrals(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getReferrals(req: ApplyRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).userId ?? (req as any).user?.id;
-      const { status = 'all', limit = 20, offset = 0 } = req.query as any;
+      const userId = this.getUserId(req);
+      const { status = 'all', limit = 20, offset = 0 } = req.query as unknown as ReferralsQuery;
       const result = await distributionService.getReferrals(userId, {
-        status,
+        status: String(status),
         limit: Number(limit),
         offset: Number(offset)
       });
@@ -72,12 +100,12 @@ class DistributionController {
     }
   }
 
-  async getCommissions(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getCommissions(req: ApplyRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).userId ?? (req as any).user?.id;
-      const { status = 'all', limit = 20, offset = 0 } = req.query as any;
+      const userId = this.getUserId(req);
+      const { status = 'all', limit = 20, offset = 0 } = req.query as unknown as ReferralsQuery;
       const result = await distributionService.getCommissions(userId, {
-        status,
+        status: String(status),
         limit: Number(limit),
         offset: Number(offset)
       });
@@ -87,10 +115,10 @@ class DistributionController {
     }
   }
 
-  async getWithdrawals(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getWithdrawals(req: ApplyRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).userId ?? (req as any).user?.id;
-      const { limit = 20, offset = 0 } = req.query as any;
+      const userId = this.getUserId(req);
+      const { limit = 20, offset = 0 } = req.query as unknown as ReferralsQuery;
       const result = await distributionService.getWithdrawals(userId, {
         limit: Number(limit),
         offset: Number(offset)
@@ -101,10 +129,10 @@ class DistributionController {
     }
   }
 
-  async createWithdrawal(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async createWithdrawal(req: ApplyRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).userId ?? (req as any).user?.id;
-      const { amount, method, accountInfo } = req.body ?? {};
+      const userId = this.getUserId(req);
+      const { amount, method, accountInfo } = (req.body ?? {}) as WithdrawalBody;
       if (!amount || !method || !accountInfo) {
         res
           .status(400)
@@ -113,7 +141,7 @@ class DistributionController {
       }
       const withdrawalId = await distributionService.createWithdrawal(userId, {
         amount: Number(amount),
-        method,
+        method: String(method),
         accountInfo
       });
       res.json({ success: true, data: { withdrawalId }, message: '提现申请已提交，请等待审核' });

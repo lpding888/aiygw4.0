@@ -1,10 +1,109 @@
-// @ts-nocheck
 import WebSocket, { type Server as WebSocketServer, type WebSocket as WSClient } from 'ws';
 import type { IncomingMessage } from 'http';
 import jwt from 'jsonwebtoken';
 import logger from '../utils/logger.js';
 import tokenService from './token.service.js';
 import permissionService from './permission.service.js';
+
+/**
+ * WebSocket配置接口
+ */
+interface WebSocketConfig {
+  port: number | string;
+  heartbeatInterval: number;
+  maxConnections: number;
+  messageQueueSize: number;
+  reconnectDelay: number;
+  pingTimeout: number;
+}
+
+/**
+ * 连接信息接口
+ */
+interface ConnectionInfo {
+  connectionId: string;
+  ip: string | unknown;
+  userAgent: string;
+  connectedAt: number;
+  authenticated: boolean;
+  userId: string | null;
+  token: string | null;
+  userInfo?: unknown;
+  subscriptions?: Set<string>;
+}
+
+/**
+ * 消息类型接口
+ */
+interface MessageTypes {
+  TASK_CREATED: string;
+  TASK_STATUS_CHANGED: string;
+  TASK_PROGRESS: string;
+  TASK_COMPLETED: string;
+  TASK_FAILED: string;
+  SYSTEM_NOTIFICATION: string;
+  USER_NOTIFICATION: string;
+  MAINTENANCE_ALERT: string;
+  PING: string;
+  PONG: string;
+  AUTH_SUCCESS: string;
+  AUTH_FAILED: string;
+  CONNECTION_ERROR: string;
+  CHAT_MESSAGE: string;
+  USER_STATUS: string;
+  SYSTEM_STATS: string;
+}
+
+/**
+ * 统计信息接口
+ */
+interface Statistics {
+  totalConnections: number;
+  activeConnections: number;
+  messagesSent: number;
+  messagesReceived: number;
+  authFailures: number;
+  lastReset: number;
+}
+
+/**
+ * WebSocket消息接口
+ */
+interface WSMessage {
+  type: string;
+  data: unknown;
+  id?: string | null;
+}
+
+/**
+ * 聊天消息数据接口
+ */
+interface ChatMessageData {
+  content: unknown;
+  type?: string;
+  targetId?: string | null;
+}
+
+/**
+ * 认证数据接口
+ */
+interface AuthData {
+  token: string;
+}
+
+/**
+ * 订阅数据接口
+ */
+interface SubscriptionData {
+  channels?: string[];
+}
+
+/**
+ * 取消订阅数据接口
+ */
+interface UnsubscriptionData {
+  channels?: string[];
+}
 
 /**
  * WebSocket服务
@@ -19,19 +118,19 @@ import permissionService from './permission.service.js';
 class WebSocketService {
   private wss: WebSocketServer | null = null;
 
-  private clients: Map<string, Set<WSClient | any>> = new Map();
+  private clients: Map<string, Set<WSClient>> = new Map();
 
-  private connections: Map<WSClient | any, Record<string, any>> = new Map();
+  private connections: Map<WSClient, ConnectionInfo> = new Map();
 
   public initialized = false;
 
   private heartbeatTimer: NodeJS.Timeout | null = null;
 
-  private config: Record<string, any>;
+  private config: WebSocketConfig;
 
-  private messageTypes: Record<string, string>;
+  private messageTypes: MessageTypes;
 
-  private stats: Record<string, number>;
+  private stats: Statistics;
 
   constructor() {
     this.config = {
@@ -84,7 +183,7 @@ class WebSocketService {
   /**
    * 初始化WebSocket服务
    */
-  async initialize() {
+  async initialize(): Promise<void> {
     if (this.initialized) {
       logger.warn('[WebSocket] WebSocket服务已初始化');
       return;
@@ -146,7 +245,7 @@ class WebSocketService {
    * 设置事件监听器
    * @private
    */
-  setupEventListeners() {
+  setupEventListeners(): void {
     this.wss.on('connection', this.handleConnection.bind(this));
     this.wss.on('error', this.handleServerError.bind(this));
 
@@ -158,7 +257,7 @@ class WebSocketService {
    * @param {WebSocket} ws - WebSocket连接
    * @param {Object} req - HTTP请求对象
    */
-  async handleConnection(ws, req) {
+  async handleConnection(ws: WSClient, req: IncomingMessage): Promise<void> {
     const connectionId = this.generateConnectionId();
     const clientIP = req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'] || 'unknown';
@@ -218,7 +317,7 @@ class WebSocketService {
    * @param {WebSocket} ws - WebSocket连接
    * @private
    */
-  setupConnectionListeners(ws) {
+  setupConnectionListeners(ws: WSClient): void {
     ws.on('message', async (data) => {
       try {
         this.stats.messagesReceived++;
@@ -250,7 +349,7 @@ class WebSocketService {
    * @param {WebSocket} ws - WebSocket连接
    * @param {Object} message - 消息对象
    */
-  async handleMessage(ws, message) {
+  async handleMessage(ws: WSClient, message: WSMessage): Promise<void> {
     const { type, data, id } = message;
 
     switch (type) {
@@ -290,7 +389,7 @@ class WebSocketService {
    * @param {Object} data - 验证数据
    * @param {string} messageId - 消息ID
    */
-  async handleAuthentication(ws, data, messageId) {
+  async handleAuthentication(ws: WSClient, data: unknown, messageId: string | null): Promise<void> {
     try {
       const { token } = data;
 
@@ -361,7 +460,7 @@ class WebSocketService {
    * @param {Object} data - 订阅数据
    * @param {string} messageId - 消息ID
    */
-  async handleSubscription(ws, data, messageId) {
+  async handleSubscription(ws: WSClient, data: unknown, messageId: string | null): Promise<void> {
     const connectionInfo = this.connections.get(ws);
     if (!connectionInfo || !connectionInfo.authenticated) {
       this.sendError(ws, 'NOT_AUTHENTICATED', '请先进行身份验证', messageId);
@@ -400,7 +499,7 @@ class WebSocketService {
    * @param {Object} data - 取消订阅数据
    * @param {string} messageId - 消息ID
    */
-  async handleUnsubscription(ws, data, messageId) {
+  async handleUnsubscription(ws: WSClient, data: unknown, messageId: string | null): Promise<void> {
     const connectionInfo = this.connections.get(ws);
     if (!connectionInfo || !connectionInfo.authenticated) {
       this.sendError(ws, 'NOT_AUTHENTICATED', '请先进行身份验证', messageId);
@@ -435,7 +534,7 @@ class WebSocketService {
    * @param {Object} data - 聊天数据
    * @param {string} messageId - 消息ID
    */
-  async handleChatMessage(ws, data, messageId) {
+  async handleChatMessage(ws: WSClient, data: unknown, messageId: string | null): Promise<void> {
     const connectionInfo = this.connections.get(ws);
     if (!connectionInfo || !connectionInfo.authenticated) {
       this.sendError(ws, 'NOT_AUTHENTICATED', '请先进行身份验证', messageId);
@@ -480,7 +579,7 @@ class WebSocketService {
    * @param {number} code - 关闭代码
    * @param {string} reason - 关闭原因
    */
-  handleDisconnection(ws, code, reason) {
+  handleDisconnection(ws: WSClient, code: number, reason: string | Buffer): void {
     const connectionInfo = this.connections.get(ws);
     if (connectionInfo) {
       logger.info(
@@ -514,7 +613,7 @@ class WebSocketService {
    * 处理服务器错误
    * @param {Error} error - 错误对象
    */
-  handleServerError(error) {
+  handleServerError(error: unknown): void {
     logger.error('[WebSocket] 服务器错误:', error);
   }
 
@@ -524,7 +623,7 @@ class WebSocketService {
    * @param {Object} message - 消息对象
    * @returns {number} 发送数量
    */
-  sendToUser(userId, message) {
+  sendToUser(userId: string | null, message: WSMessage): number {
     const userConnections = this.clients.get(userId);
     if (!userConnections || userConnections.size === 0) {
       return 0;
@@ -548,7 +647,11 @@ class WebSocketService {
    * @param {string} excludeUserId - 排除的用户ID（可选）
    * @returns {number} 发送数量
    */
-  broadcast(message, channel = null, excludeUserId = null) {
+  broadcast(
+    message: WSMessage,
+    channel: string | null = null,
+    excludeUserId: string | null = null
+  ): number {
     let sentCount = 0;
 
     this.connections.forEach((connectionInfo, ws) => {
@@ -584,7 +687,7 @@ class WebSocketService {
    * @param {WebSocket} ws - WebSocket连接
    * @param {Object} message - 消息对象
    */
-  sendMessage(ws, message) {
+  sendMessage(ws: WSClient, message: WSMessage): void {
     if (ws.readyState === WebSocket.OPEN) {
       try {
         ws.send(JSON.stringify(message));
@@ -602,7 +705,7 @@ class WebSocketService {
    * @param {string} message - 错误消息
    * @param {string} messageId - 原消息ID
    */
-  sendError(ws, code, message, messageId = null) {
+  sendError(ws: WSClient, code: string, message: string, messageId: string | null = null): void {
     this.sendMessage(ws, {
       type: 'error',
       data: {
@@ -620,7 +723,7 @@ class WebSocketService {
    * @param {number} code - 关闭代码
    * @param {string} reason - 关闭原因
    */
-  closeConnection(ws, code = 1000, reason = 'Normal closure') {
+  closeConnection(ws: WSClient, code: number = 1000, reason: string = 'Normal closure'): void {
     if (ws.readyState === WebSocket.OPEN) {
       ws.close(code, reason);
     }
@@ -632,7 +735,7 @@ class WebSocketService {
    * @param {string} taskId - 任务ID
    * @param {Object} progressData - 进度数据
    */
-  pushTaskProgress(userId, taskId, progressData) {
+  pushTaskProgress(userId: string, taskId: string, progressData: unknown): number {
     const message = {
       type: this.messageTypes.TASK_PROGRESS,
       data: {
@@ -655,7 +758,12 @@ class WebSocketService {
    * @param {string} status - 新状态
    * @param {Object} extraData - 额外数据
    */
-  pushTaskStatusChange(userId, taskId, status, extraData = {}) {
+  pushTaskStatusChange(
+    userId: string,
+    taskId: string,
+    status: string,
+    extraData: unknown = {}
+  ): number {
     const message = {
       type: this.messageTypes.TASK_STATUS_CHANGED,
       data: {
@@ -679,7 +787,7 @@ class WebSocketService {
    * @param {string} userId - 用户ID
    * @param {Object} notification - 通知数据
    */
-  pushNotification(userId, notification) {
+  pushNotification(userId: string, notification: unknown): number {
     const message = {
       type: this.messageTypes.USER_NOTIFICATION,
       data: {
@@ -698,7 +806,7 @@ class WebSocketService {
    * 系统维护通知
    * @param {Object} maintenanceData - 维护数据
    */
-  pushMaintenanceAlert(maintenanceData) {
+  pushMaintenanceAlert(maintenanceData: unknown): number {
     const message = {
       type: this.messageTypes.MAINTENANCE_ALERT,
       data: {
@@ -717,7 +825,7 @@ class WebSocketService {
    * 启动心跳检查
    * @private
    */
-  startHeartbeat() {
+  startHeartbeat(): void {
     setInterval(() => {
       this.wss.clients.forEach((ws) => {
         if (!ws.isAlive) {
@@ -738,7 +846,7 @@ class WebSocketService {
    * 获取统计信息
    * @returns {Object} 统计信息
    */
-  getStats() {
+  getStats(): unknown {
     const now = Date.now();
     const uptime = now - this.stats.lastReset;
 
@@ -772,7 +880,7 @@ class WebSocketService {
    * @returns {string} 连接ID
    * @private
    */
-  generateConnectionId() {
+  generateConnectionId(): string {
     return require('crypto').randomBytes(16).toString('hex');
   }
 
@@ -781,14 +889,14 @@ class WebSocketService {
    * @returns {string} 消息ID
    * @private
    */
-  generateMessageId() {
+  generateMessageId(): string {
     return require('crypto').randomBytes(12).toString('hex');
   }
 
   /**
    * 关闭WebSocket服务
    */
-  async close() {
+  async close(): Promise<void> {
     if (this.wss) {
       // 关闭所有连接
       this.wss.clients.forEach((ws) => {

@@ -6,6 +6,16 @@
 import { Request, Response, NextFunction } from 'express';
 import * as importExportService from '../services/importExport.service.js';
 
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+  };
+}
+
+interface ImportExportOptions extends Record<string, unknown> {
+  format?: 'json' | 'csv';
+}
+
 export class ImportExportController {
   /**
    * 导出实体数据
@@ -13,7 +23,8 @@ export class ImportExportController {
   async exportEntity(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { entityType } = req.params;
-      const { format = 'json', ...options } = req.query;
+      const { format = 'json', ...options } = req.query as ImportExportOptions &
+        Record<string, unknown>;
 
       if (!['json', 'csv'].includes(format as string)) {
         res.status(400).json({
@@ -43,8 +54,9 @@ export class ImportExportController {
           data
         });
       }
-    } catch (error: any) {
-      console.error('[ImportExportController] 导出失败:', error.message);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[ImportExportController] 导出失败:', err.message);
       next(error);
     }
   }
@@ -54,8 +66,8 @@ export class ImportExportController {
    */
   async importContentTexts(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { data, format = 'json' } = req.body;
-      const updated_by = (req as any).user?.id;
+      const { data, format = 'json' } = req.body as Record<string, unknown>;
+      const updated_by = (req as unknown as AuthenticatedRequest).user?.id;
 
       if (!data) {
         res.status(400).json({
@@ -65,14 +77,14 @@ export class ImportExportController {
         return;
       }
 
-      let parsedData: any[];
+      let parsedData: unknown[];
 
       if (format === 'csv') {
         // 艹，解析CSV
         parsedData = importExportService.parseCSV(data);
       } else {
         // 艹，解析JSON
-        parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+        parsedData = typeof data === 'string' ? JSON.parse(data as string) : (data as unknown[]);
       }
 
       if (!Array.isArray(parsedData) || parsedData.length === 0) {
@@ -90,8 +102,9 @@ export class ImportExportController {
         data: result,
         message: `导入成功: 创建${result.created}条, 更新${result.updated}条`
       });
-    } catch (error: any) {
-      console.error('[ImportExportController] 导入失败:', error.message);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[ImportExportController] 导入失败:', err.message);
       next(error);
     }
   }

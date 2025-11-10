@@ -28,7 +28,7 @@ export interface ConnectionMetrics {
  */
 export interface SlowQuery {
   sql: string;
-  params: any[];
+  params: unknown[];
   duration: number;
   timestamp: Date;
 }
@@ -174,11 +174,13 @@ class DatabaseMetrics {
    * 设置连接池事件监听
    */
   private setupEventListeners(): void {
-    const knexClient = db as any;
-    if (knexClient.client && knexClient.client.pool) {
-      const pool = knexClient.client.pool;
+    const knexClient = db as unknown;
+    if (knexClient && typeof knexClient === 'object' && 'client' in knexClient) {
+      const client = (knexClient as { client?: { pool?: unknown } }).client;
+      if (client && 'pool' in client && client.pool) {
+        const pool = client.pool;
 
-      pool.on('acquire', (connection: any) => {
+        pool.on('acquire', (connection: unknown) => {
         this.metrics.connections.active++;
         this.metrics.connections.idle--;
         logger.debug('[DB Metrics] 连接获取', {
@@ -188,7 +190,7 @@ class DatabaseMetrics {
         });
       });
 
-      pool.on('release', (connection: any) => {
+      pool.on('release', (connection: unknown) => {
         this.metrics.connections.active--;
         this.metrics.connections.idle++;
         logger.debug('[DB Metrics] 连接释放', {
@@ -197,7 +199,7 @@ class DatabaseMetrics {
         });
       });
 
-      pool.on('destroy', (connection: any) => {
+      pool.on('destroy', (connection: unknown) => {
         this.metrics.connections.total--;
         logger.info('[DB Metrics] 连接销毁', {
           total: this.metrics.connections.total
@@ -214,6 +216,7 @@ class DatabaseMetrics {
       pool.on('dequeue', () => {
         this.metrics.connections.waiting--;
       });
+      }
     }
   }
 
@@ -238,7 +241,7 @@ class DatabaseMetrics {
    * @param params - 查询参数
    * @param duration - 执行时间（毫秒）
    */
-  recordQuery(sql: string, params: any[], duration: number): void {
+  recordQuery(sql: string, params: unknown[], duration: number): void {
     this.metrics.performance.totalQueries++;
 
     // 更新平均响应时间
@@ -288,7 +291,7 @@ class DatabaseMetrics {
    * @param sql - SQL语句
    * @param params - 查询参数
    */
-  async analyzeQuery(sql: string, params: any[] = []): Promise<ExplainAnalysis> {
+  async analyzeQuery(sql: string, params: unknown[] = []): Promise<ExplainAnalysis> {
     try {
       const explainSQL = `EXPLAIN ${sql}`;
       const result = await db.raw(explainSQL, params);
@@ -313,8 +316,8 @@ class DatabaseMetrics {
       });
 
       return analysis;
-    } catch (error) {
-      const err = error as Error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       logger.error('[DB Metrics] EXPLAIN分析失败', {
         sql: this.sanitizeSQL(sql),
         error: err.message
@@ -327,7 +330,7 @@ class DatabaseMetrics {
    * 分析EXPLAIN结果
    * @param row - EXPLAIN查询结果
    */
-  private analyzeExplainResult(row: any): ExplainAnalysis {
+  private analyzeExplainResult(row: Record<string, unknown>): ExplainAnalysis {
     return {
       id: row.id,
       select_type: row.select_type,
@@ -351,7 +354,7 @@ class DatabaseMetrics {
   /**
    * 分类查询类型
    */
-  private classifyQuery(row: any): string {
+  private classifyQuery(row: Record<string, unknown>): string {
     const extra = row.extra || '';
 
     if (extra.includes('Using where') && extra.includes('Using index')) {
@@ -372,7 +375,7 @@ class DatabaseMetrics {
   /**
    * 分析索引使用情况
    */
-  private analyzeIndexUsage(row: any): ExplainAnalysis['indexUsage'] {
+  private analyzeIndexUsage(row: Record<string, unknown>): ExplainAnalysis['indexUsage'] {
     if (!row.key) {
       return {
         usingIndex: false,
@@ -401,7 +404,7 @@ class DatabaseMetrics {
   /**
    * 估算期望的键长度
    */
-  private getExpectedKeyLength(row: any): number {
+  private getExpectedKeyLength(row: Record<string, unknown>): number {
     // 简单的启发式估算
     if (row.table === 'users') return 20;
     if (row.table === 'tasks') return 32;
@@ -412,7 +415,7 @@ class DatabaseMetrics {
   /**
    * 分析性能
    */
-  private analyzePerformance(row: any): ExplainAnalysis['performance'] {
+  private analyzePerformance(row: Record<string, unknown>): ExplainAnalysis['performance'] {
     const estimatedRows = parseInt(row.rows) || 0;
 
     if (estimatedRows === 0) {
@@ -431,7 +434,7 @@ class DatabaseMetrics {
   /**
    * 生成优化建议
    */
-  private generateRecommendations(row: any): ExplainAnalysis['recommendations'] {
+  private generateRecommendations(row: Record<string, unknown>): ExplainAnalysis['recommendations'] {
     const recommendations: ExplainAnalysis['recommendations'] = [];
     const extra = row.extra || '';
 

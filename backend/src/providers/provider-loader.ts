@@ -5,7 +5,7 @@ import { IProvider, ProviderError, ProviderErrorCode } from './types.js';
  * 艹，这个tm的是安全关键！只有这里列出的handlerKey才能加载！
  * 禁止从数据库动态加载代码，那是SB设计会导致代码注入漏洞！
  */
-const ALLOW_LIST: Record<string, () => Promise<any>> = {
+const ALLOW_LIST: Record<string, () => Promise<Record<string, unknown>>> = {
   /**
    * 通用HTTP Provider - 支持标准HTTP/HTTPS请求
    */
@@ -103,14 +103,14 @@ class ProviderLoader {
       const module = await importFn();
 
       // 获取默认导出或命名导出
-      const ProviderClass = module.default || module[Object.keys(module)[0]];
+      const ProviderClass = module.default || (module as Record<string, unknown>)[Object.keys(module)[0]];
 
       if (!ProviderClass) {
         throw new Error(`Provider模块没有导出有效的类: ${handlerKey}`);
       }
 
       // 4. 实例化Provider
-      const provider: IProvider = new ProviderClass();
+      const provider: IProvider = new (ProviderClass as new () => IProvider)();
 
       // 5. 验证Provider实现（艹，必须有execute方法！）
       if (typeof provider.execute !== 'function') {
@@ -133,7 +133,7 @@ class ProviderLoader {
       this.cache.set(handlerKey, provider);
 
       return provider;
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.stats.errorCount++;
 
       // 如果已经是ProviderError，直接抛出
@@ -142,10 +142,11 @@ class ProviderLoader {
       }
 
       // 否则包装成ProviderError
+      const err = error instanceof Error ? error : new Error(String(error));
       throw new ProviderError(
         ProviderErrorCode.ERR_PROVIDER_LOAD_FAILED,
-        `Provider加载失败: ${handlerKey}. 错误: ${error.message}`,
-        { handlerKey, originalError: error.message, stack: error.stack }
+        `Provider加载失败: ${handlerKey}. 错误: ${err.message}`,
+        { handlerKey, originalError: err.message, stack: err instanceof Error ? err.stack : undefined }
       );
     }
   }

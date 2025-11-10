@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { body } from 'express-validator';
 import buildingAIAdaptorController from '../controllers/buildingai-adaptor.controller.js';
@@ -6,6 +6,22 @@ import { authenticate } from '../middlewares/auth.middleware.js';
 import { requireRole } from '../middlewares/require-permission.middleware.js';
 import cacheMiddleware from '../middlewares/cache.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
+
+// BuildingAI Adaptor Controller 方法类型
+interface BuildingAIAdaptorControllerType {
+  enhanceImage(req: Request, res: Response, next: NextFunction): Promise<void>;
+  generateImage(req: Request, res: Response, next: NextFunction): Promise<void>;
+  editImage(req: Request, res: Response, next: NextFunction): Promise<void>;
+  generateText(req: Request, res: Response, next: NextFunction): Promise<void>;
+  translateText(req: Request, res: Response, next: NextFunction): Promise<void>;
+  summarizeText(req: Request, res: Response, next: NextFunction): Promise<void>;
+  transcribeAudio(req: Request, res: Response, next: NextFunction): Promise<void>;
+  analyzeVideo(req: Request, res: Response, next: NextFunction): Promise<void>;
+  analyzeData(req: Request, res: Response, next: NextFunction): Promise<void>;
+  getSupportedFeatures(req: Request, res: Response, next: NextFunction): Promise<void>;
+  getServiceStats(req: Request, res: Response, next: NextFunction): Promise<void>;
+  resetStats(req: Request, res: Response, next: NextFunction): Promise<void>;
+}
 
 const router = Router();
 
@@ -39,7 +55,7 @@ router.post(
     })
   ],
   validate,
-  (buildingAIAdaptorController as any).enhanceImage
+  (buildingAIAdaptorController as unknown as BuildingAIAdaptorControllerType).enhanceImage
 );
 
 // 图片生成
@@ -64,7 +80,7 @@ router.post(
     body('count').optional().isInt({ min: 1, max: 4 }).withMessage('count必须是1-4之间的整数')
   ],
   validate,
-  (buildingAIAdaptorController as any).generateImage
+  (buildingAIAdaptorController as unknown as BuildingAIAdaptorControllerType).generateImage
 );
 
 // 图片编辑
@@ -81,7 +97,7 @@ router.post(
     body('count').optional().isInt({ min: 1, max: 4 }).withMessage('count必须是1-4之间的整数')
   ],
   validate,
-  (buildingAIAdaptorController as any).editImage
+  (buildingAIAdaptorController as unknown as BuildingAIAdaptorControllerType).editImage
 );
 
 // 文本生成
@@ -91,7 +107,7 @@ router.post(
   apiLimiter,
   [body('prompt').notEmpty().withMessage('prompt不能为空').isLength({ min: 1, max: 1000 })],
   validate,
-  (buildingAIAdaptorController as any).generateText
+  (buildingAIAdaptorController as unknown as BuildingAIAdaptorControllerType).generateText
 );
 
 // 文本翻译
@@ -108,7 +124,7 @@ router.post(
     body('format').optional().isIn(['text', 'html', 'markdown'])
   ],
   validate,
-  (buildingAIAdaptorController as any).translateText
+  (buildingAIAdaptorController as unknown as BuildingAIAdaptorControllerType).translateText
 );
 
 // 文本摘要
@@ -121,7 +137,7 @@ router.post(
     body('style').optional().isIn(['professional', 'casual', 'academic'])
   ],
   validate,
-  (buildingAIAdaptorController as any).summarizeText
+  (buildingAIAdaptorController as unknown as BuildingAIAdaptorControllerType).summarizeText
 );
 
 // 音频转录
@@ -140,7 +156,7 @@ router.post(
     })
   ],
   validate,
-  (buildingAIAdaptorController as any).transcribeAudio
+  (buildingAIAdaptorController as unknown as BuildingAIAdaptorControllerType).transcribeAudio
 );
 
 // 视频分析
@@ -159,7 +175,7 @@ router.post(
     })
   ],
   validate,
-  (buildingAIAdaptorController as any).analyzeVideo
+  (buildingAIAdaptorController as unknown as BuildingAIAdaptorControllerType).analyzeVideo
 );
 
 // 数据分析
@@ -172,7 +188,7 @@ router.post(
     body('outputFormat').optional().isIn(['json', 'csv', 'xml'])
   ],
   validate,
-  (buildingAIAdaptorController as any).analyzeData
+  (buildingAIAdaptorController as unknown as BuildingAIAdaptorControllerType).analyzeData
 );
 
 // 获取支持的功能（带缓存）
@@ -180,7 +196,7 @@ router.get(
   '/features',
   authenticate,
   cacheMiddleware.featureCache({ ttl: 3600 }),
-  (buildingAIAdaptorController as any).getSupportedFeatures
+  (buildingAIAdaptorController as unknown as BuildingAIAdaptorControllerType).getSupportedFeatures
 );
 
 // 管理端：AI 服务统计/重置
@@ -188,13 +204,13 @@ router.get(
   '/stats',
   authenticate,
   requireRole(['admin']),
-  (buildingAIAdaptorController as any).getServiceStats
+  (buildingAIAdaptorController as unknown as BuildingAIAdaptorControllerType).getServiceStats
 );
 router.post(
   '/reset-stats',
   authenticate,
   requireRole(['admin']),
-  (buildingAIAdaptorController as any).resetStats
+  (buildingAIAdaptorController as unknown as BuildingAIAdaptorControllerType).resetStats
 );
 
 export default router;

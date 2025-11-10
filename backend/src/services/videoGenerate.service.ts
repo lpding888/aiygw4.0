@@ -17,6 +17,14 @@ type VideoTaskResult = KuaiTaskResult & {
   shootingScript: string;
 };
 
+type KuaiStatusResult = {
+  vendorTaskId: string;
+  status: string;
+  videoUrl?: string;
+  errorMessage?: string;
+  statusUpdateTime?: string;
+};
+
 class VideoGenerateService {
   async processVideoTask(
     taskId: string,
@@ -46,7 +54,7 @@ class VideoGenerateService {
         enhancedPrompt: kuaiResult.enhancedPrompt
       };
     } catch (error) {
-      const err = error as Error;
+      const err = error instanceof Error ? error : new Error(String(error));
       logger.error('[VideoGenerateService] 视频任务处理失败', {
         taskId,
         imageUrl,
@@ -73,7 +81,7 @@ class VideoGenerateService {
 
       return script;
     } catch (error) {
-      const err = error as Error;
+      const err = error instanceof Error ? error : new Error(String(error));
       logger.error('[VideoGenerateService] 拍摄脚本生成失败', {
         imageUrl,
         error: err.message
@@ -103,7 +111,7 @@ class VideoGenerateService {
 
       return result;
     } catch (error) {
-      const err = error as Error;
+      const err = error instanceof Error ? error : new Error(String(error));
       logger.error('[VideoGenerateService] KUAI视频任务创建失败', {
         imageUrl,
         error: err.message
@@ -112,11 +120,11 @@ class VideoGenerateService {
     }
   }
 
-  async pollVideoStatus(vendorTaskId: string) {
+  async pollVideoStatus(vendorTaskId: string): Promise<KuaiStatusResult> {
     try {
       return await kuaiService.queryVideoStatus(vendorTaskId);
     } catch (error) {
-      const err = error as Error;
+      const err = error instanceof Error ? error : new Error(String(error));
       logger.error('[VideoGenerateService] 轮询视频状态失败', {
         vendorTaskId,
         error: err.message

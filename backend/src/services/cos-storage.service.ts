@@ -1,7 +1,7 @@
 import logger from '../utils/logger.js';
 import crypto from 'crypto';
 
-type AnyObject = Record<string, any>;
+type AnyObject = Record<string, unknown>;
 
 type UploadFile = {
   name: string;
@@ -23,7 +23,7 @@ type UploadFile = {
 class CosStorageService {
   private config: AnyObject;
 
-  private cosClient: any = null;
+  private cosClient: Record<string, unknown> | null = null;
 
   private initialized = false;
 
@@ -94,9 +94,10 @@ class CosStorageService {
 
       this.initialized = true;
       logger.info('[CosStorage] COS服务初始化成功');
-    } catch (error: any) {
-      logger.error('[CosStorage] COS服务初始化失败:', error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[CosStorage] COS服务初始化失败:', err);
+      throw err;
     }
   }
 
@@ -138,9 +139,10 @@ class CosStorageService {
       const rules = this.buildLifecycleRules();
       await this.cosClient.updateLifecycle(rules);
       logger.info('[CosStorage] 生命周期规则设置完成');
-    } catch (error: any) {
-      logger.error('[CosStorage] 设置生命周期规则失败:', error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[CosStorage] 设置生命周期规则失败:', err);
+      throw err;
     }
   }
 
@@ -242,9 +244,10 @@ class CosStorageService {
         size: file.size,
         uploadTime: fileMetadata.uploadTime
       };
-    } catch (error: any) {
-      logger.error('[CosStorage] 文件上传失败:', error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[CosStorage] 文件上传失败:', err);
+      throw err;
     }
   }
 
@@ -281,9 +284,10 @@ class CosStorageService {
         metadata: result.metadata,
         size: result.size
       };
-    } catch (error: any) {
-      logger.error(`[CosStorage] 文件下载失败: ${key}`, error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`[CosStorage] 文件下载失败: ${key}`, err);
+      throw err;
     }
   }
 
@@ -328,9 +332,10 @@ class CosStorageService {
         total: keyArray.length,
         deleted: results.filter((r) => r.deleted).length
       };
-    } catch (error: any) {
-      logger.error('[CosStorage] 文件删除失败:', error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[CosStorage] 文件删除失败:', err);
+      throw err;
     }
   }
 
@@ -374,9 +379,10 @@ class CosStorageService {
         nextMarker: result.nextMarker,
         totalCount: files.length
       };
-    } catch (error: any) {
-      logger.error('[CosStorage] 获取文件列表失败:', error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[CosStorage] 获取文件列表失败:', err);
+      throw err;
     }
   }
 
@@ -480,9 +486,10 @@ class CosStorageService {
       );
 
       return result;
-    } catch (error: any) {
-      logger.error('[CosStorage] 清理过期文件失败:', error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[CosStorage] 清理过期文件失败:', err);
+      throw err;
     }
   }
 
@@ -520,9 +527,10 @@ class CosStorageService {
         storageClassDistribution: await this.getStorageClassDistribution(),
         lastUpdated: new Date().toISOString()
       };
-    } catch (error: any) {
-      logger.error('[CosStorage] 获取存储统计失败:', error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[CosStorage] 获取存储统计失败:', err);
+      throw err;
     }
   }
 
@@ -558,11 +566,12 @@ class CosStorageService {
         },
         timestamp: new Date().toISOString()
       };
-    } catch (error: any) {
-      logger.error('[CosStorage] 健康检查失败:', error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[CosStorage] 健康检查失败:', err);
       return {
         status: 'unhealthy',
-        error: error.message,
+        error: err.message,
         timestamp: new Date().toISOString()
       };
     }

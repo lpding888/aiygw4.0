@@ -147,15 +147,25 @@ router.get(
         limit = '50'
       } = req.query;
 
-      const filters: any = {
+      type AuditLogFilters = {
+        page: number;
+        limit: number;
+        type?: string;
+        severity?: string;
+        userId?: string;
+        ip?: string;
+        startDate?: Date;
+        endDate?: Date;
+      };
+      const filters: AuditLogFilters = {
         page: parseInt(page as string),
         limit: parseInt(limit as string)
       };
 
-      if (type) filters.type = type;
-      if (severity) filters.severity = severity;
-      if (userId) filters.userId = userId;
-      if (ip) filters.ip = ip;
+      if (type) filters.type = type as string;
+      if (severity) filters.severity = severity as string;
+      if (userId) filters.userId = userId as string;
+      if (ip) filters.ip = ip as string;
       if (startDate) filters.startDate = new Date(startDate as string);
       if (endDate) filters.endDate = new Date(endDate as string);
 

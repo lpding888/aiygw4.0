@@ -28,7 +28,7 @@ import {
 interface MCPToolCallConfig {
   mcpEndpointRef: string; // MCP端点引用
   toolName: string; // 工具名称
-  parameters: Record<string, any>; // 工具参数（支持变量模板）
+  parameters: Record<string, unknown>; // 工具参数（支持变量模板）
   outputKey?: string; // 输出键名（默认使用工具名称）
   validateSchema?: boolean; // 是否验证参数Schema（默认true）
 }
@@ -54,7 +54,7 @@ interface MCPToolSchema {
   description: string;
   parameters: {
     type: 'object';
-    properties: Record<string, any>;
+    properties: Record<string, unknown>;
     required?: string[];
   };
 }
@@ -133,7 +133,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
           endpoint: endpoint.name
         }
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       const duration = Date.now() - startTime;
 
       logger.error(`[MCPToolCall] 执行失败: nodeId=${context.node.id}`, error);
@@ -214,10 +214,10 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
    * @private
    */
   private resolveParameters(
-    params: Record<string, any>,
-    state: Record<string, any>
-  ): Record<string, any> {
-    const resolved: Record<string, any> = {};
+    params: Record<string, unknown>,
+    state: Record<string, unknown>
+  ): Record<string, unknown> {
+    const resolved: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(params)) {
       resolved[key] = this.resolveValue(value, state);
@@ -230,7 +230,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
    * 解析单个值（支持变量模板）
    * @private
    */
-  private resolveValue(value: any, state: Record<string, any>): any {
+  private resolveValue(value: unknown, state: Record<string, unknown>): unknown {
     if (typeof value === 'string') {
       // 解析 {{variable}} 模板
       return value.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
@@ -244,7 +244,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
     }
 
     if (typeof value === 'object' && value !== null) {
-      const resolved: Record<string, any> = {};
+      const resolved: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(value)) {
         resolved[k] = this.resolveValue(v, state);
       }
@@ -258,13 +258,13 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
    * 获取嵌套对象值
    * @private
    */
-  private getNestedValue(obj: Record<string, any>, path: string): any {
+  private getNestedValue(obj: Record<string, unknown>, path: string): unknown {
     const keys = path.split('.');
-    let value: any = obj;
+    let value: unknown = obj;
 
     for (const key of keys) {
       if (value && typeof value === 'object' && key in value) {
-        value = value[key];
+        value = (value as Record<string, unknown>)[key];
       } else {
         return undefined;
       }
@@ -280,7 +280,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
   private async validateParameters(
     endpoint: MCPEndpoint,
     toolName: string,
-    params: Record<string, any>
+    params: Record<string, unknown>
   ): Promise<void> {
     try {
       // 从MCP端点获取工具Schema
@@ -330,7 +330,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
       );
 
       const tools = response.data.tools || [];
-      const tool = tools.find((t: any) => t.name === toolName);
+      const tool = tools.find((t: { name: string }) => t.name === toolName);
 
       return tool || null;
     } catch (error) {
@@ -346,9 +346,9 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
   private async callMCPTool(
     endpoint: MCPEndpoint,
     toolName: string,
-    params: Record<string, any>,
+    params: Record<string, unknown>,
     context: NodeExecutionContext
-  ): Promise<any> {
+  ): Promise<unknown> {
     const maxRetries = context.node.retryPolicy?.maxRetries || endpoint.max_retries || 0;
     const retryDelay = context.node.retryPolicy?.retryDelay || 1000;
 
@@ -376,8 +376,8 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
         );
 
         return response.data.result;
-      } catch (error: any) {
-        lastError = error;
+      } catch (error: unknown) {
+        lastError = error as Error;
 
         // 判断是否可重试
         if (!this.isRetryableError(error) || attempt >= maxRetries) {
@@ -407,20 +407,32 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
    * 判断是否可重试的错误
    * @private
    */
-  private isRetryableError(error: any): boolean {
+  private isRetryableError(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null) {
+      return false;
+    }
+
+    const err = error as Record<string, unknown>;
+
     // 网络错误可重试
-    if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+    if (err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT') {
       return true;
     }
 
     // 5xx服务器错误可重试
-    if (error.response && error.response.status >= 500) {
-      return true;
+    if (err.response) {
+      const response = err.response as Record<string, unknown>;
+      if (typeof response.status === 'number' && response.status >= 500) {
+        return true;
+      }
     }
 
     // 429 Too Many Requests可重试
-    if (error.response && error.response.status === 429) {
-      return true;
+    if (err.response) {
+      const response = err.response as Record<string, unknown>;
+      if (response.status === 429) {
+        return true;
+      }
     }
 
     return false;
@@ -434,7 +446,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
     code: string,
     message: string,
     type: NodeErrorType,
-    details?: Record<string, any>
+    details?: Record<string, unknown>
   ): NodeError {
     return {
       code,
@@ -448,30 +460,48 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
    * 处理错误
    * @private
    */
-  private handleError(error: any): NodeError {
-    if (error.code && error.type) {
-      return error; // 已经是NodeError
+  private handleError(error: unknown): NodeError {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      'type' in error
+    ) {
+      return error as NodeError; // 已经是NodeError
     }
 
-    if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
-      return this.createError('MCP_TIMEOUT', 'MCP tool call timeout', NodeErrorType.TIMEOUT);
-    }
+    if (typeof error === 'object' && error !== null) {
+      const err = error as Record<string, unknown>;
 
-    if (error.response) {
-      return this.createError(
-        'MCP_TOOL_ERROR',
-        `MCP tool error: ${error.response.status} ${error.response.statusText}`,
-        NodeErrorType.MCP_TOOL_ERROR,
-        {
-          status: error.response.status,
-          data: error.response.data
-        }
-      );
+      if (err.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED') {
+        return this.createError('MCP_TIMEOUT', 'MCP tool call timeout', NodeErrorType.TIMEOUT);
+      }
+
+      if (err.response) {
+        const response = err.response as Record<string, unknown>;
+        return this.createError(
+          'MCP_TOOL_ERROR',
+          `MCP tool error: ${response.status} ${response.statusText}`,
+          NodeErrorType.MCP_TOOL_ERROR,
+          {
+            status: response.status,
+            data: response.data
+          }
+        );
+      }
+
+      if ('message' in err && typeof err.message === 'string') {
+        return this.createError(
+          'EXECUTION_FAILED',
+          err.message,
+          NodeErrorType.EXECUTION_FAILED
+        );
+      }
     }
 
     return this.createError(
       'EXECUTION_FAILED',
-      error.message || 'MCP tool call failed',
+      'MCP tool call failed',
       NodeErrorType.EXECUTION_FAILED
     );
   }

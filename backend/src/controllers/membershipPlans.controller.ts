@@ -29,9 +29,10 @@ export class MembershipPlansController {
           offset: parseInt(offset as string)
         }
       });
-    } catch (error: any) {
-      console.error('[PlansController] 列出套餐失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[PlansController] 列出套餐失败:', err.message);
+      next(err);
     }
   }
 
@@ -46,9 +47,10 @@ export class MembershipPlansController {
         success: true,
         data: plans
       });
-    } catch (error: any) {
-      console.error('[PlansController] 获取激活套餐失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[PlansController] 获取激活套餐失败:', err.message);
+      next(err);
     }
   }
 
@@ -69,9 +71,10 @@ export class MembershipPlansController {
       }
 
       res.json({ success: true, data: plan });
-    } catch (error: any) {
-      console.error('[PlansController] 获取套餐失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[PlansController] 获取套餐失败:', err.message);
+      next(err);
     }
   }
 
@@ -95,9 +98,10 @@ export class MembershipPlansController {
       const withBenefits = await planRepo.getPlanWithBenefits(plan.id);
 
       res.json({ success: true, data: withBenefits });
-    } catch (error: any) {
-      console.error('[PlansController] 获取套餐失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[PlansController] 获取套餐失败:', err.message);
+      next(err);
     }
   }
 
@@ -144,9 +148,10 @@ export class MembershipPlansController {
       const plan = await planRepo.createPlan(input);
 
       res.status(201).json({ success: true, data: plan });
-    } catch (error: any) {
-      console.error('[PlansController] 创建套餐失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[PlansController] 创建套餐失败:', err.message);
+      next(err);
     }
   }
 
@@ -161,16 +166,17 @@ export class MembershipPlansController {
       const plan = await planRepo.updatePlan(id, updates);
 
       res.json({ success: true, data: plan });
-    } catch (error: any) {
-      if (error.message.includes('不存在')) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      if (err.message.includes('不存在')) {
         res.status(404).json({
           success: false,
-          error: { code: 'NOT_FOUND', message: error.message }
+          error: { code: 'NOT_FOUND', message: err.message }
         });
         return;
       }
-      console.error('[PlansController] 更新套餐失败:', error.message);
-      next(error);
+      console.error('[PlansController] 更新套餐失败:', err.message);
+      next(err);
     }
   }
 
@@ -191,9 +197,10 @@ export class MembershipPlansController {
       }
 
       res.json({ success: true, message: '套餐已删除' });
-    } catch (error: any) {
-      console.error('[PlansController] 删除套餐失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[PlansController] 删除套餐失败:', err.message);
+      next(err);
     }
   }
 
@@ -217,9 +224,10 @@ export class MembershipPlansController {
       await planRepo.setBenefitsForPlan(plan_id, benefits);
 
       res.json({ success: true, message: '套餐权益设置成功' });
-    } catch (error: any) {
-      console.error('[PlansController] 设置套餐权益失败:', error.message);
-      next(error);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[PlansController] 设置套餐权益失败:', err.message);
+      next(err);
     }
   }
 }

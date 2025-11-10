@@ -4,6 +4,40 @@ import logger from '../utils/logger.js';
 import taskService from './task.service.js';
 import contentAuditService from './contentAudit.service.js';
 
+interface PicOperations {
+  is_pic_info: number;
+  rules: Array<{
+    fileid: string;
+    rule: string;
+  }>;
+}
+
+interface CosProcessResult {
+  ProcessResults?: {
+    Object?: unknown | unknown[];
+  };
+}
+
+interface ProcessedObject {
+  Location?: string;
+}
+
+interface ImageInfo {
+  format?: string;
+  size?: number;
+  width?: number;
+  height?: number;
+}
+
+interface CosCallback {
+  (err: unknown, data: unknown): void;
+}
+
+interface CosProcessResultObject {
+  Location?: string;
+  [key: string]: unknown;
+}
+
 class ImageProcessService {
   private config = {
     bucket: process.env.COS_BUCKET,
@@ -12,7 +46,7 @@ class ImageProcessService {
     secretKey: process.env.TENCENT_SECRET_KEY
   };
 
-  private cos: any;
+  private cos: COS;
   private useMock: boolean;
 
   constructor() {
@@ -29,13 +63,13 @@ class ImageProcessService {
     }
   }
 
-  async processBasicClean(taskId: string, inputImageUrl: string, params: Record<string, any> = {}) {
+  async processBasicClean(taskId: string, inputImageUrl: string, params: Record<string, unknown> = {}) {
     try {
       logger.info(`[ImageProcessService] 开始处理基础修图 taskId=${taskId}`, {
         inputImageUrl,
         useMock: this.useMock
       });
-      await taskService.updateStatus(taskId, 'processing', {} as any);
+      await taskService.updateStatus(taskId, 'processing', {});
       let resultUrls: string[];
       if (this.useMock) {
         resultUrls = await this.mockProcessBasicClean(taskId, inputImageUrl);
@@ -56,16 +90,17 @@ class ImageProcessService {
       await taskService.updateStatus(taskId, 'success', { resultUrls });
       logger.info(`[ImageProcessService] 基础修图完成 taskId=${taskId} count=${resultUrls.length}`);
       return resultUrls;
-    } catch (error: any) {
-      logger.error(`[ImageProcessService] 基础修图失败: ${error.message}`, { taskId, error });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '未知错误';
+      logger.error(`[ImageProcessService] 基础修图失败: ${message}`, { taskId, error });
       await taskService.updateStatus(taskId, 'failed', {
-        errorMessage: error.message || '图片处理失败'
+        errorMessage: message || '图片处理失败'
       });
       throw error;
     }
   }
 
-  buildPicOperations(taskId: string, _params: Record<string, any> = {}) {
+  buildPicOperations(taskId: string, _params: Record<string, unknown> = {}): PicOperations {
     return {
       is_pic_info: 1,
       rules: [
@@ -82,7 +117,7 @@ class ImageProcessService {
     };
   }
 
-  async processCloudImage(imageUrl: string, picOperations: any): Promise<string[]> {
+  async processCloudImage(imageUrl: string, picOperations: PicOperations): Promise<string[]> {
     try {
       const objectKey = this.extractObjectKeyFromUrl(imageUrl);
       if (!objectKey) throw new Error('无法从URL中提取COS对象键');
@@ -90,7 +125,16 @@ class ImageProcessService {
         objectKey,
         rulesCount: picOperations.rules.length
       });
-      const result: any = await new Promise((resolve, reject) => {
+      const result: CosProcessResult = await new Promise((resolve, reject) => {
+        const callback: CosCallback = (err: unknown, data: unknown) => {
+          if (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            logger.error('[ImageProcessService] 云上数据处理失败', err);
+            reject(new Error(`数据万象处理失败: ${message}`));
+          } else {
+            resolve(data as CosProcessResult);
+          }
+        };
         this.cos.processObject(
           {
             Bucket: this.config.bucket,
@@ -98,30 +142,25 @@ class ImageProcessService {
             Key: objectKey,
             PicOperations: JSON.stringify(picOperations)
           },
-          (err: any, data: any) => {
-            if (err) {
-              logger.error('[ImageProcessService] 云上数据处理失败', err);
-              reject(new Error(`数据万象处理失败: ${err.message}`));
-            } else {
-              resolve(data);
-            }
-          }
+          callback
         );
       });
       const outputUrls: string[] = [];
       const objects = result?.ProcessResults?.Object;
       const list = Array.isArray(objects) ? objects : objects ? [objects] : [];
-      list.forEach((obj: any) => {
-        if (obj.Location) {
-          let url: string = obj.Location;
+      list.forEach((obj: unknown): void => {
+        const processedObj = obj as ProcessedObject;
+        if (processedObj.Location) {
+          let url: string = processedObj.Location;
           if (url.startsWith('//')) url = 'https:' + url;
           outputUrls.push(url);
         }
       });
       if (outputUrls.length === 0) throw new Error('数据万象处理完成但未返回结果');
       return outputUrls;
-    } catch (error: any) {
-      logger.error('[ImageProcessService] 云上数据处理异常', { imageUrl, error: error.message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error('[ImageProcessService] 云上数据处理异常', { imageUrl, error: message });
       throw error;
     }
   }
@@ -129,7 +168,7 @@ class ImageProcessService {
   async processExternalImage(
     taskId: string,
     imageUrl: string,
-    picOperations: any
+    picOperations: PicOperations
   ): Promise<string[]> {
     try {
       logger.info('[ImageProcessService] 开始处理外部图片', {
@@ -148,11 +187,12 @@ class ImageProcessService {
         outputCount: resultUrls.length
       });
       return resultUrls;
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       logger.error('[ImageProcessService] 外部图片处理异常', {
         taskId,
         imageUrl,
-        error: error.message
+        error: message
       });
       throw error;
     }
@@ -173,9 +213,10 @@ class ImageProcessService {
         contentType: response.headers['content-type']
       });
       return buffer;
-    } catch (error: any) {
-      logger.error(`[ImageProcessService] 下载图片失败: ${error.message}`, { url });
-      throw new Error(`下载图片失败: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`[ImageProcessService] 下载图片失败: ${message}`, { url });
+      throw new Error(`下载图片失败: ${message}`);
     }
   }
 
@@ -189,7 +230,16 @@ class ImageProcessService {
       } catch {
         logger.warn('[ImageProcessService] 无法获取原始图片Content-Type，使用默认值');
       }
-      await new Promise((resolve, reject) => {
+      await new Promise<void>((resolve, reject) => {
+        const callback: CosCallback = (err: unknown, data: unknown) => {
+          if (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            logger.error('[ImageProcessService] COS上传失败', err);
+            reject(new Error(`COS上传失败: ${message}`));
+          } else {
+            resolve();
+          }
+        };
         this.cos.putObject(
           {
             Bucket: this.config.bucket,
@@ -198,30 +248,25 @@ class ImageProcessService {
             Body: buffer,
             ContentType: contentType
           },
-          (err: any, data: any) => {
-            if (err) {
-              logger.error('[ImageProcessService] COS上传失败', err);
-              reject(new Error(`COS上传失败: ${err.message}`));
-            } else {
-              resolve(data);
-            }
-          }
+          callback
         );
       });
       logger.info('[ImageProcessService] COS上传完成', { key });
-    } catch (error: any) {
-      logger.error('[ImageProcessService] COS上传异常', { key, error: error.message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error('[ImageProcessService] COS上传异常', { key, error: message });
       throw error;
     }
   }
 
-  async getImageInfo(imageUrl: string): Promise<any> {
+  async getImageInfo(imageUrl: string): Promise<ImageInfo> {
     try {
       const infoUrl = `${imageUrl}?imageInfo`;
       const response = await axios.get(infoUrl, { timeout: 10000 });
-      return response.data;
-    } catch (error: any) {
-      logger.error(`[ImageProcessService] 获取图片信息失败: ${error.message}`, { imageUrl });
+      return response.data as ImageInfo;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`[ImageProcessService] 获取图片信息失败: ${message}`, { imageUrl });
       throw new Error('获取图片信息失败');
     }
   }
@@ -258,8 +303,9 @@ class ImageProcessService {
       const queryIndex = objectKey.indexOf('?');
       if (queryIndex > -1) objectKey = objectKey.substring(0, queryIndex);
       return objectKey;
-    } catch (error: any) {
-      logger.error('[ImageProcessService] 解析COS URL失败', { url, error: error.message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error('[ImageProcessService] 解析COS URL失败', { url, error: message });
       return null;
     }
   }
@@ -268,12 +314,13 @@ class ImageProcessService {
     for (let i = 0; i < maxRetries; i++) {
       try {
         return await fn();
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (i === maxRetries - 1) throw error;
+        const message = error instanceof Error ? error.message : String(error);
         logger.warn('[ImageProcessService] 操作失败，准备重试', {
           attempt: i + 1,
           maxRetries,
-          error: error.message
+          error: message
         });
         await new Promise((resolve) => setTimeout(resolve, delay * (i + 1)));
       }

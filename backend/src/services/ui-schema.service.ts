@@ -19,32 +19,47 @@ interface MenuConfig {
   };
 }
 
+interface PropertySchema {
+  type: string;
+  title: string;
+  [key: string]: unknown;
+}
+
 interface FormSchema {
   type: string;
   title: string;
-  properties: Record<string, any>;
+  properties: Record<string, PropertySchema>;
   required?: string[];
-  uiSchema?: Record<string, any>;
+  uiSchema?: Record<string, unknown>;
+}
+
+interface FilterOption {
+  text: string;
+  value: string | number | boolean;
+}
+
+interface TableColumn {
+  key: string;
+  title: string;
+  dataIndex: string;
+  width?: number;
+  fixed?: 'left' | 'right';
+  sorter?: boolean;
+  filters?: FilterOption[];
+  render?: string; // 渲染函数名
+}
+
+interface TableAction {
+  key: string;
+  title: string;
+  icon?: string;
+  permission?: string;
+  danger?: boolean;
 }
 
 interface TableSchema {
-  columns: Array<{
-    key: string;
-    title: string;
-    dataIndex: string;
-    width?: number;
-    fixed?: 'left' | 'right';
-    sorter?: boolean;
-    filters?: Array<{ text: string; value: any }>;
-    render?: string; // 渲染函数名
-  }>;
-  actions?: Array<{
-    key: string;
-    title: string;
-    icon?: string;
-    permission?: string;
-    danger?: boolean;
-  }>;
+  columns: TableColumn[];
+  actions?: TableAction[];
 }
 
 interface UISchema {
@@ -84,7 +99,8 @@ class UISchemaService {
 
       return this.filterMenusByPermission(menus, userRole);
     } catch (error) {
-      logger.error('获取菜单配置失败:', error);
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('获取菜单配置失败:', err);
       return this.getDefaultMenus(userRole);
     }
   }
@@ -107,7 +123,8 @@ class UISchemaService {
 
       return this.filterSchemaByPermission(schema, userRole);
     } catch (error) {
-      logger.error('获取UI Schema失败:', error);
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('获取UI Schema失败:', err);
       return this.getDefaultUISchema(userRole);
     }
   }
@@ -128,7 +145,8 @@ class UISchemaService {
         () => this.generateFormSchemaFromDB(formKey, userRole)
       );
     } catch (error) {
-      logger.error(`获取表单Schema失败: ${formKey}`, error);
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`获取表单Schema失败: ${formKey}`, err);
       return null;
     }
   }
@@ -149,7 +167,8 @@ class UISchemaService {
         () => this.generateTableSchemaFromDB(tableKey, userRole)
       );
     } catch (error) {
-      logger.error(`获取表格Schema失败: ${tableKey}`, error);
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`获取表格Schema失败: ${tableKey}`, err);
       return null;
     }
   }
@@ -181,8 +200,9 @@ class UISchemaService {
 
       logger.info('菜单配置已更新', { updatedBy });
     } catch (error) {
-      logger.error('更新菜单配置失败:', error);
-      throw error;
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('更新菜单配置失败:', err);
+      throw err;
     }
   }
 
@@ -213,8 +233,9 @@ class UISchemaService {
 
       logger.info(`表单Schema已更新: ${formKey}`, { updatedBy });
     } catch (error) {
-      logger.error(`更新表单Schema失败: ${formKey}`, error);
-      throw error;
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`更新表单Schema失败: ${formKey}`, err);
+      throw err;
     }
   }
 
@@ -232,12 +253,12 @@ class UISchemaService {
 
     features.forEach((feature) => {
       const menuPath = feature.menu_path || `/admin/${feature.key}`;
-      const pathParts = menuPath.split('/').filter((p: any) => p);
+      const pathParts = menuPath.split('/').filter((p: string) => p);
 
       let currentPath = '';
       let parentMenu: MenuConfig | null = null;
 
-      pathParts.forEach((part: any, index: any) => {
+      pathParts.forEach((part: string, index: number) => {
         currentPath += `/${part}`;
 
         if (!menuMap.has(currentPath)) {
@@ -306,7 +327,8 @@ class UISchemaService {
       // 如果没有配置，根据功能生成默认表单
       return this.generateDefaultFormSchema(formKey, userRole);
     } catch (error) {
-      logger.error(`生成表单Schema失败: ${formKey}`, error);
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`生成表单Schema失败: ${formKey}`, err);
       return null;
     }
   }
@@ -328,7 +350,8 @@ class UISchemaService {
       // 如果没有配置，生成默认表格配置
       return this.generateDefaultTableSchema(tableKey, userRole);
     } catch (error) {
-      logger.error(`生成表格Schema失败: ${tableKey}`, error);
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`生成表格Schema失败: ${tableKey}`, err);
       return null;
     }
   }
@@ -377,11 +400,11 @@ class UISchemaService {
         type: 'object',
         title: '功能配置',
         properties: {
-          name: { type: 'string', title: '功能名称' },
-          description: { type: 'string', title: '描述' },
-          category: { type: 'string', title: '分类', enum: ['image', 'video', 'text'] },
-          quota_cost: { type: 'number', title: '配额消耗' },
-          enabled: { type: 'boolean', title: '启用' }
+          name: { type: 'string', title: '功能名称' } as PropertySchema,
+          description: { type: 'string', title: '描述' } as PropertySchema,
+          category: { type: 'string', title: '分类', enum: ['image', 'video', 'text'] } as PropertySchema,
+          quota_cost: { type: 'number', title: '配额消耗' } as PropertySchema,
+          enabled: { type: 'boolean', title: '启用' } as PropertySchema
         },
         required: ['name', 'category']
       },
@@ -389,11 +412,11 @@ class UISchemaService {
         type: 'object',
         title: '供应商配置',
         properties: {
-          name: { type: 'string', title: '供应商名称' },
-          type: { type: 'string', title: '类型' },
-          base_url: { type: 'string', title: '基础URL', format: 'uri' },
-          timeout_ms: { type: 'number', title: '超时时间' },
-          enabled: { type: 'boolean', title: '启用' }
+          name: { type: 'string', title: '供应商名称' } as PropertySchema,
+          type: { type: 'string', title: '类型' } as PropertySchema,
+          base_url: { type: 'string', title: '基础URL', format: 'uri' } as PropertySchema,
+          timeout_ms: { type: 'number', title: '超时时间' } as PropertySchema,
+          enabled: { type: 'boolean', title: '启用' } as PropertySchema
         },
         required: ['name', 'type', 'base_url']
       }
@@ -505,7 +528,7 @@ class UISchemaService {
 
     return menu.permissions.some((permission) => {
       const [resource, action] = permission.split(':');
-      return hasPermission(userRole as any, resource, action as any);
+      return hasPermission(userRole, resource, action);
     });
   }
 
@@ -513,7 +536,7 @@ class UISchemaService {
    * 获取所有权限
    */
   private getAllPermissions(userRole: string): Record<string, string[]> {
-    return getRolePermissions(userRole as any);
+    return getRolePermissions(userRole);
   }
 
   /**

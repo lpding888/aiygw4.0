@@ -7,27 +7,43 @@ import * as auditRepo from '../repositories/auditLogs.repo.js';
 import { Request } from 'express';
 
 /**
+ * Request用户信息接口
+ */
+interface RequestUser {
+  id: string;
+  name?: string;
+  email?: string;
+}
+
+/**
  * 从Request提取用户信息和IP
  */
 function extractRequestInfo(req?: Request) {
+  const user = (req as Request & { user?: RequestUser })?.user;
+
   return {
-    user_id: (req as any)?.user?.id,
-    user_name: (req as any)?.user?.name || (req as any)?.user?.email,
-    ip_address: req?.ip || req?.connection?.remoteAddress,
+    user_id: user?.id,
+    user_name: user?.name || user?.email,
+    ip_address: req?.ip || (req?.connection as unknown as { remoteAddress?: string })?.remoteAddress,
     user_agent: req?.get('user-agent')
   };
 }
 
 /**
- * 记录创建操作
+ * 审计日志参数接口
  */
-export async function logCreate(params: {
+interface AuditLogParams {
   entity_type: string;
   entity_id: number;
   req?: Request;
-  changes?: any;
+  changes?: Record<string, unknown>;
   reason?: string;
-}): Promise<void> {
+}
+
+/**
+ * 记录创建操作
+ */
+export async function logCreate(params: AuditLogParams): Promise<void> {
   const { entity_type, entity_id, req, changes, reason } = params;
 
   await auditRepo.createAuditLog({
@@ -43,13 +59,7 @@ export async function logCreate(params: {
 /**
  * 记录更新操作
  */
-export async function logUpdate(params: {
-  entity_type: string;
-  entity_id: number;
-  req?: Request;
-  changes?: any;
-  reason?: string;
-}): Promise<void> {
+export async function logUpdate(params: AuditLogParams): Promise<void> {
   const { entity_type, entity_id, req, changes, reason } = params;
 
   await auditRepo.createAuditLog({
@@ -65,13 +75,7 @@ export async function logUpdate(params: {
 /**
  * 记录删除操作
  */
-export async function logDelete(params: {
-  entity_type: string;
-  entity_id: number;
-  req?: Request;
-  changes?: any;
-  reason?: string;
-}): Promise<void> {
+export async function logDelete(params: AuditLogParams): Promise<void> {
   const { entity_type, entity_id, req, changes, reason } = params;
 
   await auditRepo.createAuditLog({
@@ -85,14 +89,19 @@ export async function logDelete(params: {
 }
 
 /**
- * 记录发布操作
+ * 发布/下线/审核操作参数接口
  */
-export async function logPublish(params: {
+interface AuditActionParams {
   entity_type: string;
   entity_id: number;
   req?: Request;
   reason?: string;
-}): Promise<void> {
+}
+
+/**
+ * 记录发布操作
+ */
+export async function logPublish(params: AuditActionParams): Promise<void> {
   const { entity_type, entity_id, req, reason } = params;
 
   await auditRepo.createAuditLog({
@@ -107,12 +116,7 @@ export async function logPublish(params: {
 /**
  * 记录下线操作
  */
-export async function logUnpublish(params: {
-  entity_type: string;
-  entity_id: number;
-  req?: Request;
-  reason?: string;
-}): Promise<void> {
+export async function logUnpublish(params: AuditActionParams): Promise<void> {
   const { entity_type, entity_id, req, reason } = params;
 
   await auditRepo.createAuditLog({
@@ -127,12 +131,7 @@ export async function logUnpublish(params: {
 /**
  * 记录审核通过操作
  */
-export async function logApprove(params: {
-  entity_type: string;
-  entity_id: number;
-  req?: Request;
-  reason?: string;
-}): Promise<void> {
+export async function logApprove(params: AuditActionParams): Promise<void> {
   const { entity_type, entity_id, req, reason } = params;
 
   await auditRepo.createAuditLog({
@@ -147,12 +146,7 @@ export async function logApprove(params: {
 /**
  * 记录审核拒绝操作
  */
-export async function logReject(params: {
-  entity_type: string;
-  entity_id: number;
-  req?: Request;
-  reason?: string;
-}): Promise<void> {
+export async function logReject(params: AuditActionParams): Promise<void> {
   const { entity_type, entity_id, req, reason } = params;
 
   await auditRepo.createAuditLog({

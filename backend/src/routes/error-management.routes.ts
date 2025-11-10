@@ -9,6 +9,23 @@ import {
 } from '../config/error-codes.js';
 import AppError from '../utils/AppError.js';
 
+// 扩展Request类型以支持i18n和user
+declare global {
+  namespace Express {
+    interface Request {
+      i18n?: {
+        getErrorMessage?: (code: number) => string;
+        getMessage?: (key: string) => string;
+        locale?: string;
+      };
+      user?: {
+        id: string;
+      };
+      id?: string;
+    }
+  }
+}
+
 const router = Router();
 
 // GET /stats - 错误统计
@@ -16,9 +33,9 @@ router.get('/stats', authenticate, requireRole('admin'), (req: Request, res: Res
   try {
     const stats = enhancedErrorHandler.getErrorStats();
     res.json({ success: true, data: stats, timestamp: new Date().toISOString() });
-  } catch (error) {
+  } catch (error: unknown) {
     const message =
-      (req as any).i18n?.getErrorMessage?.(ERROR_CODES.INTERNAL_SERVER_ERROR) ??
+      req.i18n?.getErrorMessage?.(ERROR_CODES.INTERNAL_SERVER_ERROR) ??
       'Failed to get error statistics';
     res.status(500).json({
       success: false,
@@ -32,16 +49,24 @@ router.get('/stats', authenticate, requireRole('admin'), (req: Request, res: Res
 });
 
 // GET /codes - 错误码列表
-router.get('/codes', authenticate, requireRole('admin'), (_req: Request, res: Response) => {
+router.get('/codes', authenticate, requireRole('admin'), (req: Request, res: Response) => {
   try {
+    interface ErrorMetadataEntry {
+      category?: string;
+      severity?: string;
+    }
+
     const errorCodesList = Object.entries(ERROR_CODES)
       .filter(([key]) => !Number.isNaN(Number(key)))
-      .map(([name, code]) => ({
-        name,
-        code: code as unknown as number,
-        category: (ERROR_METADATA as any)[code]?.category ?? 'unknown',
-        severity: (ERROR_METADATA as any)[code]?.severity ?? 'medium'
-      }))
+      .map(([name, code]) => {
+        const metadata = (ERROR_METADATA as Record<string, ErrorMetadataEntry>)[code] ?? {};
+        return {
+          name,
+          code: code as unknown as number,
+          category: metadata.category ?? 'unknown',
+          severity: metadata.severity ?? 'medium'
+        };
+      })
       .sort((a, b) => a.code - b.code);
 
     res.json({
@@ -49,9 +74,10 @@ router.get('/codes', authenticate, requireRole('admin'), (_req: Request, res: Re
       data: { categories: ERROR_CATEGORIES, severity: ERROR_SEVERITY, codes: errorCodesList },
       timestamp: new Date().toISOString()
     });
-  } catch (error) {
+  } catch (error: unknown) {
     const appError = AppError.fromError(error, ERROR_CODES.INTERNAL_SERVER_ERROR);
-    res.status(appError.statusCode).json(appError.toJSON((_req as any).i18n?.locale as any));
+    const locale = req.i18n?.locale ?? 'en';
+    res.status(appError.statusCode).json(appError.toJSON(locale));
   }
 });
 
@@ -60,11 +86,12 @@ router.post('/reset-stats', authenticate, requireRole('admin'), (req: Request, r
   try {
     enhancedErrorHandler.resetStats();
     const message =
-      (req as any).i18n?.getMessage?.('error.stats_reset') ?? 'Error statistics reset successfully';
+      req.i18n?.getMessage?.('error.stats_reset') ?? 'Error statistics reset successfully';
     res.json({ success: true, message, timestamp: new Date().toISOString() });
-  } catch (error) {
+  } catch (error: unknown) {
     const appError = AppError.fromError(error, ERROR_CODES.INTERNAL_SERVER_ERROR);
-    res.status(appError.statusCode).json(appError.toJSON((req as any).i18n?.locale));
+    const locale = req.i18n?.locale ?? 'en';
+    res.status(appError.statusCode).json(appError.toJSON(locale));
   }
 });
 
@@ -81,17 +108,18 @@ router.post('/test', authenticate, requireRole('admin'), (req: Request, res: Res
         field: 'code',
         reason: 'Code must be a valid error code number'
       });
-      res.status(error.statusCode).json(error.toJSON((req as any).i18n?.locale));
+      const locale = req.i18n?.locale ?? 'en';
+      res.status(error.statusCode).json(error.toJSON(locale));
       return;
     }
-    const testError = AppError.custom(code as any, message as any, {
+    const testError = AppError.custom(code, message ?? '', {
       ...context,
       testMode: true,
-      requestedBy: (req as any).user?.id,
+      requestedBy: req.user?.id,
       timestamp: new Date().toISOString()
     });
     next(testError);
-  } catch (error) {
+  } catch (error: unknown) {
     const appError = AppError.fromError(error, ERROR_CODES.INTERNAL_SERVER_ERROR);
     next(appError);
   }
@@ -100,9 +128,17 @@ router.post('/test', authenticate, requireRole('admin'), (req: Request, res: Res
 // GET /export - 导出CSV
 router.get('/export', authenticate, requireRole('admin'), (req: Request, res: Response) => {
   try {
+    interface ErrorStat {
+      code: number;
+      category: string;
+      severity: string;
+      count: number;
+      lastOccurrence: Date | string;
+    }
+
     const stats = enhancedErrorHandler.getErrorStats();
     const csvHeaders = ['Code', 'Category', 'Severity', 'Count', 'Last Occurrence', 'Message'];
-    const rows = (stats.topErrors ?? []).map((e: any) => [
+    const rows = (stats.topErrors ?? []).map((e: ErrorStat) => [
       e.code,
       e.category,
       e.severity,
@@ -111,7 +147,7 @@ router.get('/export', authenticate, requireRole('admin'), (req: Request, res: Re
       ''
     ]);
     const csv = [csvHeaders, ...rows]
-      .map((row: any[]) => row.map((cell: unknown) => `"${String(cell)}"`).join(','))
+      .map((row: Array<string | number>) => row.map((cell: string | number) => `"${String(cell)}"`).join(','))
       .join('\n');
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader(
@@ -119,9 +155,10 @@ router.get('/export', authenticate, requireRole('admin'), (req: Request, res: Re
       `attachment; filename="error-stats-${new Date().toISOString().split('T')[0]}.csv"`
     );
     res.send(csv);
-  } catch (error) {
+  } catch (error: unknown) {
     const appError = AppError.fromError(error, ERROR_CODES.INTERNAL_SERVER_ERROR);
-    res.status(appError.statusCode).json(appError.toJSON((req as any).i18n?.locale));
+    const locale = req.i18n?.locale ?? 'en';
+    res.status(appError.statusCode).json(appError.toJSON(locale));
   }
 });
 

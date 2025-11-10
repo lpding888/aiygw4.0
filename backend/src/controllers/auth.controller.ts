@@ -136,8 +136,9 @@ export class AuthController {
           refresh_token: refreshToken
         }
       });
-    } catch (error: any) {
-      console.error('[AuthController] 注册失败:', error.message);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[AuthController] 注册失败:', err.message);
       next(error);
     }
   }
@@ -222,8 +223,9 @@ export class AuthController {
           refresh_token: refreshToken
         }
       });
-    } catch (error: any) {
-      console.error('[AuthController] 登录失败:', error.message);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[AuthController] 登录失败:', err.message);
       next(error);
     }
   }
@@ -252,7 +254,7 @@ export class AuthController {
       let payload;
       try {
         payload = verifyToken(refreshToken);
-      } catch (error: any) {
+      } catch (error: unknown) {
         res.status(401).json({
           success: false,
           error: {
@@ -298,8 +300,9 @@ export class AuthController {
           refresh_token: pair.refreshToken
         }
       });
-    } catch (error: any) {
-      console.error('[AuthController] 刷新Token失败:', error.message);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[AuthController] 刷新Token失败:', err.message);
       next(error);
     }
   }
@@ -316,8 +319,9 @@ export class AuthController {
       res.clearCookie('roles', { ...COOKIE_OPTIONS, httpOnly: false });
 
       res.json({ success: true, message: '登出成功' });
-    } catch (error: any) {
-      console.error('[AuthController] 登出失败:', error.message);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error('[AuthController] 登出失败:', err.message);
       next(error);
     }
   }
@@ -364,7 +368,7 @@ export class AuthController {
    */
   async getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).userId ?? (req.user as any)?.id;
+      const userId = (req as unknown as { userId?: string }).userId ?? (req.user as { id?: string } | undefined)?.id;
       if (!userId) {
         res
           .status(401)
@@ -384,8 +388,8 @@ export class AuthController {
    */
   async verify(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req.user as any)?.id as string | undefined;
-      const jti = (req.user as any)?.jti as string | undefined;
+      const userId = (req.user as { id?: string } | undefined)?.id as string | undefined;
+      const jti = (req.user as { jti?: string } | undefined)?.jti as string | undefined;
       if (!userId) {
         res
           .status(401)
@@ -393,13 +397,17 @@ export class AuthController {
         return;
       }
       const ok = await authService.verifyTokenStatus(userId, jti);
+      const getTokenRemainingTime = (tokenService as unknown as { getTokenRemainingTime?: (token: unknown) => unknown }).getTokenRemainingTime;
+      const token = (req as unknown as { token?: unknown }).token;
+      const iat = (req.user as { iat?: unknown } | undefined)?.iat;
+      const exp = (req.user as { exp?: unknown } | undefined)?.exp;
       res.json({
         success: ok,
         data: {
           user: req.user,
-          remainingTime: (tokenService as any).getTokenRemainingTime?.((req as any).token) ?? null,
-          iat: (req.user as any)?.iat,
-          exp: (req.user as any)?.exp
+          remainingTime: getTokenRemainingTime?.(token) ?? null,
+          iat,
+          exp
         },
         message: ok ? 'Token有效' : 'Token无效'
       });
@@ -416,7 +424,7 @@ export class AuthController {
   async setPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { newPassword, oldPassword } = req.body;
-      const userId = (req.user as any)?.userId;
+      const userId = (req.user as { userId?: string } | undefined)?.userId;
 
       if (!userId) {
         res.status(401).json({

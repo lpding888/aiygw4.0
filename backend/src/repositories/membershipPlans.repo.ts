@@ -15,7 +15,7 @@ export interface MembershipPlan {
   duration_days: number;
   quota_uploads?: number | null;
   quota_storage?: number | null;
-  quota_features?: any;
+  quota_features?: unknown;
   status: 'active' | 'inactive' | 'archived';
   sort_order: number;
   is_default: boolean;
@@ -48,7 +48,7 @@ export interface CreatePlanInput {
   duration_days: number;
   quota_uploads?: number | null;
   quota_storage?: number | null;
-  quota_features?: any;
+  quota_features?: unknown;
   status?: 'active' | 'inactive';
   sort_order?: number;
   is_default?: boolean;

@@ -3,17 +3,36 @@ import { db } from '../db/index.js';
 import { generateOrderId } from '../utils/generator.js';
 import logger from '../utils/logger.js';
 import commissionService from './commission.service.js';
+import type { OrderStatus } from '../types/payment.types.js';
 
 type PaymentChannel = 'wx' | 'alipay';
 
-type OrderRecord = {
+interface OrderRecord {
   id: string;
   userId: string;
-  status: string;
+  status: OrderStatus;
   final_amount: number;
-};
+  channel: PaymentChannel;
+  transactionId: string | null;
+  createdAt: Date;
+  paidAt: Date | null;
+}
 
-type PaymentParams = Record<string, string>;
+interface UserMembershipData {
+  isMember: boolean;
+  quota_remaining: number;
+  quota_expireAt: Date | string | null;
+  updated_at: Date;
+}
+
+interface PaymentParams {
+  [key: string]: string;
+}
+
+interface PaymentCallbackResponse {
+  success: boolean;
+  message?: string;
+}
 
 type PaymentCallbackData = {
   orderId: string;
@@ -81,12 +100,10 @@ class MembershipService {
     };
   }
 
-  async handlePaymentCallback(callbackData: PaymentCallbackData) {
+  async handlePaymentCallback(callbackData: PaymentCallbackData): Promise<PaymentCallbackResponse> {
     const { orderId, transactionId } = callbackData;
 
-    const order = (await db<OrderRecord>('orders').where('id', orderId).first()) as
-      | OrderRecord
-      | undefined;
+    const order = await db<OrderRecord>('orders').where('id', orderId).first();
 
     if (!order) {
       throw {
@@ -101,7 +118,7 @@ class MembershipService {
       return { success: true, message: '订单已处理' };
     }
 
-    await db.transaction(async (trx) => {
+    await db.transaction<void>(async (trx: Knex.Transaction) => {
       await trx('orders').where('id', orderId).update({
         status: 'paid',
         transactionId,
@@ -123,13 +140,13 @@ class MembershipService {
 
       try {
         await commissionService.calculateAndCreateCommission(
-          trx as unknown as Knex.Transaction,
+          trx,
           order.userId,
           order.id,
           order.final_amount / 100
         );
       } catch (error) {
-        const err = error as Error;
+        const err = error instanceof Error ? error : new Error(String(error));
         logger.error(`佣金计算失败: orderId=${orderId}, error=${err.message}`);
       }
     });
@@ -137,8 +154,14 @@ class MembershipService {
     return { success: true };
   }
 
-  async getStatus(userId: string) {
-    const user = await db('users').where('id', userId).first();
+  async getStatus(userId: string): Promise<{
+    isMember: boolean;
+    quota_remaining: number;
+    quota_expireAt: Date | string | null;
+    expireDays: number;
+    price: number;
+  }> {
+    const user = await db<UserMembershipData>('users').where('id', userId).first();
 
     if (!user) {
       throw {

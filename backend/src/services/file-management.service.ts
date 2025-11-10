@@ -3,7 +3,67 @@ import cosStorageService from './cos-storage.service.js';
 import fileLifecycleService from './file-lifecycle.service.js';
 import { db } from '../config/database.js';
 
-type AnyObject = Record<string, any>;
+// 类型定义
+interface FileObject {
+  name: string;
+  size?: number;
+  type?: string;
+  path?: string;
+  [key: string]: unknown;
+}
+
+interface FileOptions {
+  fileSize?: number;
+  processingDuration?: number;
+  categories?: string[];
+  force?: boolean;
+  dryRun?: boolean;
+  includeDeleted?: boolean;
+  [key: string]: unknown;
+}
+
+interface TaskFile {
+  key: string;
+  category: string;
+  stepType?: string;
+  resultIndex?: number;
+  createdAt: Date;
+  [key: string]: unknown;
+}
+
+interface UploadResult {
+  key: string;
+  url?: string;
+  size?: number;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+interface FileRecord {
+  taskId?: string;
+  userId?: string;
+  key: string;
+  category: string;
+  stepType?: string;
+  resultIndex?: number;
+  size?: number;
+  metadata?: Record<string, unknown>;
+  originalUrl?: string;
+  [key: string]: unknown;
+}
+
+interface CleanupOptions {
+  categories?: string[];
+  force?: boolean;
+  dryRun?: boolean;
+  [key: string]: unknown;
+}
+
+interface QueryOptions {
+  categories?: string[] | null;
+  includeDeleted?: boolean;
+  [key: string]: unknown;
+}
 
 /**
  * 文件管理集成服务
@@ -17,7 +77,7 @@ type AnyObject = Record<string, any>;
 class FileManagementService {
   private initialized = false;
 
-  private taskFiles: Map<string, AnyObject[]> = new Map();
+  private taskFiles: Map<string, TaskFile[]> = new Map();
 
   constructor() {
     this.initialized = false;
@@ -40,9 +100,10 @@ class FileManagementService {
 
       this.initialized = true;
       logger.info('[FileManagement] 文件管理服务初始化成功');
-    } catch (error: any) {
-      logger.error('[FileManagement] 初始化失败:', error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error as Error;
+      logger.error('[FileManagement] 初始化失败:', err);
+      throw err;
     }
   }
 
@@ -54,10 +115,10 @@ class FileManagementService {
    * @returns {Promise<Object>} 上传结果
    */
   async handleUserUpload(
-    file: AnyObject,
+    file: FileObject,
     userId: string,
-    options: AnyObject = {}
-  ): Promise<AnyObject> {
+    options: FileOptions = {}
+  ): Promise<UploadResult> {
     try {
       logger.info(`[FileManagement] 处理用户上传: ${file.name}`);
 
@@ -93,9 +154,10 @@ class FileManagementService {
       logger.info(`[FileManagement] 用户上传处理完成: ${uploadResult.key}`);
 
       return uploadResult;
-    } catch (error: any) {
-      logger.error('[FileManagement] 处理用户上传失败:', error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error as Error;
+      logger.error('[FileManagement] 处理用户上传失败:', err);
+      throw err;
     }
   }
 
@@ -110,9 +172,9 @@ class FileManagementService {
   async createTaskTempFile(
     taskId: string,
     userId: string,
-    file: AnyObject,
+    file: FileObject,
     stepType = 'input'
-  ): Promise<AnyObject> {
+  ): Promise<UploadResult> {
     try {
       logger.info(`[FileManagement] 创建任务临时文件: ${taskId} - ${stepType}`);
 
@@ -159,9 +221,10 @@ class FileManagementService {
       });
 
       return uploadResult;
-    } catch (error: any) {
-      logger.error(`[FileManagement] 创建任务临时文件失败: ${taskId}`, error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error as Error;
+      logger.error(`[FileManagement] 创建任务临时文件失败: ${taskId}`, err);
+      throw err;
     }
   }
 
@@ -176,9 +239,9 @@ class FileManagementService {
   async createIntermediateFile(
     taskId: string,
     stepType: string,
-    fileData: AnyObject,
-    options: AnyObject = {}
-  ): Promise<AnyObject> {
+    fileData: FileRecord,
+    options: FileOptions = {}
+  ): Promise<UploadResult> {
     try {
       logger.info(`[FileManagement] 创建中间文件: ${taskId} - ${stepType}`);
 
@@ -242,9 +305,10 @@ class FileManagementService {
       });
 
       return uploadResult;
-    } catch (error: any) {
-      logger.error(`[FileManagement] 创建中间文件失败: ${taskId}`, error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error as Error;
+      logger.error(`[FileManagement] 创建中间文件失败: ${taskId}`, err);
+      throw err;
     }
   }
 
@@ -257,9 +321,9 @@ class FileManagementService {
    */
   async saveTaskResultFiles(
     taskId: string,
-    resultUrls: Array<string | AnyObject> = [],
-    options: AnyObject = {}
-  ): Promise<AnyObject> {
+    resultUrls: Array<string | Record<string, unknown>> = [],
+    options: FileOptions = {}
+  ): Promise<Record<string, unknown>> {
     try {
       logger.info(`[FileManagement] 保存任务结果文件: ${taskId}`);
 
@@ -268,7 +332,7 @@ class FileManagementService {
         throw new Error(`任务不存在: ${taskId}`);
       }
 
-      const savedFiles: AnyObject[] = [];
+      const savedFiles: Record<string, unknown>[] = [];
       const normalizedResultUrls = Array.isArray(resultUrls) ? resultUrls : [resultUrls];
 
       for (const [index, resultUrl] of normalizedResultUrls.entries()) {
@@ -332,8 +396,9 @@ class FileManagementService {
             managedKey: uploadResult.key,
             managedUrl: uploadResult.url
           });
-        } catch (error: any) {
-          logger.error(`[FileManagement] 保存结果文件失败: ${taskId} - ${resultUrl}`, error);
+        } catch (error: unknown) {
+          const err = error as Error;
+          logger.error(`[FileManagement] 保存结果文件失败: ${taskId} - ${resultUrl}`, err);
         }
       }
 
@@ -348,9 +413,10 @@ class FileManagementService {
         totalProcessed: resultUrls.length,
         successCount: savedFiles.length
       };
-    } catch (error: any) {
-      logger.error(`[FileManagement] 保存任务结果文件失败: ${taskId}`, error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error as Error;
+      logger.error(`[FileManagement] 保存任务结果文件失败: ${taskId}`, err);
+      throw err;
     }
   }
 
@@ -360,7 +426,7 @@ class FileManagementService {
    * @param {Object} options - 清理选项
    * @returns {Promise<Object>} 清理结果
    */
-  async cleanupTaskFiles(taskId: string, options: AnyObject = {}): Promise<AnyObject> {
+  async cleanupTaskFiles(taskId: string, options: CleanupOptions = {}): Promise<Record<string, unknown>> {
     try {
       logger.info(`[FileManagement] 清理任务文件: ${taskId}`);
 
@@ -379,7 +445,7 @@ class FileManagementService {
       }
 
       let cleanedCount = 0;
-      const cleanedFiles: AnyObject[] = [];
+      const cleanedFiles: TaskFile[] = [];
 
       for (const file of filesToCleanup) {
         try {
@@ -402,8 +468,9 @@ class FileManagementService {
 
           cleanedCount++;
           cleanedFiles.push(file);
-        } catch (error: any) {
-          logger.error(`[FileManagement] 清理文件失败: ${file.key}`, error);
+        } catch (error: unknown) {
+          const err = error as Error;
+          logger.error(`[FileManagement] 清理文件失败: ${file.key}`, err);
         }
       }
 
@@ -430,9 +497,10 @@ class FileManagementService {
       );
 
       return result;
-    } catch (error: any) {
-      logger.error(`[FileManagement] 清理任务文件失败: ${taskId}`, error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error as Error;
+      logger.error(`[FileManagement] 清理任务文件失败: ${taskId}`, err);
+      throw err;
     }
   }
 
@@ -442,7 +510,7 @@ class FileManagementService {
    * @param {Object} options - 查询选项
    * @returns {Promise<Object>} 文件列表
    */
-  async getTaskFiles(taskId: string, options: AnyObject = {}): Promise<AnyObject> {
+  async getTaskFiles(taskId: string, options: QueryOptions = {}): Promise<Record<string, unknown>> {
     try {
       const { categories = null, includeDeleted = false } = options;
 
@@ -473,9 +541,10 @@ class FileManagementService {
         })),
         totalCount: files.length
       };
-    } catch (error: any) {
-      logger.error(`[FileManagement] 获取任务文件失败: ${taskId}`, error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error as Error;
+      logger.error(`[FileManagement] 获取任务文件失败: ${taskId}`, err);
+      throw err;
     }
   }
 
@@ -483,7 +552,7 @@ class FileManagementService {
    * 获取文件管理统计
    * @returns {Promise<Object>} 统计信息
    */
-  async getFileManagementStats(): Promise<AnyObject> {
+  async getFileManagementStats(): Promise<Record<string, unknown>> {
     try {
       // 获取任务文件统计
       const taskFileStats = await db('task_files')
@@ -514,9 +583,10 @@ class FileManagementService {
         memoryStats,
         timestamp: new Date().toISOString()
       };
-    } catch (error: any) {
-      logger.error('[FileManagement] 获取文件管理统计失败:', error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error as Error;
+      logger.error('[FileManagement] 获取文件管理统计失败:', err);
+      throw err;
     }
   }
 
@@ -524,7 +594,7 @@ class FileManagementService {
    * 健康检查
    * @returns {Promise<Object>} 健康状态
    */
-  async healthCheck(): Promise<AnyObject> {
+  async healthCheck(): Promise<Record<string, unknown>> {
     try {
       const [cosHealth, lifecycleHealth] = await Promise.all([
         cosStorageService.healthCheck(),
@@ -548,11 +618,12 @@ class FileManagementService {
         },
         timestamp: new Date().toISOString()
       };
-    } catch (error: any) {
-      logger.error('[FileManagement] 健康检查失败:', error);
+    } catch (error: unknown) {
+      const err = error as Error;
+      logger.error('[FileManagement] 健康检查失败:', err);
       return {
         status: 'unhealthy',
-        error: error.message,
+        error: err.message,
         timestamp: new Date().toISOString()
       };
     }
@@ -565,7 +636,7 @@ class FileManagementService {
    * @param {Object} fileData - 文件数据
    * @private
    */
-  async saveFileRecord(fileData: AnyObject): Promise<void> {
+  async saveFileRecord(fileData: FileRecord): Promise<void> {
     try {
       await db('task_files').insert({
         task_id: fileData.taskId,
@@ -580,9 +651,10 @@ class FileManagementService {
         status: 'active',
         created_at: new Date()
       });
-    } catch (error: any) {
-      logger.error('[FileManagement] 保存文件记录失败:', error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error as Error;
+      logger.error('[FileManagement] 保存文件记录失败:', err);
+      throw err;
     }
   }
 }
