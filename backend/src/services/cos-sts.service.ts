@@ -50,6 +50,18 @@ export interface GetSTSOptions {
 }
 
 /**
+ * COS策略接口
+ */
+interface COSPolicyStatement {
+  version: string;
+  statement: Array<{
+    effect: string;
+    action: string[];
+    resource: string[];
+  }>;
+}
+
+/**
  * COS STS服务类
  */
 class CosSTSService {
@@ -186,18 +198,6 @@ class CosSTSService {
     };
 
     return actionMap[action] || actionMap.upload;
-  }
-
-  /**
-   * COS策略接口
-   */
-  interface COSPolicyStatement {
-    version: string;
-    statement: Array<{
-      effect: string;
-      action: string[];
-      resource: string[];
-    }>;
   }
 
   /**
