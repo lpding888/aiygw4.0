@@ -36,6 +36,12 @@ router.post('/logout', authenticate, authController.logout.bind(authController))
 // 发送验证码
 router.post('/send-code', authController.sendCode.bind(authController));
 
+// 发送邮箱验证码
+router.post('/send-email-code', authController.sendEmailCode.bind(authController));
+
+// 邮箱验证码登录
+router.post('/login/email', authController.loginEmail.bind(authController));
+
 // 获取当前登录用户
 router.get('/me', authenticate, authController.getMe.bind(authController));
 

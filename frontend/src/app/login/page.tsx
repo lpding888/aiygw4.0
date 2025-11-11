@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Tabs, Form, Input, Button, message, Modal, Typography, Card } from 'antd';
-import { MobileOutlined, SafetyOutlined, LockOutlined } from '@ant-design/icons';
+import { MobileOutlined, SafetyOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
@@ -19,6 +19,11 @@ type PasswordLoginForm = {
   password: string;
 };
 
+type EmailLoginForm = {
+  email: string;
+  code: string;
+};
+
 type SetPasswordForm = {
   password: string;
 };
@@ -26,16 +31,20 @@ type SetPasswordForm = {
 export default function LoginPage() {
   const [codeForm] = Form.useForm<CodeLoginForm>();
   const [passwordForm] = Form.useForm<PasswordLoginForm>();
+  const [emailForm] = Form.useForm<EmailLoginForm>();
   const [setPasswordForm] = Form.useForm<SetPasswordForm>();
 
   const router = useRouter();
   const setAuth = useAuthStore((state) => state.setAuth);
 
-  const [mode, setMode] = useState<'code' | 'password'>('code');
+  const [mode, setMode] = useState<'code' | 'password' | 'email'>('code');
   const [sendingCode, setSendingCode] = useState(false);
   const [codeCountdown, setCodeCountdown] = useState(0);
+  const [sendingEmailCode, setSendingEmailCode] = useState(false);
+  const [emailCodeCountdown, setEmailCodeCountdown] = useState(0);
   const [codeLoading, setCodeLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
   const [pwdModalOpen, setPwdModalOpen] = useState(false);
   const [settingPassword, setSettingPassword] = useState(false);
 
@@ -44,6 +53,12 @@ export default function LoginPage() {
     const timer = window.setTimeout(() => setCodeCountdown((prev) => prev - 1), 1000);
     return () => window.clearTimeout(timer);
   }, [codeCountdown]);
+
+  useEffect(() => {
+    if (emailCodeCountdown <= 0) return;
+    const timer = window.setTimeout(() => setEmailCodeCountdown((prev) => prev - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [emailCodeCountdown]);
 
   const handleSendCode = async () => {
     try {
@@ -94,6 +109,43 @@ export default function LoginPage() {
       message.error(err?.message || '登录失败，请重试');
     } finally {
       setPasswordLoading(false);
+    }
+  };
+
+  const handleSendEmailCode = async () => {
+    try {
+      const email = emailForm.getFieldValue('email');
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        message.error('请输入正确的邮箱地址');
+        return;
+      }
+      setSendingEmailCode(true);
+      const response: any = await api.auth.sendEmailCode(email);
+      if (response?.success) {
+        message.success('验证码已发送到邮箱');
+        setEmailCodeCountdown(60);
+      } else {
+        message.error(response?.error?.message || '验证码发送失败');
+      }
+    } catch (err: any) {
+      message.error(err?.message || '验证码发送失败');
+    } finally {
+      setSendingEmailCode(false);
+    }
+  };
+
+  const onEmailLogin = async (values: EmailLoginForm) => {
+    try {
+      setEmailLoading(true);
+      const response: any = await api.auth.loginWithEmail(values.email, values.code);
+      if (!response?.success) {
+        throw new Error(response?.error?.message || '登录失败，请重试');
+      }
+      handleLoginSuccess(response.data ?? response);
+    } catch (err: any) {
+      message.error(err?.message || '登录失败，请重试');
+    } finally {
+      setEmailLoading(false);
     }
   };
 
@@ -323,6 +375,87 @@ export default function LoginPage() {
                     </Button>
                     <Button type="link" href="/reset-password" style={{ padding: 0 }}>
                       忘记密码？
+                    </Button>
+                  </div>
+                </Form>
+              ),
+            },
+            {
+              key: 'email',
+              label: '邮箱登录',
+              children: (
+                <Form
+                  layout="vertical"
+                  form={emailForm}
+                  onFinish={onEmailLogin}
+                  autoComplete="off"
+                >
+                  <Form.Item
+                    name="email"
+                    label="邮箱"
+                    rules={[
+                      { required: true, message: '请输入邮箱' },
+                      {
+                        pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                        message: '请输入正确的邮箱地址',
+                      },
+                    ]}
+                  >
+                    <Input
+                      prefix={<MailOutlined />}
+                      placeholder="请输入邮箱地址"
+                    />
+                  </Form.Item>
+
+                  <Form.Item
+                    name="code"
+                    label="验证码"
+                    rules={[
+                      { required: true, message: '请输入验证码' },
+                      {
+                        pattern: /^\d{6}$/,
+                        message: '验证码为6位数字',
+                      },
+                    ]}
+                  >
+                    <Input
+                      prefix={<SafetyOutlined />}
+                      placeholder="请输入6位验证码"
+                      maxLength={6}
+                    />
+                  </Form.Item>
+
+                  <Form.Item>
+                    <Button
+                      block
+                      onClick={handleSendEmailCode}
+                      disabled={emailCodeCountdown > 0}
+                      loading={sendingEmailCode}
+                    >
+                      {emailCodeCountdown > 0
+                        ? `${emailCodeCountdown}秒后重试`
+                        : '获取验证码'}
+                    </Button>
+                  </Form.Item>
+
+                  <Form.Item>
+                    <Button
+                      type="primary"
+                      htmlType="submit"
+                      loading={emailLoading}
+                      block
+                    >
+                      登录
+                    </Button>
+                  </Form.Item>
+
+                  <div style={{ textAlign: 'right' }}>
+                    <Button
+                      type="link"
+                      onClick={() => setMode('code')}
+                      style={{ padding: 0 }}
+                    >
+                      使用手机号登录
                     </Button>
                   </div>
                 </Form>
