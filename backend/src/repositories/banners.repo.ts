@@ -17,7 +17,7 @@ export interface Banner {
   publish_at?: Date | null;
   expire_at?: Date | null;
   target_audience: 'all' | 'member' | 'vip';
-  created_by?: number;
+  created_by?: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -32,7 +32,7 @@ export interface CreateBannerInput {
   publish_at?: Date | null;
   expire_at?: Date | null;
   target_audience?: 'all' | 'member' | 'vip';
-  created_by?: number;
+  created_by?: string | null;
 }
 
 export async function createBanner(input: CreateBannerInput): Promise<Banner> {

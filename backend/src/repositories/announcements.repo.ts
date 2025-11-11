@@ -21,7 +21,7 @@ export interface Announcement {
   expire_at?: Date | null;
   target_audience: 'all' | 'member' | 'vip';
   closable: boolean;
-  created_by?: number;
+  created_by?: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -40,7 +40,7 @@ export interface CreateAnnouncementInput {
   expire_at?: Date | null;
   target_audience?: 'all' | 'member' | 'vip';
   closable?: boolean;
-  created_by?: number;
+  created_by?: string | null;
 }
 
 /**

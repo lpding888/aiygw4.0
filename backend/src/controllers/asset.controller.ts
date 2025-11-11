@@ -25,7 +25,11 @@ interface AssetError extends Error {
 class AssetController {
   async getAssets(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = req.user?.id as string;
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } });
+        return;
+      }
       const { type, featureId, startDate, endDate, page, limit } = req.query as AssetQueryParams;
       const result = await assetService.getAssets({
         userId,
@@ -46,7 +50,11 @@ class AssetController {
 
   async deleteAsset(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = req.user?.id as string;
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } });
+        return;
+      }
       const { assetId } = req.params as { assetId?: string };
       if (!assetId) {
         res.status(400).json({ success: false, error: { code: 4001, message: '缺少素材ID' } });
@@ -69,7 +77,7 @@ class AssetController {
     try {
       const { userId, type, featureId, startDate, endDate, page, limit } = req.query as AssetQueryParams;
       const result = await assetService.getAllAssets({
-        userId,
+        ...(userId ? { userId } : {}),
         type,
         featureId,
         startDate,

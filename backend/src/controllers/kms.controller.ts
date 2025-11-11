@@ -4,13 +4,11 @@ import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
 import { db as knex } from '../config/database.js';
 import type {
-  AuthenticatedRequest,
   KeyGenerationConfig,
   KeyListQuery,
   EncryptRequest,
   DecryptRequest,
-  DeleteKeyOptions,
-  KMSService
+  DeleteKeyOptions
 } from '../types/kms.types.js';
 import type { Knex } from 'knex';
 
@@ -56,7 +54,7 @@ class KMSController {
       }
 
       const kmsMod = await import('../services/kms.service.js');
-      const svc = (kmsMod.default ?? kmsMod) as KMSService;
+      const svc: any = kmsMod.default ?? kmsMod;
       const key = await svc.generateKey({
         keyName: String(keyName).trim(),
         keyAlias,
@@ -68,9 +66,7 @@ class KMSController {
         notAfter: notAfter ? new Date(notAfter) : null
       });
 
-      logger.info(
-        `[KMSController] User ${(req as AuthenticatedRequest).user?.id} generated key: ${keyName}`
-      );
+      logger.info(`[KMSController] User ${req.user?.id ?? 'unknown'} generated key: ${keyName}`);
       res.json({ success: true, message: '密钥生成成功', data: key });
     } catch (error) {
       logger.error('[KMSController] Failed to generate key:', error);
@@ -101,7 +97,7 @@ class KMSController {
         });
       }
       const kmsMod = await import('../services/kms.service.js');
-      const svc = (kmsMod.default ?? kmsMod) as KMSService;
+      const svc: any = kmsMod.default ?? kmsMod;
       const result = await svc.encrypt({
         data,
         keyNameOrId: String(keyNameOrId).trim(),
@@ -137,7 +133,7 @@ class KMSController {
         });
       }
       const kmsMod = await import('../services/kms.service.js');
-      const svc = (kmsMod.default ?? kmsMod) as KMSService;
+      const svc: any = kmsMod.default ?? kmsMod;
       const result = await svc.decrypt({
         cipherText,
         keyNameOrId: String(keyNameOrId).trim(),
@@ -161,7 +157,7 @@ class KMSController {
         });
       }
       const kmsMod = await import('../services/kms.service.js');
-      const svc = (kmsMod.default ?? kmsMod) as KMSService;
+      const svc: any = kmsMod.default ?? kmsMod;
       const options: DeleteKeyOptions = {
         force: force === 'true' || force === true
       };
@@ -171,9 +167,7 @@ class KMSController {
           message: '密钥删除失败'
         });
       }
-      logger.info(
-        `[KMSController] User ${(req as AuthenticatedRequest).user?.id} deleted key: ${keyNameOrId}`
-      );
+      logger.info(`[KMSController] User ${req.user?.id ?? 'unknown'} deleted key: ${keyNameOrId}`);
       res.json({ success: true, message: '密钥删除成功' });
     } catch (error) {
       logger.error('[KMSController] Failed to delete key:', error);
@@ -249,9 +243,9 @@ class KMSController {
     try {
       const { id } = req.params as { id: string };
       const kmsMod = await import('../services/kms.service.js');
-      const svc = (kmsMod.default ?? kmsMod) as KMSService;
+      const svc: any = kmsMod.default ?? kmsMod;
       const info = await svc.getKeyInfo?.(String(id));
-      res.json({ success: true, data: info ?? [], requestId: (req as AuthenticatedRequest).id });
+      res.json({ success: true, data: info ?? [], requestId: req.id });
     } catch (error) {
       next(error);
     }

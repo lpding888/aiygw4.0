@@ -2,8 +2,7 @@ import type { Knex } from 'knex';
 import { db } from '../db/index.js';
 import logger from '../utils/logger.js';
 
-type AssetQueryParams = {
-  userId: string;
+type BaseAssetQueryParams = {
   type?: string;
   featureId?: string;
   startDate?: string;
@@ -12,9 +11,9 @@ type AssetQueryParams = {
   limit?: number | string;
 };
 
-type AllAssetQueryParams = AssetQueryParams & {
-  userId?: string;
-};
+type AssetQueryParams = BaseAssetQueryParams & { userId: string };
+
+type AllAssetQueryParams = BaseAssetQueryParams & { userId?: string };
 
 type AssetRecord = {
   asset_id: string;

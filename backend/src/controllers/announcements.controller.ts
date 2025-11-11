@@ -5,22 +5,16 @@
 
 import { Request, Response, NextFunction } from 'express';
 import * as announcementRepo from '../repositories/announcements.repo.js';
-import type { CreateAnnouncementInput } from '../repositories/announcements.repo.js';
+import type { CreateAnnouncementInput, Announcement } from '../repositories/announcements.repo.js';
 
-/**
- * Express请求对象扩展类型定义
- */
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: number;
-    [key: string]: unknown;
-  };
-}
+type TargetAudience = Announcement['target_audience'] | undefined;
 
-/**
- * 目标受众类型
- */
-type TargetAudience = string | string[] | undefined;
+const parseTargetAudience = (value: unknown): TargetAudience => {
+  if (value === 'all' || value === 'member' || value === 'vip') {
+    return value;
+  }
+  return undefined;
+};
 
 export class AnnouncementsController {
   /**
@@ -62,7 +56,7 @@ export class AnnouncementsController {
 
       const announcements = await announcementRepo.getActiveAnnouncements({
         position: position as string,
-        target_audience: target_audience as TargetAudience
+        target_audience: parseTargetAudience(target_audience) ?? 'all'
       });
 
       res.json({
@@ -105,9 +99,16 @@ export class AnnouncementsController {
    */
   async createAnnouncement(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } });
+        return;
+      }
+
+      const payload = req.body as CreateAnnouncementInput;
       const input: CreateAnnouncementInput = {
-        ...req.body,
-        created_by: (req as AuthenticatedRequest).user?.id
+        ...payload,
+        created_by: userId
       };
 
       // 艹，基础校验

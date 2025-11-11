@@ -42,6 +42,10 @@ declare global {
         setLanguage?: (locale: string) => void;
       };
       /**
+       * 解析后的 Cookie 集合
+       */
+      cookies?: Record<string, string>;
+      /**
        * 管理员附加信息（旧 adminAuth 中间件遗留）
        */
       admin?: {
@@ -49,6 +53,18 @@ declare global {
         phone?: string;
         role: string;
         [key: string]: unknown;
+      };
+      /**
+       * 请求级安全检查结果
+       */
+      securityChecks?: unknown;
+      /**
+       * 最近一次权限校验的上下文
+       */
+      userPermissions?: {
+        role: UserRole;
+        resource: string;
+        actions: string[];
       };
     }
   }

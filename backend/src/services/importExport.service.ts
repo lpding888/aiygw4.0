@@ -13,7 +13,7 @@ import * as benefitRepo from '../repositories/membershipBenefits.repo.js';
 /**
  * 内容文案导出对象
  */
-interface ContentTextExport {
+export interface ContentTextExport {
   page: string;
   section: string;
   key: string;

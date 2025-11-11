@@ -140,6 +140,8 @@ class InviteCodeController {
 
   async getInviteCodes(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      const sortOrderParam = (req.query.sortOrder as string | undefined)?.toLowerCase();
+      const sortOrder: 'asc' | 'desc' = sortOrderParam === 'asc' ? 'asc' : 'desc';
       const options = {
         type: req.query.type as string | undefined,
         status: req.query.status as string | undefined,
@@ -149,7 +151,7 @@ class InviteCodeController {
         page: req.query.page ? Number(req.query.page) : 1,
         limit: req.query.limit ? Number(req.query.limit) : 20,
         sortBy: (req.query.sortBy as string | undefined) ?? 'created_at',
-        sortOrder: (req.query.sortOrder as string | undefined) ?? 'desc'
+        sortOrder
       };
       const codes = await inviteCodeService.getInviteCodes(options);
       res.json({ success: true, data: codes });
@@ -163,6 +165,10 @@ class InviteCodeController {
     try {
       const user = req.user as { id?: string } | undefined;
       const targetUserId = (req.params?.userId as string | undefined) ?? user?.id;
+      if (!targetUserId) {
+        res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: '缺少用户ID' } });
+        return;
+      }
       const stats = await inviteCodeService.getUserInviteStats(targetUserId);
       res.json({ success: true, data: stats });
     } catch (error) {

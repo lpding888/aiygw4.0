@@ -5,12 +5,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import * as importExportService from '../services/importExport.service.js';
-
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-  };
-}
+import type { ContentTextExport } from '../services/importExport.service.js';
 
 interface ImportExportOptions extends Record<string, unknown> {
   format?: 'json' | 'csv';
@@ -22,7 +17,11 @@ export class ImportExportController {
    */
   async exportEntity(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { entityType } = req.params;
+      const { entityType } = req.params as { entityType?: string };
+      if (!entityType) {
+        res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: '缺少实体类型' } });
+        return;
+      }
       const { format = 'json', ...options } = req.query as ImportExportOptions &
         Record<string, unknown>;
 
@@ -67,7 +66,6 @@ export class ImportExportController {
   async importContentTexts(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { data, format = 'json' } = req.body as Record<string, unknown>;
-      const updated_by = (req as unknown as AuthenticatedRequest).user?.id;
 
       if (!data) {
         res.status(400).json({
@@ -77,14 +75,19 @@ export class ImportExportController {
         return;
       }
 
-      let parsedData: unknown[];
+      let parsedData: ContentTextExport[];
 
       if (format === 'csv') {
-        // 艹，解析CSV
-        parsedData = importExportService.parseCSV(data);
+        if (typeof data !== 'string') {
+          res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'CSV数据必须是字符串' } });
+          return;
+        }
+        parsedData = importExportService.parseCSV(data) as unknown as ContentTextExport[];
       } else {
         // 艹，解析JSON
-        parsedData = typeof data === 'string' ? JSON.parse(data as string) : (data as unknown[]);
+        parsedData = (typeof data === 'string'
+          ? (JSON.parse(data as string) as unknown as ContentTextExport[])
+          : (data as ContentTextExport[]));
       }
 
       if (!Array.isArray(parsedData) || parsedData.length === 0) {
@@ -95,7 +98,7 @@ export class ImportExportController {
         return;
       }
 
-      const result = await importExportService.importContentTextsJSON(parsedData, updated_by);
+      const result = await importExportService.importContentTextsJSON(parsedData);
 
       res.json({
         success: true,

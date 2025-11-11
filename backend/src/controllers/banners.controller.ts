@@ -5,29 +5,17 @@
 
 import { Request, Response, NextFunction } from 'express';
 import * as bannerRepo from '../repositories/banners.repo.js';
-import type { CreateBannerInput } from '../repositories/banners.repo.js';
+import type { CreateBannerInput, Banner } from '../repositories/banners.repo.js';
 import * as cosService from '../services/cos.service.js';
 
-/**
- * Express请求对象扩展类型定义
- */
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: number;
-    [key: string]: unknown;
-  };
-  file?: {
-    originalname: string;
-    buffer: Buffer;
-    mimetype: string;
-    [key: string]: unknown;
-  };
-}
+type TargetAudience = Banner['target_audience'] | undefined;
 
-/**
- * 目标受众类型
- */
-type TargetAudience = string | string[] | undefined;
+const parseTargetAudience = (value: unknown): TargetAudience => {
+  if (value === 'all' || value === 'member' || value === 'vip') {
+    return value;
+  }
+  return undefined;
+};
 
 export class BannersController {
   /**
@@ -66,7 +54,7 @@ export class BannersController {
       const { target_audience } = req.query;
 
       const banners = await bannerRepo.getActiveBanners({
-        target_audience: target_audience as TargetAudience
+        target_audience: parseTargetAudience(target_audience) ?? 'all'
       });
 
       res.json({
@@ -109,9 +97,16 @@ export class BannersController {
    */
   async createBanner(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } });
+        return;
+      }
+
+      const payload = req.body as CreateBannerInput;
       const input: CreateBannerInput = {
-        ...req.body,
-        created_by: (req as AuthenticatedRequest).user?.id
+        ...payload,
+        created_by: userId
       };
 
       // 艹，基础校验
@@ -289,7 +284,9 @@ export class BannersController {
 
       // 这里需要使用multer等中间件处理文件上传
       // 暂时假设文件已经通过body传过来（需要配置multer）
-      const file = (req as AuthenticatedRequest).file;
+      const file = (req as Request & {
+        file?: { originalname: string; buffer: Buffer; mimetype: string };
+      }).file;
 
       if (!file) {
         res.status(400).json({

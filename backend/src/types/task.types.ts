@@ -4,6 +4,7 @@
  *
  * @author 老王
  */
+import type { AuthRequest } from '../middlewares/auth.middleware.js';
 
 /**
  * 任务状态
@@ -150,16 +151,6 @@ export interface VideoGenerateResult {
 }
 
 /**
- * 管理员任务筛选器
- */
-export interface AdminTaskFilters {
-  status?: string;
-  type?: string;
-  userId?: string;
-  created_at?: (this: unknown) => void;
-}
-
-/**
  * 任务WebSocket推送数据
  */
 export interface TaskWebSocketData {
@@ -247,11 +238,4 @@ export interface DbPerformanceQuery {
 /**
  * Express Request扩展(包含用户信息)
  */
-export interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    role?: string;
-    [key: string]: unknown;
-  };
-  id?: string;
-}
+export type AuthenticatedRequest = AuthRequest;

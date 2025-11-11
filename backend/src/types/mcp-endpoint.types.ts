@@ -1,3 +1,5 @@
+import type { AuthRequest } from '../middlewares/auth.middleware.js';
+
 /**
  * MCP Endpoint 类型定义
  * 艹！这个SB文件定义MCP端点管理的所有类型，消除any！
@@ -112,16 +114,9 @@ export interface BatchTestSummary {
 }
 
 /**
- * Express Request扩展(包含用户信息)
+ * 认证请求类型
  */
-export interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    role?: string;
-    [key: string]: unknown;
-  };
-  id?: string;
-}
+export type AuthenticatedRequest = AuthRequest;
 
 /**
  * 端点统计信息

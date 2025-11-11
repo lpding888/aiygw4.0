@@ -1,5 +1,7 @@
 import logger from '../utils/logger.js';
-import providerWrapperService from './provider-wrapper.service.js';
+import providerWrapperService, {
+  type HealthCheckResponse
+} from './provider-wrapper.service.js';
 import imageProcessService from './imageProcess.service.js';
 import aiModelService from './aiModel.service.js';
 
@@ -92,7 +94,7 @@ class ProviderRegistryService {
     return await providerWrapperService.execute(providerName, methodName, args, options);
   }
 
-  async healthCheck() {
+  async healthCheck(): Promise<HealthCheckResponse> {
     const wrapperHealth = await providerWrapperService.healthCheck();
     return wrapperHealth;
   }

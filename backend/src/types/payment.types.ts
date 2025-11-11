@@ -5,6 +5,8 @@
  * @author 老王
  */
 
+import type { AuthRequest } from '../middlewares/auth.middleware.js';
+
 /**
  * 支付方式
  */
@@ -176,16 +178,9 @@ export interface PaymentStatsResponse {
 }
 
 /**
- * Express Request扩展(包含用户信息)
+ * 认证后的请求（沿用公共中间件的定义）
  */
-export interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    role?: string;
-    [key: string]: unknown;
-  };
-  id?: string;
-}
+export type AuthenticatedRequest = AuthRequest;
 
 /**
  * 支付服务接口（用于controller调用）

@@ -47,7 +47,7 @@ interface ProviderStats {
   circuitBreaker?: unknown;
 }
 
-interface HealthCheckResponse {
+export interface HealthCheckResponse {
   status: 'healthy' | 'degraded' | 'unhealthy';
   providers?: Record<string, unknown>;
   totalProviders?: number;

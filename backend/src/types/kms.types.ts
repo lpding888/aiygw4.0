@@ -1,3 +1,5 @@
+import type { AuthRequest } from '../middlewares/auth.middleware.js';
+
 /**
  * KMS (密钥管理服务) 类型定义
  * 艹！这个SB文件定义密钥管理的所有类型，消除any！
@@ -139,16 +141,9 @@ export interface DeleteKeyOptions {
 }
 
 /**
- * Express Request扩展(包含用户信息)
+ * 认证请求类型
  */
-export interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    role?: string;
-    [key: string]: unknown;
-  };
-  id?: string;
-}
+export type AuthenticatedRequest = AuthRequest;
 
 /**
  * KMS服务接口（用于 controller 调用）

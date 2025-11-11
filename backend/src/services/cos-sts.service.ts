@@ -23,6 +23,26 @@ interface STSPolicy {
   prefix: string; // 路径前缀限制
 }
 
+interface STSResult {
+  credentials: {
+    tmpSecretId: string;
+    tmpSecretKey: string;
+    sessionToken: string;
+  };
+  expiredTime: number;
+  expiration: string;
+  startTime: number;
+}
+
+interface COSPolicyStatement {
+  version: string;
+  statement: Array<{
+    effect: string;
+    action: string[];
+    resource: string[];
+  }>;
+}
+
 /**
  * STS临时密钥响应
  */
@@ -47,18 +67,6 @@ export interface GetSTSOptions {
   durationSeconds?: number; // 有效期（秒）
   bucket?: string; // 存储桶（可选，默认使用环境变量）
   region?: string; // 地域（可选，默认使用环境变量）
-}
-
-/**
- * COS策略接口
- */
-interface COSPolicyStatement {
-  version: string;
-  statement: Array<{
-    effect: string;
-    action: string[];
-    resource: string[];
-  }>;
 }
 
 /**
@@ -126,17 +134,6 @@ class CosSTSService {
       );
 
       // 调用STS API
-      interface STSResult {
-        credentials: {
-          tmpSecretId: string;
-          tmpSecretKey: string;
-          sessionToken: string;
-        };
-        expiredTime: number;
-        expiration: string;
-        startTime: number;
-      }
-
       const stsResult = await new Promise<STSResult>((resolve, reject) => {
         STS.getCredential(
           {

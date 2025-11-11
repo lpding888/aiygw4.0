@@ -7,15 +7,6 @@ import { Request, Response, NextFunction } from 'express';
 import * as textRepo from '../repositories/contentTexts.repo.js';
 import type { CreateTextInput } from '../repositories/contentTexts.repo.js';
 
-/**
- * Express请求对象扩展类型定义
- */
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: number;
-    [key: string]: unknown;
-  };
-}
 
 export class ContentTextsController {
   /**
@@ -102,10 +93,7 @@ export class ContentTextsController {
    */
   async createText(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const input: CreateTextInput = {
-        ...req.body,
-        created_by: (req as AuthenticatedRequest).user?.id
-      };
+      const input = req.body as CreateTextInput;
 
       // 艹，基础校验
       if (!input.page?.trim()) {
@@ -148,10 +136,7 @@ export class ContentTextsController {
   async updateText(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = parseInt(req.params.id);
-      const updates = {
-        ...req.body,
-        updated_by: (req as AuthenticatedRequest).user?.id
-      };
+      const updates = req.body as Partial<CreateTextInput>;
 
       const text = await textRepo.updateText(id, updates);
 
@@ -201,7 +186,6 @@ export class ContentTextsController {
   async batchUpsertTexts(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { texts } = req.body;
-      const updated_by = (req as AuthenticatedRequest).user?.id;
 
       if (!Array.isArray(texts) || texts.length === 0) {
         res.status(400).json({
@@ -211,7 +195,7 @@ export class ContentTextsController {
         return;
       }
 
-      const result = await textRepo.batchUpsertTexts(texts, updated_by);
+      const result = await textRepo.batchUpsertTexts(texts);
 
       res.json({
         success: true,

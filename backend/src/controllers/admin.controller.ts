@@ -67,7 +67,7 @@ const toError = (error: unknown): Error =>
     ? error
     : new Error(typeof error === 'string' ? error : JSON.stringify(error));
 
-const fetchCount = async (query: Knex.QueryBuilder<unknown, unknown>): Promise<number> => {
+const fetchCount = async (query: Knex.QueryBuilder): Promise<number> => {
   const rows = (await query.count('* as count')) as Array<{ count: CountValue }>;
   return rows.length > 0 ? normalizeCount(rows[0]?.count) : 0;
 };
@@ -83,7 +83,10 @@ const logAndNext = (next: NextFunction, error: unknown, context: string): void =
   next(err);
 };
 
-const isSuperAdminUser = (req: Request): boolean => `${req.user?.role ?? ''}` === 'super_admin';
+const isSuperAdminUser = (req: Request): boolean => {
+  const role = (req.user as { role?: string } | undefined)?.role;
+  return role === 'super_admin';
+};
 
 /**
  * 管理后台控制器 - 处理管理相关请求

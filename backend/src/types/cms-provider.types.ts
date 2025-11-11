@@ -6,6 +6,7 @@
  */
 
 import type { Request } from 'express';
+import type { AuthRequest } from '../middlewares/auth.middleware.js';
 
 /**
  * 供应商状态
@@ -32,7 +33,7 @@ export interface Provider {
   enabled: boolean;
   status: ProviderStatus;
   last_tested_at?: Date | string | null;
-  last_test_result?: string | null;
+  last_test_result?: string | TestResult | null;
   created_by?: string | number | null;
   created_at: Date | string;
   updated_at: Date | string;
@@ -163,15 +164,9 @@ export interface BatchTestResult {
 }
 
 /**
- * Express Request扩展(包含用户信息)
+ * 认证请求类型
  */
-export interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    [key: string]: unknown;
-  };
-  id?: string;
-}
+export type AuthenticatedRequest = AuthRequest;
 
 /**
  * CmsCache服务接口(用于类型安全)
