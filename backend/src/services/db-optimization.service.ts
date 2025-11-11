@@ -5,7 +5,7 @@
 
 import logger from '../utils/logger.js';
 import dbMetrics from '../utils/db-metrics.js';
-import type { MetricsReport, SlowQuery } from '../utils/db-metrics.js';
+import type { MetricsReport, SlowQuery, ExplainAnalysis } from '../utils/db-metrics.js';
 import { db } from '../config/database.js';
 
 interface QueryAnalysis {
@@ -23,6 +23,12 @@ interface IndexSuggestion {
   priority: string;
 }
 
+interface TableIndexInfo {
+  keyName: string;
+  columnName: string;
+  [key: string]: unknown;
+}
+
 /**
  * 数据库优化服务
  *
@@ -30,7 +36,7 @@ interface IndexSuggestion {
  */
 class DatabaseOptimizationService {
   private baselineQueries: Map<string, QueryAnalysis>;
-  private analysisQueue: Array<Record<string, unknown>>;
+  private analysisQueue: ExplainAnalysis[];
   private isAnalyzing: boolean;
 
   constructor() {
@@ -45,7 +51,7 @@ class DatabaseOptimizationService {
    * @param {Array} params - 参数
    * @returns {Promise<Object>} 分析结果
    */
-  async analyzeQueryExecution(sql: string, params: Array<unknown> = []): Promise<Record<string, unknown>> {
+  async analyzeQueryExecution(sql: string, params: Array<unknown> = []): Promise<ExplainAnalysis> {
     try {
       logger.info('[DB Optimization] 开始分析查询', {
         sql: this.sanitizeSQL(sql)
@@ -162,18 +168,18 @@ class DatabaseOptimizationService {
    * 获取表的索引信息
    * @param {string} tableName - 表名
    */
-  async getTableIndexes(tableName: string): Promise<Array<Record<string, unknown>>> {
+  async getTableIndexes(tableName: string): Promise<TableIndexInfo[]> {
     try {
       const result = await db.raw(`
         SHOW INDEX FROM ${tableName}
       `);
 
       return result.map((row: Record<string, unknown>) => ({
-        table: row.Table,
+        table: String(row.Table ?? tableName),
         nonUnique: row.Non_unique === 0,
-        keyName: row.Key_name,
-        seqInIndex: row.Seq_in_index,
-        columnName: row.Column_name,
+        keyName: String(row.Key_name ?? ''),
+        seqInIndex: Number(row.Seq_in_index ?? 0),
+        columnName: String(row.Column_name ?? ''),
         collation: row.Collation,
         cardinality: row.Cardinality,
         subPart: row.Sub_part,
@@ -195,23 +201,31 @@ class DatabaseOptimizationService {
    * @param {string} table - 表名
    * @param {Array} indexes - 现有索引
    */
-  generateIndexSuggestions(table: string, indexes: Array<Record<string, unknown>>): IndexSuggestion[] {
+  generateIndexSuggestions(table: string, indexes: TableIndexInfo[]): IndexSuggestion[] {
     const suggestions: IndexSuggestion[] = [];
     const indexMap = new Map<string, string[]>();
 
     // 创建索引映射
-    indexes.forEach((idx: Record<string, unknown>) => {
-      if (!indexMap.has(idx.keyName)) {
-        indexMap.set(idx.keyName, []);
+    indexes.forEach((idx) => {
+      const keyName = idx.keyName || '';
+      const columnName = idx.columnName || '';
+      if (!keyName || !columnName) {
+        return;
       }
-      const columns = indexMap.get(idx.keyName);
+      if (!indexMap.has(keyName)) {
+        indexMap.set(keyName, []);
+      }
+      const columns = indexMap.get(keyName);
       if (columns) {
-        columns.push(idx.columnName);
+        columns.push(columnName);
       }
     });
 
     // 建议的核心索引
-    const recommendedIndexes = {
+    const recommendedIndexes: Record<
+      string,
+      Array<{ columns: string[]; type: string; reason: string }>
+    > = {
       users: [
         { columns: ['id'], type: 'PRIMARY', reason: '主键索引' },
         { columns: ['phone'], type: 'UNIQUE', reason: '登录查询' },
@@ -241,13 +255,11 @@ class DatabaseOptimizationService {
       ]
     };
 
-    const recommended = (recommendedIndexes as Record<string, Array<Record<string, unknown>>>)[table] || [];
+    const recommended = recommendedIndexes[table] || [];
 
-    recommended.forEach((rec: Record<string, unknown>) => {
+    recommended.forEach((rec) => {
       const exists = Array.from(indexMap.values()).some(
-        (cols: string[]) =>
-          cols.length === rec.columns.length &&
-          cols.every((col: string) => rec.columns.includes(col))
+        (cols) => cols.length === rec.columns.length && cols.every((col) => rec.columns.includes(col))
       );
 
       if (!exists) {
@@ -343,11 +355,16 @@ class DatabaseOptimizationService {
   /**
    * 生成整体优化建议
    */
-  generateOverallRecommendations(queries: Array<unknown>, indexes: Array<unknown>, metrics: Record<string, unknown>): Array<Record<string, unknown>> {
+  generateOverallRecommendations(
+    queries: Array<Record<string, unknown>>,
+    indexes: IndexSuggestion[],
+    metrics: MetricsReport
+  ): Array<Record<string, unknown>> {
     const recommendations: Array<Record<string, unknown>> = [];
 
     // 连接池建议
-    if (Number(metrics.pool.utilization.replace('%', '')) > 80) {
+    const poolUtilization = Number(metrics.pool.utilization.replace('%', ''));
+    if (poolUtilization > 80) {
       recommendations.push({
         category: 'connection-pool',
         priority: 'high',
@@ -369,10 +386,7 @@ class DatabaseOptimizationService {
     }
 
     // 索引建议
-    const highPriorityIndexes = indexes.filter((idx: unknown) => {
-      const indexObj = idx as Record<string, unknown>;
-      return indexObj.priority === 'high';
-    });
+    const highPriorityIndexes = indexes.filter((idx) => idx.priority === 'high');
     if (highPriorityIndexes.length > 0) {
       recommendations.push({
         category: 'indexes',

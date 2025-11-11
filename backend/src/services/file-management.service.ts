@@ -2,67 +2,49 @@ import logger from '../utils/logger.js';
 import cosStorageService from './cos-storage.service.js';
 import fileLifecycleService from './file-lifecycle.service.js';
 import { db } from '../config/database.js';
-
-// 类型定义
-interface FileObject {
-  name: string;
-  size?: number;
-  type?: string;
-  path?: string;
-  [key: string]: unknown;
-}
+import type {
+  FileCategory,
+  FileMetadata,
+  StorageUploadOptions,
+  StorageUploadResult,
+  TaskFileCleanupOptions,
+  TaskFileCleanupResult,
+  TaskFileListOptions,
+  TaskFileListResponse,
+  TaskFileRecord,
+  TaskFileRecordInput,
+  TaskFileRecordSummary,
+  UploadFileDescriptor
+} from '../types/file.types.js';
 
 interface FileOptions {
   fileSize?: number;
   processingDuration?: number;
-  categories?: string[];
+  categories?: FileCategory[];
   force?: boolean;
   dryRun?: boolean;
   includeDeleted?: boolean;
-  [key: string]: unknown;
 }
 
-interface TaskFile {
-  key: string;
-  category: string;
-  stepType?: string;
-  resultIndex?: number;
-  createdAt: Date;
-  [key: string]: unknown;
+interface IntermediateFilePayload extends TaskFileRecordInput {
+  inputFrom?: string;
+  outputTo?: string;
+  processingTime?: number;
+  type?: string;
 }
 
-interface UploadResult {
-  key: string;
-  url?: string;
-  size?: number;
-  metadata?: Record<string, unknown>;
-  [key: string]: unknown;
+interface ManagedResultFile {
+  originalUrl: string | Record<string, unknown>;
+  managedKey: string;
+  managedUrl?: string;
 }
 
-interface FileRecord {
-  taskId?: string;
-  userId?: string;
-  key: string;
-  category: string;
-  stepType?: string;
-  resultIndex?: number;
-  size?: number;
-  metadata?: Record<string, unknown>;
-  originalUrl?: string;
-  [key: string]: unknown;
-}
-
-interface CleanupOptions {
-  categories?: string[];
-  force?: boolean;
-  dryRun?: boolean;
-  [key: string]: unknown;
-}
-
-interface QueryOptions {
-  categories?: string[] | null;
-  includeDeleted?: boolean;
-  [key: string]: unknown;
+interface SaveResultSummary {
+  success: boolean;
+  taskId: string;
+  savedFiles: ManagedResultFile[];
+  totalProcessed: number;
+  successCount: number;
 }
 
 /**
@@ -77,7 +59,7 @@ interface QueryOptions {
 class FileManagementService {
   private initialized = false;
 
-  private taskFiles: Map<string, TaskFile[]> = new Map();
+  private taskFiles: Map<string, TaskFileRecordSummary[]> = new Map();
 
   constructor() {
     this.initialized = false;
@@ -115,15 +97,15 @@ class FileManagementService {
    * @returns {Promise<Object>} 上传结果
    */
   async handleUserUpload(
-    file: FileObject,
+    file: UploadFileDescriptor,
     userId: string,
-    options: FileOptions = {}
-  ): Promise<UploadResult> {
+    _options: FileOptions = {}
+  ): Promise<StorageUploadResult> {
     try {
       logger.info(`[FileManagement] 处理用户上传: ${file.name}`);
 
       // 上传到COS
-      const uploadResult = await cosStorageService.uploadFile({
+      const uploadResult = await this.uploadToCos({
         file,
         category: 'userUpload',
         metadata: {
@@ -138,17 +120,8 @@ class FileManagementService {
         key: uploadResult.key,
         category: 'userUpload',
         userId,
-        metadata: uploadResult.metadata
-      });
-
-      // 保存到数据库
-      await this.saveFileRecord({
-        key: uploadResult.key,
-        originalName: file.name,
-        userId,
-        category: 'userUpload',
-        size: uploadResult.size,
-        metadata: uploadResult.metadata
+        metadata: uploadResult.metadata,
+        size: uploadResult.size
       });
 
       logger.info(`[FileManagement] 用户上传处理完成: ${uploadResult.key}`);
@@ -172,14 +145,14 @@ class FileManagementService {
   async createTaskTempFile(
     taskId: string,
     userId: string,
-    file: FileObject,
+    file: UploadFileDescriptor,
     stepType = 'input'
-  ): Promise<UploadResult> {
+  ): Promise<StorageUploadResult> {
     try {
       logger.info(`[FileManagement] 创建任务临时文件: ${taskId} - ${stepType}`);
 
       // 上传到COS临时目录
-      const uploadResult = await cosStorageService.uploadFile({
+      const uploadResult = await this.uploadToCos({
         file,
         category: 'temp',
         metadata: {
@@ -191,12 +164,13 @@ class FileManagementService {
       });
 
       // 注册到生命周期管理
-      await fileLifecycleService.registerFile({
+      const lifecycleRegistration = await fileLifecycleService.registerFile({
         key: uploadResult.key,
         category: 'temp',
         taskId,
         userId,
-        metadata: uploadResult.metadata
+        metadata: uploadResult.metadata,
+        size: uploadResult.size
       });
 
       // 记录到任务文件映射
@@ -205,7 +179,8 @@ class FileManagementService {
         key: uploadResult.key,
         category: 'temp',
         stepType,
-        createdAt: new Date()
+        createdAt: new Date(),
+        lifecycleId: lifecycleRegistration.fileId
       });
       this.taskFiles.set(taskId, taskFiles);
 
@@ -217,6 +192,7 @@ class FileManagementService {
         category: 'temp',
         stepType,
         size: uploadResult.size,
+        originalUrl: file.path,
         metadata: uploadResult.metadata
       });
 
@@ -239,9 +215,9 @@ class FileManagementService {
   async createIntermediateFile(
     taskId: string,
     stepType: string,
-    fileData: FileRecord,
+    fileData: TaskFileRecordInput,
     options: FileOptions = {}
-  ): Promise<UploadResult> {
+  ): Promise<StorageUploadResult> {
     try {
       logger.info(`[FileManagement] 创建中间文件: ${taskId} - ${stepType}`);
 
@@ -253,15 +229,19 @@ class FileManagementService {
 
       // 模拟文件上传（在实际项目中，这里会上传真实的文件数据）
       const fileName = `${stepType}_${Date.now()}.jpg`;
-      const mockFile = {
+      const mockFile: UploadFileDescriptor = {
         name: fileName,
         size: fileData.size || 1024000,
-        type: fileData.type || 'image/jpeg',
+        type:
+          fileData.type ||
+          (typeof fileData.metadata?.fileType === 'string'
+            ? (fileData.metadata.fileType as string)
+            : 'image/jpeg'),
         path: `/tmp/${fileName}`
       };
 
       // 上传到COS中间文件目录
-      const uploadResult = await cosStorageService.uploadFile({
+      const uploadResult = await this.uploadToCos({
         file: mockFile,
         category: 'intermediate',
         metadata: {
@@ -275,12 +255,13 @@ class FileManagementService {
       });
 
       // 注册到生命周期管理
-      await fileLifecycleService.registerFile({
+      const lifecycleRegistration = await fileLifecycleService.registerFile({
         key: uploadResult.key,
         category: 'intermediate',
         taskId,
         userId: task.user_id,
-        metadata: uploadResult.metadata
+        metadata: uploadResult.metadata,
+        size: uploadResult.size
       });
 
       // 记录到任务文件映射
@@ -289,7 +270,8 @@ class FileManagementService {
         key: uploadResult.key,
         category: 'intermediate',
         stepType,
-        createdAt: new Date()
+        createdAt: new Date(),
+        lifecycleId: lifecycleRegistration.fileId
       });
       this.taskFiles.set(taskId, intermediateFiles);
 
@@ -323,7 +305,7 @@ class FileManagementService {
     taskId: string,
     resultUrls: Array<string | Record<string, unknown>> = [],
     options: FileOptions = {}
-  ): Promise<Record<string, unknown>> {
+  ): Promise<SaveResultSummary> {
     try {
       logger.info(`[FileManagement] 保存任务结果文件: ${taskId}`);
 
@@ -332,14 +314,14 @@ class FileManagementService {
         throw new Error(`任务不存在: ${taskId}`);
       }
 
-      const savedFiles: Record<string, unknown>[] = [];
+      const savedFiles: ManagedResultFile[] = [];
       const normalizedResultUrls = Array.isArray(resultUrls) ? resultUrls : [resultUrls];
 
       for (const [index, resultUrl] of normalizedResultUrls.entries()) {
         try {
           // 提取文件信息
           const fileName = `result_${index + 1}_${Date.now()}.jpg`;
-          const mockFile = {
+          const mockFile: UploadFileDescriptor = {
             name: fileName,
             size: options.fileSize || 2048000,
             type: 'image/jpeg',
@@ -347,7 +329,7 @@ class FileManagementService {
           };
 
           // 上传到COS结果目录
-          const uploadResult = await cosStorageService.uploadFile({
+          const uploadResult = await this.uploadToCos({
             file: mockFile,
             category: 'result',
             metadata: {
@@ -361,12 +343,13 @@ class FileManagementService {
           });
 
           // 注册到生命周期管理
-          await fileLifecycleService.registerFile({
+          const lifecycleRegistration = await fileLifecycleService.registerFile({
             key: uploadResult.key,
             category: 'result',
             taskId,
             userId: task.user_id,
-            metadata: uploadResult.metadata
+            metadata: uploadResult.metadata,
+            size: uploadResult.size
           });
 
           // 记录到任务文件映射
@@ -375,7 +358,8 @@ class FileManagementService {
             key: uploadResult.key,
             category: 'result',
             resultIndex: index,
-            createdAt: new Date()
+            createdAt: new Date(),
+            lifecycleId: lifecycleRegistration.fileId
           });
           this.taskFiles.set(taskId, resultTaskFiles);
 
@@ -387,7 +371,7 @@ class FileManagementService {
             category: 'result',
             resultIndex: index,
             size: uploadResult.size,
-            originalUrl: resultUrl,
+            originalUrl: typeof resultUrl === 'string' ? resultUrl : JSON.stringify(resultUrl),
             metadata: uploadResult.metadata
           });
 
@@ -426,15 +410,14 @@ class FileManagementService {
    * @param {Object} options - 清理选项
    * @returns {Promise<Object>} 清理结果
    */
-  async cleanupTaskFiles(taskId: string, options: CleanupOptions = {}): Promise<Record<string, unknown>> {
+  async cleanupTaskFiles(
+    taskId: string,
+    options: TaskFileCleanupOptions = {}
+  ): Promise<TaskFileCleanupResult> {
     try {
       logger.info(`[FileManagement] 清理任务文件: ${taskId}`);
 
-      const {
-        categories = ['temp', 'intermediate'], // 不清理result文件
-        force = false,
-        dryRun = false
-      } = options;
+      const { categories = ['temp', 'intermediate'], dryRun = false } = options;
 
       const taskFiles = this.taskFiles.get(taskId) ?? [];
       const filesToCleanup = taskFiles.filter((file) => categories.includes(file.category));
@@ -445,7 +428,7 @@ class FileManagementService {
       }
 
       let cleanedCount = 0;
-      const cleanedFiles: TaskFile[] = [];
+      const cleanedFiles: TaskFileRecordSummary[] = [];
 
       for (const file of filesToCleanup) {
         try {
@@ -454,10 +437,7 @@ class FileManagementService {
             await cosStorageService.deleteFile(file.key);
 
             // 更新生命周期状态
-            await fileLifecycleService.updateFileStatus(file.key, {
-              status: 'deleted',
-              deletedAt: new Date()
-            });
+            await this.markLifecycleDeleted(file);
 
             // 更新数据库记录
             await db('task_files').where('task_id', taskId).where('file_key', file.key).update({
@@ -482,7 +462,7 @@ class FileManagementService {
         this.taskFiles.set(taskId, remainingFiles);
       }
 
-      const result = {
+      const result: TaskFileCleanupResult = {
         success: true,
         taskId,
         cleanedCount,
@@ -510,7 +490,10 @@ class FileManagementService {
    * @param {Object} options - 查询选项
    * @returns {Promise<Object>} 文件列表
    */
-  async getTaskFiles(taskId: string, options: QueryOptions = {}): Promise<Record<string, unknown>> {
+  async getTaskFiles(
+    taskId: string,
+    options: TaskFileListOptions = {}
+  ): Promise<TaskFileListResponse> {
     try {
       const { categories = null, includeDeleted = false } = options;
 
@@ -524,21 +507,26 @@ class FileManagementService {
         query = query.where('status', 'active');
       }
 
-      const files = await query.orderBy('created_at', 'asc');
+      const rows = await query.orderBy('created_at', 'asc');
+      const files: TaskFileRecord[] = rows.map((file) => ({
+        id: file.id,
+        task_id: file.task_id,
+        user_id: file.user_id,
+        file_key: file.file_key,
+        category: file.category,
+        step_type: file.step_type,
+        result_index: file.result_index,
+        size: file.size,
+        original_url: file.original_url,
+        metadata: this.parseMetadata(file.metadata),
+        status: file.status,
+        created_at: file.created_at,
+        updated_at: file.updated_at,
+        deleted_at: file.deleted_at
+      }));
 
       return {
-        success: true,
-        taskId,
-        files: files.map((file) => ({
-          key: file.file_key,
-          category: file.category,
-          stepType: file.step_type,
-          resultIndex: file.result_index,
-          size: file.size,
-          originalUrl: file.original_url,
-          createdAt: file.created_at,
-          status: file.status
-        })),
+        files,
         totalCount: files.length
       };
     } catch (error: unknown) {
@@ -631,13 +619,54 @@ class FileManagementService {
 
   // 辅助方法
 
+  private uploadToCos(options: StorageUploadOptions): Promise<StorageUploadResult> {
+    return cosStorageService.uploadFile(options);
+  }
+
+  private parseMetadata(raw: unknown): FileMetadata {
+    if (typeof raw === 'string') {
+      try {
+        return JSON.parse(raw) as FileMetadata;
+      } catch (error) {
+        logger.warn('[FileManagement] 解析文件元数据失败，返回空对象', { error });
+        return {};
+      }
+    }
+    return (raw as FileMetadata) ?? {};
+  }
+
+  private async markLifecycleDeleted(file: TaskFileRecordSummary): Promise<void> {
+    const payload = {
+      status: 'deleted' as const,
+      deleted_at: new Date()
+    };
+
+    if (file.lifecycleId) {
+      await fileLifecycleService.updateFileStatus(file.lifecycleId, payload);
+      return;
+    }
+
+    const lifecycleRecord = await db('file_lifecycle_records')
+      .select('id')
+      .where('key', file.key)
+      .first();
+
+    if (lifecycleRecord?.id) {
+      await fileLifecycleService.updateFileStatus(lifecycleRecord.id, payload);
+    }
+  }
+
   /**
    * 保存文件记录到数据库
    * @param {Object} fileData - 文件数据
    * @private
    */
-  async saveFileRecord(fileData: FileRecord): Promise<void> {
+  async saveFileRecord(fileData: TaskFileRecordInput): Promise<void> {
     try {
+      if (!fileData.taskId) {
+        throw new Error('任务文件记录必须包含 taskId');
+      }
+
       await db('task_files').insert({
         task_id: fileData.taskId,
         user_id: fileData.userId,
@@ -647,7 +676,7 @@ class FileManagementService {
         result_index: fileData.resultIndex,
         size: fileData.size,
         original_url: fileData.originalUrl,
-        metadata: JSON.stringify(fileData.metadata || {}),
+        metadata: JSON.stringify(fileData.metadata ?? {}),
         status: 'active',
         created_at: new Date()
       });

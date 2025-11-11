@@ -174,6 +174,25 @@ class UISchemaService {
   }
 
   /**
+   * 获取单个功能的完整UI配置
+   */
+  async getFeatureUiConfig(
+    featureKey: string,
+    userRole: string = 'viewer'
+  ): Promise<{
+    form: FormSchema | null;
+    table: TableSchema | null;
+    permissions: string[];
+  }> {
+    const schema = await this.getUISchema(userRole);
+    return {
+      form: schema.forms?.[featureKey] ?? null,
+      table: schema.tables?.[featureKey] ?? null,
+      permissions: schema.permissions?.[featureKey] ?? []
+    };
+  }
+
+  /**
    * 更新菜单配置
    */
   async updateMenus(menus: MenuConfig[], updatedBy: string): Promise<void> {
@@ -237,6 +256,10 @@ class UISchemaService {
       logger.error(`更新表单Schema失败: ${formKey}`, err);
       throw err;
     }
+  }
+
+  async invalidateAllCaches(): Promise<void> {
+    await configCacheService.invalidate(this.CACHE_SCOPE);
   }
 
   /**
@@ -635,9 +658,11 @@ export const getMenus = uiSchemaService.getMenus.bind(uiSchemaService);
 export const getUISchema = uiSchemaService.getUISchema.bind(uiSchemaService);
 export const getFormSchema = uiSchemaService.getFormSchema.bind(uiSchemaService);
 export const getTableSchema = uiSchemaService.getTableSchema.bind(uiSchemaService);
+export const getFeatureUiConfig = uiSchemaService.getFeatureUiConfig.bind(uiSchemaService);
 export const updateMenus = uiSchemaService.updateMenus.bind(uiSchemaService);
 export const updateFormSchema = uiSchemaService.updateFormSchema.bind(uiSchemaService);
 export const filterMenusByPermission =
   uiSchemaService.filterMenusByPermission.bind(uiSchemaService);
+export const invalidateAllCaches = uiSchemaService.invalidateAllCaches.bind(uiSchemaService);
 
 export default uiSchemaService;

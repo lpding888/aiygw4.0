@@ -34,15 +34,19 @@ export interface CacheStats {
   };
 }
 
+interface MemoryCacheEntry {
+  value: unknown;
+}
+
 export class ConfigCacheService {
-  private memoryCache: LRUCache<string, unknown>;
+  private memoryCache: LRUCache<string, MemoryCacheEntry>;
   private readonly CACHE_PREFIX = 'cms:config:';
   private readonly INVALIDATE_CHANNEL = 'cms:invalidate';
   private versionCache: Map<string, number>;
   private unsubscribe: (() => void) | null = null;
 
   constructor() {
-    this.memoryCache = new LRUCache({
+    this.memoryCache = new LRUCache<string, MemoryCacheEntry>({
       max: 1000,
       ttl: 1000 * 30,
       updateAgeOnGet: true
@@ -57,32 +61,31 @@ export class ConfigCacheService {
     const cacheKey = this.buildCacheKey(scope, key, version);
 
     try {
-      let data = this.memoryCache.get(cacheKey);
-      if (data !== undefined) {
+      const memoryEntry = this.memoryCache.get(cacheKey);
+      if (memoryEntry !== undefined) {
         logger.debug(`Cache hit (L1): ${cacheKey}`);
-        return data;
+        return memoryEntry.value;
       }
 
       const cached = await redis.get(cacheKey);
       if (cached) {
-        data = JSON.parse(cached);
-        this.memoryCache.set(cacheKey, data);
+        const parsed = JSON.parse(cached);
+        this.memoryCache.set(cacheKey, { value: parsed });
         logger.debug(`Cache hit (L2): ${cacheKey}`);
-        return data;
+        return parsed;
       }
 
       const snapshotData = await this.getSnapshot(scope, key, version);
       if (snapshotData) {
-        data = snapshotData;
-        this.memoryCache.set(cacheKey, data);
-        await redis.setex(cacheKey, 300, JSON.stringify(data));
+        this.memoryCache.set(cacheKey, { value: snapshotData });
+        await redis.setex(cacheKey, 300, JSON.stringify(snapshotData));
         logger.debug(`Cache hit (L3 - Snapshot): ${cacheKey}`);
-        return data;
+        return snapshotData;
       }
 
-      data = await fetcher();
+      const data = await fetcher();
 
-      this.memoryCache.set(cacheKey, data);
+      this.memoryCache.set(cacheKey, { value: data });
       await redis.setex(cacheKey, 300, JSON.stringify(data));
       await this.saveSnapshot(scope, key, version, data);
 

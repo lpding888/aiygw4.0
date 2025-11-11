@@ -27,14 +27,14 @@ interface RateLimitResult {
   retryAfter?: number;
 }
 
-interface DataMaskingRule {
+export interface DataMaskingRule {
   field: string;
   type: 'email' | 'phone' | 'id_card' | 'bank_card' | 'password' | 'token' | 'custom';
   customPattern?: string;
   replacement?: string;
 }
 
-interface HealthCheck {
+export interface HealthCheck {
   name: string;
   status: 'healthy' | 'unhealthy' | 'warning';
   responseTime: number;

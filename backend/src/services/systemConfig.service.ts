@@ -2,8 +2,8 @@ import { db } from '../config/database.js';
 import logger from '../utils/logger.js';
 import cacheService from './cache.service.js'; // P1-010: 使用Redis缓存
 
-type ConfigPrimitive = string | number | boolean | Record<string, unknown> | null;
-type ConfigType = 'string' | 'number' | 'boolean' | 'json';
+export type ConfigPrimitive = string | number | boolean | Record<string, unknown> | null;
+export type ConfigType = 'string' | 'number' | 'boolean' | 'json';
 
 type SystemConfigRow = {
   config_key: string;
@@ -265,6 +265,15 @@ class SystemConfigService {
       return categories.map((c) => c.category as string);
     } catch (error) {
       logger.error('[SystemConfigService] 获取配置分类失败', error);
+      throw error;
+    }
+  }
+
+  async exportAll(): Promise<SystemConfigRow[]> {
+    try {
+      return await db<SystemConfigRow>('system_configs').select('*');
+    } catch (error) {
+      logger.error('[SystemConfigService] 导出配置失败', error);
       throw error;
     }
   }

@@ -1,9 +1,49 @@
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 import logger from '../utils/logger.js';
 import cosStorageService from './cos-storage.service.js';
 import { db } from '../config/database.js';
+import type {
+  FileCategory,
+  FileLifecycleRecord,
+  FileLifecycleRecordRow,
+  FileLifecycleStats,
+  FileMetadata,
+  FilePriority,
+  FileStorageClass,
+  LifecycleCleanupOptions,
+  LifecycleCleanupResult,
+  LifecycleProcessResult,
+  LifecycleRegistrationInput,
+  LifecycleRegistrationResult,
+  LifecycleSchedule,
+  LifecycleStrategyConfig,
+  LifecycleTransitionExecutionResult,
+  LifecycleTransitionState
+} from '../types/file.types.js';
 
-type AnyObject = Record<string, unknown>;
+type LifecycleStrategyMap = Record<FileCategory, LifecycleStrategyConfig>;
+
+interface CleanupConfig {
+  enabled: boolean;
+  interval: number;
+  batchSize: number;
+  maxExecutionTime: number;
+}
+
+interface MonitoringConfig {
+  enabled: boolean;
+  alertThresholds: {
+    storageUsage: number;
+    costIncrease: number;
+    errorRate: number;
+  };
+}
+
+interface FileLifecycleConfig {
+  strategies: LifecycleStrategyMap;
+  cleanup: CleanupConfig;
+  monitoring: MonitoringConfig;
+}
 
 /**
  * 文件生命周期管理服务
@@ -16,90 +56,69 @@ type AnyObject = Record<string, unknown>;
  * - 合规性审计
  */
 class FileLifecycleService {
-  private config: Record<string, unknown>;
+  private config: FileLifecycleConfig;
 
   private initialized = false;
 
   private cleanupTimer: NodeJS.Timeout | null = null;
 
-  private stats: {
-    totalProcessed: number;
-    totalDeleted: number;
-    totalTransferred: number;
-    costSaved: number;
-    lastCleanup: Date | null;
-    errors: number;
-  };
+  private stats: FileLifecycleStats;
 
   constructor() {
-    this.config = {
-      // 生命周期策略
-      strategies: {
-        // 临时文件（上传、处理中）
-        temp: {
-          ttl: 7 * 24 * 60 * 60 * 1000, // 7天
-          transitions: [
-            { after: 1 * 24 * 60 * 60 * 1000, storageClass: 'Standard_IA' }, // 1天后转低频
-            { after: 3 * 24 * 60 * 60 * 1000, storageClass: 'Archive' } // 3天后转归档
-          ],
-          autoDelete: true
-        },
-
-        // 中间文件（处理过程的中间结果）
-        intermediate: {
-          ttl: 30 * 24 * 60 * 60 * 1000, // 30天
-          transitions: [
-            { after: 7 * 24 * 60 * 60 * 1000, storageClass: 'Standard_IA' }, // 7天后转低频
-            { after: 15 * 24 * 60 * 60 * 1000, storageClass: 'Archive' } // 15天后转归档
-          ],
-          autoDelete: true
-        },
-
-        // 用户上传文件
-        userUpload: {
-          ttl: 365 * 24 * 60 * 60 * 1000, // 1年
-          transitions: [
-            { after: 90 * 24 * 60 * 60 * 1000, storageClass: 'Standard_IA' }, // 90天后转低频
-            { after: 180 * 24 * 60 * 60 * 1000, storageClass: 'Archive' } // 180天后转归档
-          ],
-          autoDelete: false
-        },
-
-        // 处理结果文件
-        result: {
-          ttl: 180 * 24 * 60 * 60 * 1000, // 180天
-          transitions: [
-            { after: 30 * 24 * 60 * 60 * 1000, storageClass: 'Standard_IA' }, // 30天后转低频
-            { after: 90 * 24 * 60 * 60 * 1000, storageClass: 'Archive' } // 90天后转归档
-          ],
-          autoDelete: true
-        },
-
-        // 日志文件
-        log: {
-          ttl: 30 * 24 * 60 * 60 * 1000, // 30天
-          transitions: [
-            { after: 7 * 24 * 60 * 60 * 1000, storageClass: 'Standard_IA' } // 7天后转低频
-          ],
-          autoDelete: true
-        }
+    const strategies: LifecycleStrategyMap = {
+      temp: {
+        ttl: 7 * 24 * 60 * 60 * 1000,
+        transitions: [
+          { after: 1 * 24 * 60 * 60 * 1000, storageClass: 'Standard_IA' },
+          { after: 3 * 24 * 60 * 60 * 1000, storageClass: 'Archive' }
+        ],
+        autoDelete: true
       },
+      intermediate: {
+        ttl: 30 * 24 * 60 * 60 * 1000,
+        transitions: [
+          { after: 7 * 24 * 60 * 60 * 1000, storageClass: 'Standard_IA' },
+          { after: 15 * 24 * 60 * 60 * 1000, storageClass: 'Archive' }
+        ],
+        autoDelete: true
+      },
+      userUpload: {
+        ttl: 365 * 24 * 60 * 60 * 1000,
+        transitions: [
+          { after: 90 * 24 * 60 * 60 * 1000, storageClass: 'Standard_IA' },
+          { after: 180 * 24 * 60 * 60 * 1000, storageClass: 'Archive' }
+        ],
+        autoDelete: false
+      },
+      result: {
+        ttl: 180 * 24 * 60 * 60 * 1000,
+        transitions: [
+          { after: 30 * 24 * 60 * 60 * 1000, storageClass: 'Standard_IA' },
+          { after: 90 * 24 * 60 * 60 * 1000, storageClass: 'Archive' }
+        ],
+        autoDelete: true
+      },
+      log: {
+        ttl: 30 * 24 * 60 * 60 * 1000,
+        transitions: [{ after: 7 * 24 * 60 * 60 * 1000, storageClass: 'Standard_IA' }],
+        autoDelete: true
+      }
+    };
 
-      // 清理任务配置
+    this.config = {
+      strategies,
       cleanup: {
         enabled: true,
-        interval: 6 * 60 * 60 * 1000, // 6小时执行一次
-        batchSize: 1000, // 每批处理1000个文件
-        maxExecutionTime: 30 * 60 * 1000 // 最大执行时间30分钟
+        interval: 6 * 60 * 60 * 1000,
+        batchSize: 1000,
+        maxExecutionTime: 30 * 60 * 1000
       },
-
-      // 监控配置
       monitoring: {
         enabled: true,
         alertThresholds: {
-          storageUsage: 0.8, // 存储使用率超过80%告警
-          costIncrease: 0.2, // 成本增长超过20%告警
-          errorRate: 0.05 // 错误率超过5%告警
+          storageUsage: 0.8,
+          costIncrease: 0.2,
+          errorRate: 0.05
         }
       }
     };
@@ -149,9 +168,14 @@ class FileLifecycleService {
    * @param {Object} fileInfo - 文件信息
    * @returns {Promise<Object>} 注册结果
    */
-  async registerFile(fileInfo: AnyObject): Promise<AnyObject> {
+  async registerFile(fileInfo: LifecycleRegistrationInput): Promise<LifecycleRegistrationResult> {
     try {
-      const { key, category, taskId, userId, metadata = {}, priority = 'normal' } = fileInfo;
+      const { key, category, taskId, userId, metadata = {}, size = 0 } = fileInfo;
+      const priority = this.normalizePriority(fileInfo.priority);
+
+      if (!key || typeof key !== 'string') {
+        throw new Error('文件 key 必须为字符串');
+      }
 
       // 验证分类
       if (!this.config.strategies[category]) {
@@ -164,21 +188,23 @@ class FileLifecycleService {
       // 计算生命周期时间点
       const lifecycleSchedule = this.calculateLifecycleSchedule(strategy, now);
 
-      const fileRecord = {
+      const fileRecord: FileLifecycleRecordRow = {
         id: this.generateFileId(),
         key,
         category,
-        task_id: taskId,
-        user_id: userId,
+        task_id: taskId ?? null,
+        user_id: userId ?? null,
         metadata: JSON.stringify(metadata),
-        storage_class: 'Standard',
+        storage_class: fileInfo.storageClass ?? 'Standard',
         priority,
         status: 'active',
         created_at: now,
         updated_at: now,
         expires_at: new Date(now.getTime() + strategy.ttl),
+        next_transition_at: lifecycleSchedule.nextTransitionAt,
+        size,
         transitions: JSON.stringify(lifecycleSchedule.transitions),
-        auto_delete: Boolean(strategy.autoDelete)
+        auto_delete: strategy.autoDelete
       };
 
       // 保存到数据库
@@ -204,7 +230,13 @@ class FileLifecycleService {
    * @param {Object} updates - 更新内容
    * @returns {Promise<boolean>} 是否成功
    */
-  async updateFileStatus(fileId: string, updates: Record<string, unknown>): Promise<boolean> {
+  async updateFileStatus(
+    fileId: string,
+    updates: Partial<FileLifecycleRecord> & {
+      metadata?: FileMetadata;
+      transitions?: LifecycleTransitionState[] | string;
+    }
+  ): Promise<boolean> {
     try {
       const updateData: Record<string, unknown> = {
         ...updates,
@@ -213,6 +245,13 @@ class FileLifecycleService {
 
       if (updates.metadata) {
         updateData.metadata = JSON.stringify(updates.metadata);
+      }
+
+      if (updates.transitions) {
+        updateData.transitions =
+          typeof updates.transitions === 'string'
+            ? updates.transitions
+            : JSON.stringify(updates.transitions);
       }
 
       const affected = await db('file_lifecycle_records').where('id', fileId).update(updateData);
@@ -229,7 +268,7 @@ class FileLifecycleService {
    * 执行生命周期转换
    * @returns {Promise<Object>} 执行结果
    */
-  async executeLifecycleTransitions(): Promise<Record<string, unknown>> {
+  async executeLifecycleTransitions(): Promise<LifecycleTransitionExecutionResult> {
     try {
       logger.info('[FileLifecycle] 开始执行生命周期转换');
 
@@ -240,14 +279,15 @@ class FileLifecycleService {
       const errors = [];
 
       // 查询需要处理的文件
-      const filesToProcess = (await db('file_lifecycle_records')
+      const rawRecords = (await db('file_lifecycle_records')
         .where('status', 'active')
         .where('expires_at', '<=', now)
         .orWhere('next_transition_at', '<=', now)
         .limit(this.config.cleanup.batchSize)) as Record<string, unknown>[];
 
-      for (const file of filesToProcess) {
+      for (const record of rawRecords) {
         try {
+          const file = this.mapLifecycleRecord(record);
           const result = await this.processFileLifecycle(file);
           processedCount++;
 
@@ -260,12 +300,13 @@ class FileLifecycleService {
           }
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
+          const key = typeof record.key === 'string' ? record.key : 'unknown';
           errors.push({
-            fileId: file.id,
-            key: file.key,
+            fileId: typeof record.id === 'string' ? record.id : undefined,
+            key: typeof record.key === 'string' ? record.key : undefined,
             error: err.message
           });
-          logger.error(`[FileLifecycle] 处理文件失败: ${file.key}`, err);
+          logger.error(`[FileLifecycle] 处理文件失败: ${key}`, err);
         }
       }
 
@@ -275,7 +316,7 @@ class FileLifecycleService {
       this.stats.totalDeleted += deletedCount;
       this.stats.lastCleanup = now;
 
-      const result = {
+      const result: LifecycleTransitionExecutionResult = {
         success: true,
         processed: processedCount,
         transferred: transferredCount,
@@ -303,17 +344,15 @@ class FileLifecycleService {
    * @returns {Promise<Object>} 处理结果
    * @private
    */
-  async processFileLifecycle(
-    file: Record<string, unknown>
-  ): Promise<{ transferred: boolean; deleted: boolean; expired?: boolean }> {
+  private async processFileLifecycle(file: FileLifecycleRecord): Promise<LifecycleProcessResult> {
     const now = new Date();
-    const strategy = this.config.strategies[file.category] ?? {};
+    const strategy = this.config.strategies[file.category as FileCategory];
 
     // 检查是否需要删除
-    const expiresAt = file.expires_at ? new Date(file.expires_at) : now;
+    const expiresAt = file.expires_at ?? now;
 
     if (expiresAt <= now) {
-      const autoDelete = Boolean(file.auto_delete ?? file.autoDelete);
+      const autoDelete = Boolean(file.auto_delete);
       if (autoDelete) {
         await this.deleteFile(file);
         return { deleted: true, transferred: false };
@@ -325,9 +364,8 @@ class FileLifecycleService {
     }
 
     // 检查是否需要转移存储类别
-    const transitions: Record<string, unknown>[] = JSON.parse(file.transitions || '[]');
-    const nextTransition = transitions.find(
-      (t: Record<string, unknown>) => new Date(t.at as string) <= now && !t.completed
+    const nextTransition = file.transitions.find(
+      (t) => new Date(t.at) <= now && !t.completed
     );
 
     if (nextTransition) {
@@ -344,7 +382,10 @@ class FileLifecycleService {
    * @param {Object} transition - 转移配置
    * @private
    */
-  async transferFileStorage(file: Record<string, unknown>, transition: Record<string, unknown>): Promise<void> {
+  private async transferFileStorage(
+    file: FileLifecycleRecord,
+    transition: LifecycleTransitionState
+  ): Promise<void> {
     try {
       logger.info(`[FileLifecycle] 转移文件存储类别: ${file.key} -> ${transition.storageClass}`);
 
@@ -356,9 +397,7 @@ class FileLifecycleService {
       transition.completedAt = new Date().toISOString();
 
       // 更新数据库记录
-      const updatedTransitions: Record<string, unknown>[] = JSON.parse(file.transitions || '[]').map(
-        (t: Record<string, unknown>) => (t.at === transition.at ? transition : t)
-      );
+      const updatedTransitions = file.transitions.map((t) => (t.at === transition.at ? transition : t));
 
       await this.updateFileStatus(file.id, {
         storage_class: transition.storageClass,
@@ -384,7 +423,7 @@ class FileLifecycleService {
    * @param {Object} file - 文件记录
    * @private
    */
-  async deleteFile(file: Record<string, unknown>): Promise<void> {
+  private async deleteFile(file: FileLifecycleRecord): Promise<void> {
     try {
       logger.info(`[FileLifecycle] 删除过期文件: ${file.key}`);
 
@@ -408,12 +447,11 @@ class FileLifecycleService {
    * @param {Object} options - 清理选项
    * @returns {Promise<Object>} 清理结果
    */
-  async forceCleanup(options: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
-    const cleanupOptions: Record<string, unknown> = options ?? {};
-    const category = cleanupOptions.category ?? null;
-    const olderThanDays = cleanupOptions.olderThanDays ?? 7;
-    const dryRun = cleanupOptions.dryRun ?? false;
-    const batchSize = cleanupOptions.batchSize ?? 100;
+  async forceCleanup(options: LifecycleCleanupOptions = {}): Promise<LifecycleCleanupResult> {
+    const category = options.category ?? null;
+    const olderThanDays = options.olderThanDays ?? 7;
+    const dryRun = options.dryRun ?? false;
+    const batchSize = options.batchSize ?? 100;
 
     try {
       logger.info(
@@ -429,26 +467,29 @@ class FileLifecycleService {
         query = query.where('category', category);
       }
 
-      const filesToCleanup = await query.where('created_at', '<', cutoffDate).limit(batchSize);
+      const filesToCleanup = (await query
+        .where('created_at', '<', cutoffDate)
+        .limit(batchSize)) as Record<string, unknown>[];
+      const normalizedFiles = filesToCleanup.map((record) => this.mapLifecycleRecord(record));
 
       let deletedCount = 0;
       let totalSize = 0;
 
-      for (const file of filesToCleanup) {
+      for (const file of normalizedFiles) {
         try {
           if (!dryRun) {
             await this.deleteFile(file);
           }
 
           deletedCount++;
-          // TODO: 获取文件大小并累加到totalSize
+          totalSize += file.size;
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
           logger.error(`[FileLifecycle] 清理文件失败: ${file.key}`, err);
         }
       }
 
-      const result = {
+      const result: LifecycleCleanupResult = {
         success: true,
         deletedCount,
         totalSize,
@@ -472,22 +513,33 @@ class FileLifecycleService {
    * 获取生命周期统计信息
    * @returns {Promise<Object>} 统计信息
    */
-  async getLifecycleStats() {
+  async getLifecycleStats(): Promise<LifecycleStatsResponse> {
     try {
       // 获取各分类文件统计
-      const categoryStats = await db('file_lifecycle_records')
+      const categoryStatsRaw = await db('file_lifecycle_records')
         .select('category')
         .count('* as count')
         .sum('size as totalSize')
         .where('status', 'active')
         .groupBy('category');
 
+      const categoryStats = (categoryStatsRaw ?? []).map((row) => ({
+        category: row.category as FileCategory,
+        count: Number(row.count ?? 0),
+        totalSize: Number(row.totalSize ?? 0)
+      }));
+
       // 获取存储类别分布
-      const storageClassStats = await db('file_lifecycle_records')
+      const storageClassRaw = await db('file_lifecycle_records')
         .select('storage_class')
         .count('* as count')
         .where('status', 'active')
         .groupBy('storage_class');
+
+      const storageClassStats = (storageClassRaw ?? []).map((row) => ({
+        storage_class: row.storage_class as FileStorageClass,
+        count: Number(row.count ?? 0)
+      }));
 
       // 获取即将过期文件
       const expiringSoon = await db('file_lifecycle_records')
@@ -497,10 +549,10 @@ class FileLifecycleService {
         .first();
 
       return {
-        stats: this.stats,
-        categoryStats: categoryStats || [],
-        storageClassStats: storageClassStats || [],
-        expiringSoonCount: expiringSoon?.count || 0,
+        stats: { ...this.stats },
+        categoryStats,
+        storageClassStats,
+        expiringSoonCount: Number(expiringSoon?.count ?? 0),
         config: {
           cleanupInterval: this.config.cleanup.interval,
           batchSize: this.config.cleanup.batchSize
@@ -619,21 +671,20 @@ class FileLifecycleService {
    * @returns {Object} 生命周期时间表
    * @private
    */
-  calculateLifecycleSchedule(strategy: Record<string, unknown>, now: Date): Record<string, unknown> {
-    const transitionConfigs: Record<string, unknown>[] = Array.isArray(strategy.transitions)
-      ? (strategy.transitions as Record<string, unknown>[])
-      : [];
-    const transitions = transitionConfigs.map((transition: Record<string, unknown>, index: number) => ({
-      at: new Date(now.getTime() + (transition.after ?? 0)).toISOString(),
-      storageClass: transition.storageClass,
-      completed: false,
-      order: index + 1
-    }));
+  private calculateLifecycleSchedule(strategy: LifecycleStrategyConfig, now: Date): LifecycleSchedule {
+    const transitions: LifecycleTransitionState[] = strategy.transitions.map(
+      (transition: LifecycleTransitionConfig, index: number) => ({
+        at: new Date(now.getTime() + transition.after).toISOString(),
+        storageClass: transition.storageClass,
+        completed: false,
+        order: index + 1
+      })
+    );
 
     const nextTransitionAt = transitions.length > 0 ? new Date(transitions[0].at) : null;
 
     return {
-      expiresAt: new Date(now.getTime() + (strategy.ttl ?? 0)),
+      expiresAt: new Date(now.getTime() + strategy.ttl),
       transitions,
       nextTransitionAt
     };
@@ -646,7 +697,10 @@ class FileLifecycleService {
    * @returns {number} 预计节省金额
    * @private
    */
-  calculateCostSaving(file: Record<string, unknown>, transition: Record<string, unknown>): number {
+  private calculateCostSaving(
+    file: FileLifecycleRecord,
+    transition: LifecycleTransitionState
+  ): number {
     // 简化的成本计算（实际项目中会根据具体的存储定价计算）
     const sizeGB = (file.size || 0) / (1024 * 1024 * 1024);
     const daysInMonth = 30;
@@ -669,12 +723,101 @@ class FileLifecycleService {
     return dailySaving;
   }
 
+  private mapLifecycleRecord(record: Record<string, unknown>): FileLifecycleRecord {
+    const row = record as FileLifecycleRecordRow;
+
+    if (typeof row.id !== 'string' || typeof row.key !== 'string') {
+      throw new Error('Invalid file lifecycle row');
+    }
+
+    const metadata = this.safeParseJson<FileMetadata>(row.metadata, {});
+    const transitions = this.safeParseJson<LifecycleTransitionState[]>(row.transitions, []).map(
+      (transition, index) => ({
+        ...transition,
+        storageClass: this.normalizeStorageClass(transition.storageClass),
+        order: transition.order ?? index + 1,
+        completed: Boolean(transition.completed)
+      })
+    );
+
+    return {
+      id: row.id,
+      key: row.key,
+      category: this.ensureCategory(row.category),
+      task_id: row.task_id ?? null,
+      user_id: row.user_id ?? null,
+      metadata,
+      storage_class: this.normalizeStorageClass(row.storage_class),
+      priority: this.normalizePriority(row.priority),
+      status: this.normalizeStatus(row.status),
+      size: Number(row.size ?? 0),
+      created_at: this.toDateOrNow(row.created_at),
+      updated_at: this.toDateOrNow(row.updated_at),
+      expires_at: this.toOptionalDate(row.expires_at),
+      next_transition_at: this.toOptionalDate(row.next_transition_at),
+      transitions,
+      auto_delete: Boolean(row.auto_delete),
+      deleted_at: this.toOptionalDate(row.deleted_at)
+    };
+  }
+
+  private ensureCategory(category?: string | null): FileCategory {
+    const valid: FileCategory[] = ['temp', 'intermediate', 'userUpload', 'result', 'log'];
+    if (category && valid.includes(category as FileCategory)) {
+      return category as FileCategory;
+    }
+    logger.warn(`[FileLifecycle] 未知文件分类 ${category}, 默认归类为 temp`);
+    return 'temp';
+  }
+
+  private normalizeStorageClass(value?: string | null): FileStorageClass {
+    if (value === 'Standard_IA' || value === 'Archive') {
+      return value;
+    }
+    return 'Standard';
+  }
+
+  private normalizeStatus(value?: string | null): FileLifecycleRecord['status'] {
+    if (value === 'expired' || value === 'deleted') {
+      return value;
+    }
+    return 'active';
+  }
+
+  private toOptionalDate(value?: Date | string | null): Date | null {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private toDateOrNow(value?: Date | string | null): Date {
+    return this.toOptionalDate(value) ?? new Date();
+  }
+
+  private safeParseJson<T>(raw: string | null, fallback: T): T {
+    if (!raw) return fallback;
+    try {
+      return JSON.parse(raw) as T;
+    } catch (error) {
+      logger.warn('[FileLifecycle] JSON解析失败，使用默认值', { error });
+      return fallback;
+    }
+  }
+
+  private normalizePriority(priority?: string): FilePriority {
+    if (priority === 'low' || priority === 'normal' || priority === 'high') {
+      return priority;
+    }
+    return 'normal';
+  }
+
   /**
    * 生成文件ID
    * @returns {string} 文件ID
    * @private
    */
-  generateFileId(): string {
+  private generateFileId(): string {
     return crypto.randomBytes(16).toString('hex');
   }
 
@@ -690,7 +833,11 @@ class FileLifecycleService {
   /**
    * 健康检查
    */
-  async healthCheck(): Promise<Record<string, unknown>> {
+  async healthCheck(): Promise<{
+    status: 'healthy' | 'initializing';
+    stats: FileLifecycleStats;
+    timestamp: string;
+  }> {
     return {
       status: this.initialized ? 'healthy' : 'initializing',
       stats: { ...this.stats },

@@ -120,6 +120,11 @@ export interface TaskFilters {
   status?: string;
   type?: string;
   userId?: string;
+  createdRange?: {
+    start?: string;
+    end?: string;
+  };
+  [key: string]: unknown;
 }
 
 /**
@@ -382,14 +387,33 @@ class PaginationService {
   }
 
   async getTaskList(filters: TaskFilters = {}, options: Partial<OffsetPaginateOptions> = {}) {
-    const where: Record<string, unknown> = {};
-    if (filters.status) where.status = filters.status;
-    if (filters.type) where.type = filters.type;
-    if (filters.userId) where.userId = filters.userId;
+    const baseWhere: Record<string, unknown> = {};
+    if (filters.status) baseWhere.status = filters.status;
+    if (filters.type) baseWhere.type = filters.type;
+    if (filters.userId) baseWhere.userId = filters.userId;
+
+    const hasRange = Boolean(filters.createdRange?.start || filters.createdRange?.end);
+    const whereCondition = hasRange
+      ? function (this: Knex.QueryBuilder) {
+          Object.entries(baseWhere).forEach(([column, value]) => {
+            if (value !== undefined && value !== null) {
+              this.where(column, value as string);
+            }
+          });
+          const { start, end } = filters.createdRange ?? {};
+          if (start && end) {
+            this.whereBetween('created_at', [start, end]);
+          } else if (start) {
+            this.where('created_at', '>=', start);
+          } else if (end) {
+            this.where('created_at', '<=', end);
+          }
+        }
+      : baseWhere;
     return this.offsetPaginate({
       table: 'tasks',
       columns: ['id', 'userId', 'type', 'status', 'created_at', 'completed_at'],
-      where,
+      where: whereCondition,
       orderBy: [
         { column: 'created_at', direction: 'desc' },
         { column: 'id', direction: 'desc' }

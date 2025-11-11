@@ -377,12 +377,3 @@ class I18nService {
 }
 const i18nService = new I18nService();
 export default i18nService;
-
-declare global {
-  namespace Express {
-    interface Request {
-      i18n?: I18nContext;
-      cookies?: Record<string, string>;
-    }
-  }
-}

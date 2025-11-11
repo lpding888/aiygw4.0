@@ -5,7 +5,7 @@ import logger from '../utils/logger.js';
 import commissionService from './commission.service.js';
 import type { OrderStatus } from '../types/payment.types.js';
 
-type PaymentChannel = 'wx' | 'alipay';
+export type PaymentChannel = 'wx' | 'alipay';
 
 interface OrderRecord {
   id: string;
@@ -34,7 +34,7 @@ interface PaymentCallbackResponse {
   message?: string;
 }
 
-type PaymentCallbackData = {
+export type PaymentCallbackData = {
   orderId: string;
   transactionId: string;
   channel: PaymentChannel;

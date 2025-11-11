@@ -42,6 +42,10 @@ class PipelineExecutionService extends EventEmitter {
   private executions: Map<string, PipelineExecution> = new Map();
   private executionSteps: Map<string, ExecutionStep[]> = new Map();
 
+  getActiveExecutionCount(): number {
+    return this.executions.size;
+  }
+
   async createExecution(
     schemaId: string,
     inputData: Record<string, unknown>,
