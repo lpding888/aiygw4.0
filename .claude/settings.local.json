@@ -21,7 +21,13 @@
       "Bash(npm run lint:*)",
       "Bash(xargs -I {} sh -c \"echo \"\"=== {} ===\"\" && grep -n \"\"quota\"\" {} | head -5\")",
       "Bash(npx eslint:*)",
-      "Bash(cut:*)"
+      "Bash(cut:*)",
+      "Bash(npx tsc:*)",
+      "Bash(cat:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nrefactor(types): 建立统一的类型系统\n\n- 新增 file.types.ts 统一文件管理类型定义\n- 新增 nodemailer.d.ts 类型声明\n- 统一 AuthenticatedRequest 定义到 auth.middleware\n- 优化 cms-provider、kms、payment、task、mcp-endpoint 类型\n- 扩展 global.d.ts 全局类型定义\n- 修复 tsconfig.json 配置(指向正确的backend项目)\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git reset:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
