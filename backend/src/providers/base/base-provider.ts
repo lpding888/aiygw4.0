@@ -393,7 +393,7 @@ export abstract class BaseProvider implements IProvider {
         const abortHandler = () => {
           clearTimeout(timeoutId);
           const error = new Error('执行被中止');
-          (error as Record<string, string>).name = 'AbortError'; // 艹，这个name很重要！
+          error.name = 'AbortError'; // 艹，这个name很重要！
           reject(error);
         };
         signal.addEventListener('abort', abortHandler);

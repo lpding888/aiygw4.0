@@ -13,19 +13,16 @@ import { body, param, query } from 'express-validator';
 import { validate } from '../../middlewares/validate.middleware.js';
 import logger from '../../utils/logger.js';
 
-// 扩展Express Request类型以支持自定义属性
-declare global {
-  namespace Express {
-    interface Request {
-      id: string;
-      user: {
-        id: string;
-      };
-    }
-  }
-}
-
 const router = express.Router();
+
+const ensureUserId = (req: Request, res: Response): string | null => {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ success: false, error: { code: 4010, message: '未登录' } });
+    return null;
+  }
+  return userId;
+};
 
 // 频率限制
 const providerRateLimit = rateLimit({
@@ -158,6 +155,8 @@ router.get(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const userId = ensureUserId(req, res);
+      if (!userId) return;
       const { id } = req.params;
       const provider = await providerManagementService.getProvider(id);
 
@@ -207,6 +206,8 @@ router.post(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const userId = ensureUserId(req, res);
+      if (!userId) return;
       const {
         name,
         type,
@@ -233,13 +234,13 @@ router.post(
           apiKey,
           handlerKey
         },
-        req.user.id
+        userId
       );
 
       logger.info('供应商已创建', {
         providerId: provider.id,
         name: provider.name,
-        createdBy: req.user.id,
+        createdBy: userId,
         ip: req.ip
       });
 
@@ -271,18 +272,16 @@ router.put(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const userId = ensureUserId(req, res);
+      if (!userId) return;
       const { id } = req.params;
       const updateData = req.body;
 
-      const provider = await providerManagementService.updateProvider(
-        id,
-        updateData,
-        req.user.id
-      );
+      const provider = await providerManagementService.updateProvider(id, updateData, userId);
 
       logger.info('供应商已更新', {
         providerId: id,
-        updatedBy: req.user.id,
+        updatedBy: userId,
         ip: req.ip
       });
 
@@ -314,6 +313,8 @@ router.post(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const userId = ensureUserId(req, res);
+      if (!userId) return;
       const { id } = req.params;
       const result = await providerManagementService.testConnection(id);
 
@@ -321,7 +322,7 @@ router.post(
         providerId: id,
         success: result.success,
         latency: result.latency,
-        testedBy: req.user.id,
+        testedBy: userId,
         ip: req.ip
       });
 
@@ -350,6 +351,8 @@ router.post(
   }),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const userId = ensureUserId(req, res);
+      if (!userId) return;
       const { providerIds } = req.body;
       type ProviderTestResult = {
         id: string;
@@ -410,7 +413,7 @@ router.post(
         totalCount,
         successCount,
         failedCount: totalCount - successCount,
-        testedBy: req.user.id,
+        testedBy: userId,
         ip: req.ip
       });
 
@@ -450,6 +453,8 @@ router.patch(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const userId = ensureUserId(req, res);
+      if (!userId) return;
       const { id } = req.params;
       const { enabled } = req.body;
 
@@ -458,7 +463,7 @@ router.patch(
       logger.info('供应商状态已切换', {
         providerId: id,
         enabled,
-        updatedBy: req.user.id,
+        updatedBy: userId,
         ip: req.ip
       });
 
@@ -490,13 +495,15 @@ router.delete(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const userId = ensureUserId(req, res);
+      if (!userId) return;
       const { id } = req.params;
 
       // 这里需要在providerManagementService中实现delete方法
       // 暂时返回成功
       logger.warn('供应商删除功能待实现', {
         providerId: id,
-        deletedBy: req.user.id,
+        deletedBy: userId,
         ip: req.ip
       });
 

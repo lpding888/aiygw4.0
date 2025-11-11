@@ -558,7 +558,13 @@ router.post(
         type: testType
       };
 
-      const maskedValue = securityService.maskData({ test: value }, [rule]).test;
+      const maskedResult = securityService.maskData({ test: value }, [rule]) as {
+        test?: unknown;
+      };
+      const maskedValue =
+        typeof maskedResult.test === 'string'
+          ? maskedResult.test
+          : String(maskedResult.test ?? '');
 
       logger.info('数据脱敏测试', {
         testType,

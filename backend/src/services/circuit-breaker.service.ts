@@ -1,7 +1,16 @@
 import logger from '../utils/logger.js';
 import cacheService from './cache.service.js';
 
-type CircuitBreakerConfig = Record<string, unknown>;
+interface CircuitBreakerConfig {
+  failureThreshold?: number;
+  resetTimeout?: number;
+  monitoringPeriod?: number;
+  halfOpenMaxCalls?: number;
+  successThreshold?: number;
+  batchSize?: number;
+}
+
+type CircuitBreakerRuntimeConfig = Required<Omit<CircuitBreakerConfig, 'batchSize'>>;
 type OperationFn<T = unknown> = () => Promise<T> | T;
 type FallbackFn<T = unknown> = (error: Error) => Promise<T> | T;
 type BatchOperation<T = unknown> = OperationFn<T>;
@@ -26,13 +35,7 @@ class CircuitBreakerService {
     activeBreakers: number;
   };
 
-  private defaultConfig: {
-    failureThreshold: number;
-    resetTimeout: number;
-    monitoringPeriod: number;
-    halfOpenMaxCalls: number;
-    successThreshold: number;
-  };
+  private defaultConfig: Required<CircuitBreakerConfig>;
 
   constructor() {
     this.circuitBreakers = new Map();
@@ -49,7 +52,8 @@ class CircuitBreakerService {
       resetTimeout: 60000, // 重置超时（60秒）
       monitoringPeriod: 10000, // 监控周期（10秒）
       halfOpenMaxCalls: 3, // 半开状态最大调用数
-      successThreshold: 3 // 成功阈值（半开->关闭）
+      successThreshold: 3, // 成功阈值（半开->关闭）
+      batchSize: 5
     };
   }
 
@@ -61,9 +65,10 @@ class CircuitBreakerService {
    */
   getCircuitBreaker(name: string, config: CircuitBreakerConfig = {}): CircuitBreaker {
     if (!this.circuitBreakers.has(name)) {
+      const { batchSize: _batchSize, ...breakerOverrides } = config;
       const circuitBreaker = new CircuitBreaker(name, {
         ...this.defaultConfig,
-        ...config
+        ...breakerOverrides
       });
 
       this.circuitBreakers.set(name, circuitBreaker);
@@ -159,7 +164,7 @@ class CircuitBreakerService {
   ): Promise<Array<T | { error: string }>> {
     const circuitBreaker = this.getCircuitBreaker(name, config);
     const results: Array<T | { error: string }> = [];
-    const batchSize = config.batchSize || 5;
+    const batchSize = config.batchSize ?? this.defaultConfig.batchSize;
 
     try {
       // 检查熔断器状态
@@ -420,7 +425,7 @@ class CircuitBreakerService {
 class CircuitBreaker {
   private name: string;
 
-  private config: CircuitBreakerConfig;
+  private config: CircuitBreakerRuntimeConfig;
 
   private state: 'closed' | 'open' | 'half-open';
 
@@ -440,7 +445,7 @@ class CircuitBreaker {
     successes: number;
   };
 
-  constructor(name: string, config: CircuitBreakerConfig) {
+  constructor(name: string, config: CircuitBreakerRuntimeConfig) {
     this.name = name;
     this.config = config;
 

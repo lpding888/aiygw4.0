@@ -2,17 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import cacheService from '../services/cache.service.js';
 import logger from '../utils/logger.js';
 import crypto from 'crypto';
-
-/**
- * 艹！定义用户认证后的Request类型
- */
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    role?: string;
-    [key: string]: unknown;
-  };
-}
+import type { AuthRequest } from './auth.middleware.js';
 
 interface ResponseCacheOptions {
   ttl?: number;
@@ -27,9 +17,9 @@ interface ResponseCacheOptions {
 /**
  * 扩展 Response 类型，包含自定义 json 方法
  */
-interface ResponseWithCustomJson extends Response {
+type ResponseWithCustomJson = Response & {
   json: (data: unknown) => Response;
-}
+};
 
 class CacheMiddleware {
   responseCache(
@@ -98,14 +88,14 @@ class CacheMiddleware {
       ttl,
       namespace,
       keyGenerator: (req) => {
-        const authReq = req as AuthenticatedRequest;
+        const authReq = req as AuthRequest;
         const userId =
           authReq.user?.id ||
           String((req.params as Record<string, unknown>).userId || '') ||
           String((req.query as Record<string, unknown>).userId || '');
         return `user:${userId}:${req.originalUrl}`;
       },
-      condition: (req) => Boolean((req as AuthenticatedRequest).user)
+      condition: (req) => Boolean((req as AuthRequest).user)
     });
   }
 
@@ -115,12 +105,12 @@ class CacheMiddleware {
       ttl,
       namespace,
       keyGenerator: (req) => {
-        const adminId = (req as AuthenticatedRequest).user?.id;
+        const adminId = (req as AuthRequest).user?.id;
         const path = req.originalUrl;
         const query = JSON.stringify(req.query);
         return `admin:${adminId}:${path}:${query}`;
       },
-      condition: (req) => (req as AuthenticatedRequest).user?.role === 'admin'
+      condition: (req) => (req as AuthRequest).user?.role === 'admin'
     });
   }
 
@@ -146,7 +136,7 @@ class CacheMiddleware {
       ttl,
       namespace,
       keyGenerator: (req) => {
-        const userId = (req as AuthenticatedRequest).user?.id;
+        const userId = (req as AuthRequest).user?.id;
         const path = req.originalUrl;
         const query = JSON.stringify(req.query);
         return `stats:${userId}:${path}:${query}`;
@@ -166,7 +156,7 @@ class CacheMiddleware {
   ): string {
     try {
       const keyComponents: string[] = [req.method.toLowerCase(), req.path];
-      const authReq = req as AuthenticatedRequest;
+      const authReq = req as AuthRequest;
 
       if (authReq.user?.id) {
         keyComponents.push(`user:${authReq.user.id}`);

@@ -10,6 +10,18 @@ import logger from '../../utils/logger.js';
 
 const router = express.Router();
 
+const normalizeTags = (value: unknown): string[] | undefined => {
+  if (!value) return undefined;
+  if (Array.isArray(value)) {
+    const result = value.filter((tag): tag is string => typeof tag === 'string');
+    return result.length ? result : undefined;
+  }
+  if (typeof value === 'string') {
+    return [value];
+  }
+  return undefined;
+};
+
 // 频率限制
 const promptRateLimit = rateLimit({
   windowMs: 60 * 1000, // 1分钟
@@ -195,8 +207,8 @@ router.get(
         status?: string;
         category?: string;
         complexity?: string;
-        sortBy?: string;
-        sortOrder?: string;
+        sortBy?: 'created_at' | 'updated_at' | 'used_count' | 'avg_rating';
+        sortOrder?: 'asc' | 'desc';
         tags?: string[];
       };
       const filters: TemplateFilters = {
@@ -207,10 +219,23 @@ router.get(
       if (status) filters.status = status as string;
       if (category) filters.category = category as string;
       if (complexity) filters.complexity = complexity as string;
-      if (sortBy) filters.sortBy = sortBy as string;
-      if (sortOrder) filters.sortOrder = sortOrder as string;
-      if (tags) {
-        filters.tags = Array.isArray(tags) ? tags : [tags as string];
+      const allowedSortBy: TemplateFilters['sortBy'][] = [
+        'created_at',
+        'updated_at',
+        'used_count',
+        'avg_rating'
+      ];
+      if (sortBy && allowedSortBy.includes(sortBy as TemplateFilters['sortBy'])) {
+        filters.sortBy = sortBy as TemplateFilters['sortBy'];
+      }
+
+      if (sortOrder && (sortOrder === 'asc' || sortOrder === 'desc')) {
+        filters.sortOrder = sortOrder;
+      }
+
+      const parsedTags = normalizeTags(tags);
+      if (parsedTags) {
+        filters.tags = parsedTags;
       }
 
       const result = await promptTemplateService.getTemplates(filters);
@@ -246,8 +271,9 @@ router.get(
       };
       const filters: SearchFilters = { limit: parseInt(limit as string) };
       if (category) filters.category = category as string;
-      if (tags) {
-        filters.tags = Array.isArray(tags) ? tags : [tags as string];
+      const parsedSearchTags = normalizeTags(tags);
+      if (parsedSearchTags) {
+        filters.tags = parsedSearchTags;
       }
 
       const templates = await promptTemplateService.searchTemplates(query as string, filters);

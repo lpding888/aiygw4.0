@@ -16,6 +16,9 @@ interface TaskStatusPayload {
 }
 
 interface RunningHubResponse {
+  taskId?: string;
+  status?: string;
+  outputs?: string[];
   data?: {
     data?: {
       taskId?: string;

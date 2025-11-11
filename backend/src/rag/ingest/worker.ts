@@ -93,7 +93,9 @@ async function processIngestJob(job: JobProcessor) {
     });
 
     await job.updateProgress(20);
-    const parseResult = await parser.parse(content, format as 'markdown' | 'html' | 'pdf' | 'text');
+    const normalizedFormat: 'markdown' | 'html' | 'pdf' =
+      format === 'html' || format === 'pdf' ? format : 'markdown';
+    const parseResult = await parser.parse(content, normalizedFormat);
     logger.info(
       `[IngestWorker] 解析完成: documentId=${documentId} length=${parseResult.metadata.length}`
     );

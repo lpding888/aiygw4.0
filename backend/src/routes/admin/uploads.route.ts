@@ -14,19 +14,16 @@ import cosSTSService from '../../services/cos-sts.service.js';
 import { authenticate as authenticateToken } from '../../middlewares/auth.middleware.js';
 import logger from '../../utils/logger.js';
 
-// 扩展Express Request类型以支持自定义属性
-declare global {
-  namespace Express {
-    interface Request {
-      id: string;
-      user: {
-        id: string;
-      };
-    }
-  }
-}
-
 const router = express.Router();
+
+const ensureUserId = (req: Request, res: Response): string | null => {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ success: false, error: { code: 4010, message: '未登录' } });
+    return null;
+  }
+  return userId;
+};
 
 /**
  * 验证中间件
@@ -70,7 +67,8 @@ router.post(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user.id;
+      const userId = ensureUserId(req, res);
+      if (!userId) return;
       const { action = 'upload', prefix, durationSeconds } = req.body;
 
       logger.info(`[UploadRoute] 获取STS临时密钥: userId=${userId} action=${action}`);
@@ -118,7 +116,8 @@ router.post(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user.id;
+      const userId = ensureUserId(req, res);
+      if (!userId) return;
       const { key, size, etag, metadata = {} } = req.body;
 
       logger.info(`[UploadRoute] 上传回调: userId=${userId} key=${key} size=${size}`);
@@ -178,7 +177,8 @@ router.get(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user.id;
+      const userId = ensureUserId(req, res);
+      if (!userId) return;
       const { prefix = `user-${userId}/`, maxKeys = 100, marker = '' } = req.query;
 
       logger.info(`[UploadRoute] 获取文件列表: userId=${userId} prefix=${prefix}`);
@@ -257,7 +257,8 @@ router.post(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user.id;
+      const userId = ensureUserId(req, res);
+      if (!userId) return;
       const { key, type, expires = 3600 } = req.body;
 
       logger.info(`[UploadRoute] 生成签名URL: userId=${userId} key=${key} type=${type}`);

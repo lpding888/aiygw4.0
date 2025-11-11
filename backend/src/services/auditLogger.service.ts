@@ -20,9 +20,10 @@ interface RequestUser {
  */
 function extractRequestInfo(req?: Request) {
   const user = (req as Request & { user?: RequestUser })?.user;
+  const parsedUserId = user?.id !== undefined ? Number(user.id) : undefined;
 
   return {
-    user_id: user?.id,
+    user_id: Number.isFinite(parsedUserId) ? (parsedUserId as number) : undefined,
     user_name: user?.name || user?.email,
     ip_address: req?.ip || (req?.connection as unknown as { remoteAddress?: string })?.remoteAddress,
     user_agent: req?.get('user-agent')

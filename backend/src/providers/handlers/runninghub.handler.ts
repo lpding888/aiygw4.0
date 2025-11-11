@@ -63,7 +63,8 @@ export class RunningHubProvider extends BaseProvider {
       return '输入参数必须是对象';
     }
 
-    const { workflowId, apiKey, params } = input as RunningHubInput;
+    const payload = input as RunningHubInput;
+    const { workflowId, apiKey, params, pollInterval, maxPollTime } = payload;
 
     // 校验workflowId
     if (!workflowId || typeof workflowId !== 'string') {
@@ -81,14 +82,14 @@ export class RunningHubProvider extends BaseProvider {
     }
 
     // 校验轮询配置（可选）
-    if (input.pollInterval !== undefined) {
-      if (typeof input.pollInterval !== 'number' || input.pollInterval < 1000) {
+    if (pollInterval !== undefined) {
+      if (typeof pollInterval !== 'number' || pollInterval < 1000) {
         return 'pollInterval必须是数字且不小于1000ms';
       }
     }
 
-    if (input.maxPollTime !== undefined) {
-      if (typeof input.maxPollTime !== 'number' || input.maxPollTime < 10000) {
+    if (maxPollTime !== undefined) {
+      if (typeof maxPollTime !== 'number' || maxPollTime < 10000) {
         return 'maxPollTime必须是数字且不小于10000ms';
       }
     }

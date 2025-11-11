@@ -179,6 +179,9 @@ export class ScfProvider extends BaseProvider {
       });
 
       // 2. 构建调用参数
+      const clientContext =
+        typeof params.payload === 'string' ? params.payload : JSON.stringify(params.payload);
+
       const invokeParams: Record<string, unknown> = {
         FunctionName: params.functionName,
         Namespace: params.namespace || 'default',
@@ -187,15 +190,14 @@ export class ScfProvider extends BaseProvider {
         InvocationType: params.invokeType === 'sync' ? 'RequestResponse' : 'Event',
         LogType: params.logType || 'None',
         // 艹，payload需要转成JSON字符串（如果不是字符串的话）
-        ClientContext:
-          typeof params.payload === 'string' ? params.payload : JSON.stringify(params.payload)
+        ClientContext: clientContext
       };
 
       this.logger.debug(`[${this.key}] SCF调用参数`, {
         taskId: context.taskId,
         invokeParams: {
           ...invokeParams,
-          ClientContext: `${invokeParams.ClientContext.substring(0, 100)}...` // 只打印前100字符
+          ClientContext: `${clientContext.substring(0, 100)}...` // 只打印前100字符
         }
       });
 
@@ -253,38 +255,49 @@ export class ScfProvider extends BaseProvider {
    * @returns 解析后的结果
    */
   private parseScfResponse(response: Record<string, unknown>, invokeType: 'sync' | 'async'): unknown {
+    const scfResponse = response as {
+      RequestId?: string;
+      Result?: string | (Record<string, unknown> & { FunctionRequestId?: string; RetMsg?: string });
+    };
+
     // 异步调用没有返回结果
     if (invokeType === 'async') {
       return {
         message: '异步调用已提交',
-        requestId: response.RequestId
+        requestId: scfResponse.RequestId
       };
     }
 
     // 同步调用需要解析Result字段
-    if (!response.Result) {
+    if (!scfResponse.Result) {
       return null;
     }
 
     try {
       // 艹，Result是JSON字符串，需要解析
-      const resultStr = response.Result.FunctionRequestId
-        ? response.Result.RetMsg // 老版本API
-        : response.Result; // 新版本API
+      const resultPayload = scfResponse.Result;
+      const resultValue =
+        typeof resultPayload === 'object' && resultPayload !== null && 'FunctionRequestId' in resultPayload
+          ? (resultPayload as { RetMsg?: string }).RetMsg
+          : resultPayload;
 
       // 如果Result是对象，直接返回
-      if (typeof resultStr === 'object') {
-        return resultStr;
+      if (typeof resultValue === 'object' && resultValue !== null) {
+        return resultValue;
       }
 
       // 尝试解析JSON
-      return JSON.parse(resultStr);
+      if (typeof resultValue === 'string') {
+        return JSON.parse(resultValue);
+      }
+
+      return resultValue;
     } catch (error) {
       // 解析失败，返回原始字符串
       this.logger.warn(`[${this.key}] 无法解析SCF返回结果为JSON`, {
-        result: response.Result
+        result: scfResponse.Result
       });
-      return response.Result;
+      return scfResponse.Result;
     }
   }
 

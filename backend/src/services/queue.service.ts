@@ -3,6 +3,7 @@ import { Redis as IORedis } from 'ioredis';
 import { redisConfig } from '../config/redis.js';
 import pLimit from 'p-limit';
 import logger from '../utils/logger.js';
+import type { QueuesHealthReport } from './health.service.js';
 
 interface JobData {
   [key: string]: unknown;
@@ -366,7 +367,7 @@ class QueueService {
     }
   }
 
-  public async healthCheck() {
+  public async healthCheck(): Promise<QueuesHealthReport> {
     try {
       const queueStats = await this.getAllQueueStats();
       const activeQueues = Object.keys(queueStats.queues).length;
@@ -387,7 +388,11 @@ class QueueService {
     } catch (error: unknown) {
       const err = error as Error;
       logger.error('[QueueService] 健康检查失败', error);
-      return { status: 'unhealthy', error: err?.message, timestamp: new Date().toISOString() };
+      return {
+        status: 'unhealthy',
+        error: err?.message,
+        timestamp: new Date().toISOString()
+      };
     }
   }
 

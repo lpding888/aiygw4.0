@@ -5,28 +5,18 @@ import {
   ERROR_CODES,
   ERROR_CATEGORIES,
   ERROR_SEVERITY,
-  ERROR_METADATA
+  ERROR_METADATA,
+  type ErrorCode
 } from '../config/error-codes.js';
+import type { SupportedLanguageCode } from '../config/i18n-messages.js';
 import AppError from '../utils/AppError.js';
 
-// 扩展Request类型以支持i18n和user
-declare global {
-  namespace Express {
-    interface Request {
-      i18n?: {
-        getErrorMessage?: (code: number) => string;
-        getMessage?: (key: string) => string;
-        locale?: string;
-      };
-      user?: {
-        id: string;
-      };
-      id?: string;
-    }
-  }
-}
-
 const router = Router();
+
+const resolveLocale = (req: Request): SupportedLanguageCode => {
+  const locale = req.i18n?.locale;
+  return locale === 'zh-CN' || locale === 'ja-JP' ? locale : 'en-US';
+};
 
 // GET /stats - 错误统计
 router.get('/stats', authenticate, requireRole('admin'), (req: Request, res: Response) => {
@@ -76,7 +66,7 @@ router.get('/codes', authenticate, requireRole('admin'), (req: Request, res: Res
     });
   } catch (error: unknown) {
     const appError = AppError.fromError(error, ERROR_CODES.INTERNAL_SERVER_ERROR);
-    const locale = req.i18n?.locale ?? 'en';
+    const locale = resolveLocale(req);
     res.status(appError.statusCode).json(appError.toJSON(locale));
   }
 });
@@ -90,7 +80,7 @@ router.post('/reset-stats', authenticate, requireRole('admin'), (req: Request, r
     res.json({ success: true, message, timestamp: new Date().toISOString() });
   } catch (error: unknown) {
     const appError = AppError.fromError(error, ERROR_CODES.INTERNAL_SERVER_ERROR);
-    const locale = req.i18n?.locale ?? 'en';
+    const locale = resolveLocale(req);
     res.status(appError.statusCode).json(appError.toJSON(locale));
   }
 });
@@ -108,11 +98,11 @@ router.post('/test', authenticate, requireRole('admin'), (req: Request, res: Res
         field: 'code',
         reason: 'Code must be a valid error code number'
       });
-      const locale = req.i18n?.locale ?? 'en';
+      const locale = resolveLocale(req);
       res.status(error.statusCode).json(error.toJSON(locale));
       return;
     }
-    const testError = AppError.custom(code, message ?? '', {
+    const testError = AppError.custom(code as ErrorCode, message ?? '', {
       ...context,
       testMode: true,
       requestedBy: req.user?.id,
@@ -128,20 +118,12 @@ router.post('/test', authenticate, requireRole('admin'), (req: Request, res: Res
 // GET /export - 导出CSV
 router.get('/export', authenticate, requireRole('admin'), (req: Request, res: Response) => {
   try {
-    interface ErrorStat {
-      code: number;
-      category: string;
-      severity: string;
-      count: number;
-      lastOccurrence: Date | string;
-    }
-
     const stats = enhancedErrorHandler.getErrorStats();
     const csvHeaders = ['Code', 'Category', 'Severity', 'Count', 'Last Occurrence', 'Message'];
-    const rows = (stats.topErrors ?? []).map((e: ErrorStat) => [
+    const rows = (stats.topErrors ?? []).map((e) => [
       e.code,
-      e.category,
-      e.severity,
+      e.category ?? 'unknown',
+      e.severity ?? 'unknown',
       e.count,
       new Date(e.lastOccurrence).toISOString(),
       ''
@@ -157,7 +139,7 @@ router.get('/export', authenticate, requireRole('admin'), (req: Request, res: Re
     res.send(csv);
   } catch (error: unknown) {
     const appError = AppError.fromError(error, ERROR_CODES.INTERNAL_SERVER_ERROR);
-    const locale = req.i18n?.locale ?? 'en';
+    const locale = resolveLocale(req);
     res.status(appError.statusCode).json(appError.toJSON(locale));
   }
 });

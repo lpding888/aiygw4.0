@@ -36,15 +36,21 @@ type UsageFilterOptions = {
   offset?: number;
 };
 
-type UsageRecord = {
-  userId?: string;
+type FeatureUsageStatus = 'success' | 'failed' | 'partial';
+
+type FeatureMetricValue = string | number | boolean | null;
+
+type FeatureUsageMetrics = Record<string, FeatureMetricValue>;
+
+type FeatureUsageError = Record<string, unknown> | Record<string, unknown>[] | null;
+
+interface FeatureUsageRecordInput {
   usageCount?: number;
-  usageDate?: string | Date;
   cost?: number;
-  metrics?: Record<string, unknown>;
-  status?: 'success' | 'failed';
-  errorDetails?: unknown;
-};
+  metrics?: FeatureUsageMetrics;
+  status?: FeatureUsageStatus;
+  errorDetails?: FeatureUsageError;
+}
 
 type AccessContext = {
   userId?: string;
@@ -57,13 +63,25 @@ type AccessContext = {
   [key: string]: unknown;
 };
 
-type UsageStatsOptions = {
+interface FeatureUsageStatsOptions {
   featureKey?: string;
   userId?: string;
   startDate?: string | Date;
   endDate?: string | Date;
   groupBy?: 'feature' | 'user' | 'day';
-};
+}
+
+interface FeatureUsageStatSummary {
+  featureId: string;
+  featureKey: string;
+  featureName: string;
+  category: string;
+  usageDate: string | null;
+  userId: string | null;
+  totalUsage: number;
+  totalCost: number;
+  activeDays: number;
+}
 
 type FeatureDefinitionRecord = Record<string, any>;
 type FeatureDefinitionCacheEntry = FeatureDefinitionRecord & {
@@ -417,7 +435,7 @@ class FeatureCatalogService {
 
       // 尝试从缓存获取
       const cached = await cacheService.get(cacheKey);
-      if (cached) {
+      if (Array.isArray(cached)) {
         return cached;
       }
 
@@ -505,7 +523,7 @@ class FeatureCatalogService {
 
       // 尝试从缓存获取
       const cached = await cacheService.get(cacheKey);
-      if (cached) {
+      if (Array.isArray(cached)) {
         return cached;
       }
 
@@ -641,6 +659,22 @@ class FeatureCatalogService {
     }
   }
 
+  private parseUsageMetrics(raw: unknown): FeatureUsageMetrics {
+    if (!raw) return {};
+    if (typeof raw === 'string') {
+      try {
+        return JSON.parse(raw) as FeatureUsageMetrics;
+      } catch (error) {
+        logger.warn('[FeatureCatalogService] 解析 usage_metrics 失败，返回空对象', { error });
+        return {};
+      }
+    }
+    if (typeof raw === 'object') {
+      return raw as FeatureUsageMetrics;
+    }
+    return {};
+  }
+
   /**
    * 记录功能使用统计
    * @param {string} featureKey - 功能key
@@ -650,7 +684,7 @@ class FeatureCatalogService {
   async recordFeatureUsage(
     featureKey: string,
     userId: string,
-    usageData: UsageRecord = {}
+    usageData: FeatureUsageRecordInput = {}
   ): Promise<void> {
     try {
       const feature = await this.getFeatureByKey(featureKey);
@@ -660,9 +694,9 @@ class FeatureCatalogService {
 
       const {
         usageCount = 1,
-        metrics = {},
+        metrics = {} as FeatureUsageMetrics,
         cost = 0,
-        status = 'success',
+        status = 'success' as FeatureUsageStatus,
         errorDetails = null
       } = usageData;
 
@@ -680,13 +714,14 @@ class FeatureCatalogService {
           .first();
 
         if (existingStat) {
+          const existingMetrics = this.parseUsageMetrics(existingStat.usage_metrics);
           // 更新现有记录
           await trx('feature_usage_stats')
             .where('id', existingStat.id)
             .update({
               usage_count: existingStat.usage_count + usageCount,
               usage_metrics: JSON.stringify({
-                ...JSON.parse(String(existingStat.usage_metrics ?? '{}')),
+                ...existingMetrics,
                 ...metrics
               }),
               total_cost: Number(existingStat.total_cost ?? 0) + Number(cost ?? 0),
@@ -725,7 +760,7 @@ class FeatureCatalogService {
    * @param {Object} options - 查询选项
    * @returns {Array} 统计数据
    */
-  async getUsageStats(options: UsageStatsOptions = {}): Promise<any[]> {
+  async getUsageStats(options: FeatureUsageStatsOptions = {}): Promise<FeatureUsageStatSummary[]> {
     try {
       const { featureKey, userId, startDate, endDate, groupBy = 'day' } = options;
 
@@ -781,7 +816,19 @@ class FeatureCatalogService {
 
       const stats = await query.orderBy('fus.usage_date', 'desc');
 
-      return stats;
+      return stats.map((row) => ({
+        featureId: row.feature_id,
+        featureKey: row.feature_key,
+        featureName: row.feature_name,
+        category: row.category,
+        usageDate: row.usage_date
+          ? new Date(row.usage_date).toISOString().split('T')[0]
+          : null,
+        userId: row.user_id ?? null,
+        totalUsage: Number(row.total_usage ?? 0),
+        totalCost: Number(row.total_cost ?? 0),
+        activeDays: Number(row.active_days ?? 0)
+      }));
     } catch (error) {
       logger.error('[FeatureCatalogService] Failed to get usage stats:', error);
       throw AppError.fromError(error, ERROR_CODES.INTERNAL_SERVER_ERROR);

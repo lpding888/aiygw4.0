@@ -12,7 +12,7 @@ interface IAuditImageResult {
 interface IAuditTaskResult {
   pass: boolean;
   reasons?: string[];
-  auditResults?: Record<string, unknown>[];
+  auditResults?: IAuditImageResult[];
 }
 
 interface IImsModerationResponse {
@@ -24,6 +24,8 @@ interface ImsClientType {
   ImageModeration(params: Record<string, string>): Promise<IImsModerationResponse>;
 }
 
+type COSClient = InstanceType<typeof COS>;
+
 class ContentAuditService {
   private readonly config = {
     secretId: process.env.TENCENT_SECRET_ID,
@@ -33,7 +35,7 @@ class ContentAuditService {
   };
 
   private imsClient: ImsClientType;
-  private cos: COS;
+  private cos: COSClient;
 
   constructor() {
     const tencentCloudSdk = tencentcloud as Record<string, unknown>;

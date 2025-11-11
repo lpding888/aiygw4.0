@@ -55,7 +55,11 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
       );
 
       // 解析查询变量
-      const resolvedQuery = this.resolveValue(config.query, context.flowContext.state);
+      const resolvedQueryRaw = this.resolveValue(config.query, context.flowContext.state);
+      const resolvedQuery =
+        typeof resolvedQueryRaw === 'string'
+          ? resolvedQueryRaw
+          : String(resolvedQueryRaw ?? '');
 
       // 执行检索
       const results = await this.retrieve(
@@ -103,13 +107,7 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
    */
   validate(config: NodeConfig): boolean {
     try {
-      const kbConfig = config.config as KBRetrieveConfig;
-
-      if (!kbConfig.query) {
-        logger.error('[KBRetrieve] 缺少query');
-        return false;
-      }
-
+      this.parseConfig(config);
       return true;
     } catch (error) {
       logger.error('[KBRetrieve] 配置验证失败:', error);
@@ -122,7 +120,30 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
    * @private
    */
   private parseConfig(node: NodeConfig): KBRetrieveConfig {
-    return node.config as KBRetrieveConfig;
+    const rawConfig = node.config as Record<string, unknown> | undefined;
+    if (!rawConfig || typeof rawConfig !== 'object') {
+      throw new Error('KB检索配置无效');
+    }
+
+    const query = rawConfig.query;
+    if (typeof query !== 'string' || query.trim().length === 0) {
+      throw new Error('KB检索 query 不能为空');
+    }
+
+    const kbId = typeof rawConfig.kbId === 'string' ? rawConfig.kbId : undefined;
+    const topK = typeof rawConfig.topK === 'number' ? rawConfig.topK : undefined;
+    const filters = (rawConfig.filters && typeof rawConfig.filters === 'object'
+      ? (rawConfig.filters as Record<string, unknown>)
+      : undefined) ?? {};
+    const outputKey = typeof rawConfig.outputKey === 'string' ? rawConfig.outputKey : undefined;
+
+    return {
+      query,
+      kbId,
+      topK,
+      filters,
+      outputKey
+    };
   }
 
   /**
@@ -179,7 +200,8 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
     if (typeof value === 'string') {
       return value.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
         const resolved = this.getNestedValue(state, path.trim());
-        return resolved !== undefined ? resolved : match;
+        const replacement = resolved !== undefined ? resolved : match;
+        return typeof replacement === 'string' ? replacement : String(replacement);
       });
     }
     return value;

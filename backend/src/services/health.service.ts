@@ -62,8 +62,8 @@ async function checkRedis(): Promise<{ ok: boolean; latencyMs?: number; error?: 
   }
 }
 
-async function checkQueues() {
-  return queueService.healthCheck();
+async function checkQueues(): Promise<QueuesHealthReport> {
+  return (await queueService.healthCheck()) as QueuesHealthReport;
 }
 
 function checkCron(): CronStatus {

@@ -151,23 +151,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
    */
   validate(config: NodeConfig): boolean {
     try {
-      const mcpConfig = config.config as MCPToolCallConfig;
-
-      if (!mcpConfig.mcpEndpointRef) {
-        logger.error('[MCPToolCall] 缺少mcpEndpointRef');
-        return false;
-      }
-
-      if (!mcpConfig.toolName) {
-        logger.error('[MCPToolCall] 缺少toolName');
-        return false;
-      }
-
-      if (!mcpConfig.parameters || typeof mcpConfig.parameters !== 'object') {
-        logger.error('[MCPToolCall] parameters必须是对象');
-        return false;
-      }
-
+      this.parseConfig(config);
       return true;
     } catch (error) {
       logger.error('[MCPToolCall] 配置验证失败:', error);
@@ -179,17 +163,6 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
    * 解析节点配置
    * @private
    */
-  private parseConfig(node: NodeConfig): MCPToolCallConfig {
-    const config = node.config as MCPToolCallConfig;
-
-    return {
-      mcpEndpointRef: config.mcpEndpointRef,
-      toolName: config.toolName,
-      parameters: config.parameters || {},
-      outputKey: config.outputKey,
-      validateSchema: config.validateSchema !== false // 默认true
-    };
-  }
 
   /**
    * 获取MCP端点配置
@@ -235,7 +208,11 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
       // 解析 {{variable}} 模板
       return value.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
         const resolved = this.getNestedValue(state, path.trim());
-        return resolved !== undefined ? resolved : match;
+        const replacement = resolved !== undefined ? resolved : match;
+        if (replacement === null || replacement === undefined) {
+          return '';
+        }
+        return typeof replacement === 'string' ? replacement : String(replacement);
       });
     }
 
@@ -252,6 +229,43 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
     }
 
     return value;
+  }
+
+  private parseConfig(node: NodeConfig): MCPToolCallConfig {
+    const rawConfig = node.config as Record<string, unknown> | undefined;
+    if (!rawConfig || typeof rawConfig !== 'object') {
+      throw this.createError('INVALID_CONFIG', 'MCP工具配置不能为空', NodeErrorType.INVALID_CONFIG);
+    }
+
+    const mcpEndpointRef = rawConfig.mcpEndpointRef;
+    if (typeof mcpEndpointRef !== 'string' || mcpEndpointRef.trim().length === 0) {
+      throw this.createError(
+        'MISSING_ENDPOINT_REF',
+        '缺少mcpEndpointRef配置',
+        NodeErrorType.INVALID_CONFIG
+      );
+    }
+
+    const toolName = rawConfig.toolName;
+    if (typeof toolName !== 'string' || toolName.trim().length === 0) {
+      throw this.createError('MISSING_TOOL_NAME', '缺少toolName配置', NodeErrorType.INVALID_CONFIG);
+    }
+
+    const parameters =
+      rawConfig.parameters && typeof rawConfig.parameters === 'object'
+        ? (rawConfig.parameters as Record<string, unknown>)
+        : {};
+
+    const outputKey = typeof rawConfig.outputKey === 'string' ? rawConfig.outputKey : undefined;
+    const validateSchema = rawConfig.validateSchema === undefined ? true : Boolean(rawConfig.validateSchema);
+
+    return {
+      mcpEndpointRef,
+      toolName,
+      parameters,
+      outputKey,
+      validateSchema
+    };
   }
 
   /**

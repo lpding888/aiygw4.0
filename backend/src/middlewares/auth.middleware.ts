@@ -64,11 +64,12 @@ function normalizeUserPayload(payload: unknown): UserPayload | null {
  * JWT认证中间件
  */
 export async function authenticate(
-  req: AuthRequest,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
   try {
+    const authReq = req as AuthRequest;
     // 获取token
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -83,7 +84,7 @@ export async function authenticate(
     }
 
     const token = authHeader.substring(7);
-    req.token = token; // 保存原始token供其他中间件使用
+    authReq.token = token; // 保存原始token供其他中间件使用
 
     // 验证Access Token
     const decoded = tokenService.verifyAccessToken(token);
@@ -128,8 +129,8 @@ export async function authenticate(
 
     // 将用户信息附加到请求对象
     // 艹，注意decoded.role可能是string需要转换为UserRole！
-    req.userId = normalizedUser.id;
-    req.user = normalizedUser;
+    authReq.userId = normalizedUser.id;
+    authReq.user = normalizedUser;
 
     logger.debug(
       `[AuthMiddleware] 用户认证成功: userId=${normalizedUser.id}, role=${normalizedUser.role}`
@@ -164,15 +165,16 @@ export async function authenticate(
  * 可选认证中间件(用于某些接口既可登录也可不登录访问)
  */
 export async function optionalAuthenticate(
-  req: AuthRequest,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
   try {
+    const authReq = req as AuthRequest;
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
-      req.token = token;
+      authReq.token = token;
 
       // 尝试验证token
       const decoded = tokenService.verifyAccessToken(token);
@@ -183,8 +185,8 @@ export async function optionalAuthenticate(
         const isRevoked = await tokenService.isUserRevoked(normalizedUser.id);
 
         if (!isBlacklisted && !isRevoked) {
-          req.userId = normalizedUser.id;
-          req.user = normalizedUser;
+          authReq.userId = normalizedUser.id;
+          authReq.user = normalizedUser;
         }
       }
     }
@@ -203,8 +205,9 @@ export async function optionalAuthenticate(
  * @returns 中间件函数
  */
 export function requireRole(requiredRoles: string | string[]) {
-  return (req: AuthRequest, res: Response, next: NextFunction): void => {
-    if (!req.user) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const authReq = req as AuthRequest;
+    if (!authReq.user) {
       res.status(401).json({
         success: false,
         error: {
@@ -215,7 +218,7 @@ export function requireRole(requiredRoles: string | string[]) {
       return;
     }
 
-    const userRole = req.user.role;
+    const userRole = authReq.user.role;
     const roles = Array.isArray(requiredRoles) ? requiredRoles : [requiredRoles];
 
     if (!roles.includes(userRole)) {
@@ -230,7 +233,7 @@ export function requireRole(requiredRoles: string | string[]) {
     }
 
     logger.debug(
-      `[AuthMiddleware] 权限检查通过: userId=${req.user.uid}, role=${userRole}, required=${roles.join(',')}`
+      `[AuthMiddleware] 权限检查通过: userId=${authReq.user.uid}, role=${userRole}, required=${roles.join(',')}`
     );
     next();
   };
@@ -250,12 +253,13 @@ export const requireUserOrAdmin = requireRole(['user', 'admin']);
  * API Key认证中间件（用于系统间调用）
  */
 export async function authenticateApiKey(
-  req: AuthRequest,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
   try {
-    const apiKey = req.headers['x-api-key'];
+    const authReq = req as AuthRequest;
+    const apiKey = authReq.headers['x-api-key'];
     const validApiKeys = process.env.VALID_API_KEYS ? process.env.VALID_API_KEYS.split(',') : [];
 
     if (!apiKey || !validApiKeys.includes(apiKey as string)) {
@@ -271,13 +275,13 @@ export async function authenticateApiKey(
 
     // 设置系统用户标识
     // 艹，'system'不是合法的UserRole，用'admin'代替！
-    req.user = {
+    authReq.user = {
       id: 'system',
       uid: 'system',
       role: 'admin' as UserRole,
       source: 'api_key'
     };
-    req.userId = 'system';
+    authReq.userId = 'system';
 
     logger.debug('[AuthMiddleware] API Key认证成功');
     next();

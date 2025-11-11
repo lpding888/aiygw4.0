@@ -18,18 +18,6 @@ const router = express.Router();
 /**
  * 验证中间件
  */
-// 扩展Request类型
-declare global {
-  namespace Express {
-    interface Request {
-      id?: string;
-      user?: {
-        id: string;
-      };
-    }
-  }
-}
-
 const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {

@@ -2,57 +2,16 @@ import type { NextFunction, Request, Response } from 'express';
 import * as securityService from '../services/security.service.js';
 import { createErrorResponse } from '../utils/response.js';
 import logger from '../utils/logger.js';
+import type { DataMaskingRule, HealthCheck } from '../services/security.service.js';
 
-/**
- * 艹！扩展 Request 类型，包含用户和安全检查信息
- */
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    role?: string;
-    [key: string]: unknown;
-  };
-  body?: Record<string, unknown>;
-  securityChecks?: unknown;
-}
-
-/**
- * 扩展 Response 类型，包含自定义方法
- */
-interface ResponseWithCustomMethods extends Response {
+type ResponseWithCustomMethods = Response & {
   json: (data: unknown) => Response;
   send: (data: unknown) => Response;
-}
+};
 
-/**
- * 数据掩码规则接口
- */
-interface MaskingRule {
-  field: string;
-  type?: 'phone' | 'email' | 'idCard' | 'bankCard' | 'custom';
-  maskFn?: (value: string) => string;
-}
-
-/**
- * 安全检查结果接口
- */
-interface SecurityCheck {
-  status: 'healthy' | 'unhealthy';
-  details?: {
-    severity?: 'low' | 'medium' | 'high' | 'critical';
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
-}
-
-/**
- * 可疑活动检测结果
- */
-interface SuspiciousActivityResult {
-  isSuspicious: boolean;
-  severity?: 'low' | 'medium' | 'high' | 'critical';
-  [key: string]: unknown;
-}
+type SuspiciousActivityResult = Awaited<
+  ReturnType<typeof securityService.detectSuspiciousActivity>
+> & { severity?: 'low' | 'medium' | 'high' | 'critical' };
 
 export interface RateLimitConfig {
   windowMs: number;
@@ -101,7 +60,7 @@ export const rateLimit = (config: RateLimitConfig) => {
   };
 };
 
-export const dataMasking = (rules: MaskingRule[] = []) => {
+export const dataMasking = (rules: DataMaskingRule[] = []) => {
   return (req: Request, res: Response, next: NextFunction) => {
     const originalJson = res.json.bind(res);
     const customRes = res as ResponseWithCustomMethods;
@@ -114,10 +73,7 @@ export const dataMasking = (rules: MaskingRule[] = []) => {
         (data as Record<string, unknown>).data
       ) {
         const dataObj = data as Record<string, unknown>;
-        dataObj.data = securityService.maskData(
-          dataObj.data as Record<string, unknown>,
-          rules as Record<string, unknown>[]
-        );
+        dataObj.data = securityService.maskData(dataObj.data as Record<string, unknown>, rules);
       }
       return originalJson(data);
     };
@@ -129,10 +85,12 @@ export const securityCheck = (options: { skipCriticalCheck?: boolean } = {}) => 
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const checks = await securityService.performHealthChecks();
-      const checksData = checks.checks as SecurityCheck[] | undefined;
-      const criticalIssues = (checksData ?? []).filter(
-        (check) => check.status === 'unhealthy' && check.details?.severity === 'critical'
-      );
+      const checksData = checks.checks as HealthCheck[];
+      const criticalIssues = checksData.filter((check) => {
+        const details = (check.details as { severity?: string } | undefined) ?? undefined;
+        const severity = typeof details?.severity === 'string' ? details.severity : undefined;
+        return check.status === 'unhealthy' && severity === 'critical';
+      });
 
       if (criticalIssues.length > 0 && !options.skipCriticalCheck) {
         logger.error('发现严重安全问题:', criticalIssues);
@@ -144,7 +102,7 @@ export const securityCheck = (options: { skipCriticalCheck?: boolean } = {}) => 
         return;
       }
 
-      (req as AuthenticatedRequest).securityChecks = checks;
+      req.securityChecks = checks;
       next();
     } catch (error) {
       logger.error('安全检查中间件错误:', error);
@@ -156,31 +114,37 @@ export const securityCheck = (options: { skipCriticalCheck?: boolean } = {}) => 
 export const suspiciousActivityDetection = (options: Record<string, unknown> = {}) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const suspicious = (await securityService.detectSuspiciousActivity(
-        req.ip as string
-      )) as SuspiciousActivityResult;
+      const suspicious = (await securityService.detectSuspiciousActivity(req.ip as string)) as SuspiciousActivityResult;
 
-      if (suspicious.isSuspicious) {
+      if (suspicious.suspicious) {
+        const severity: SuspiciousActivityResult['severity'] =
+          suspicious.riskScore >= 80
+            ? 'critical'
+            : suspicious.riskScore >= 60
+              ? 'high'
+              : suspicious.riskScore >= 30
+                ? 'medium'
+                : 'low';
         logger.warn('检测到可疑活动:', suspicious);
         await securityService.logSecurityEvent({
           type: 'suspicious_activity',
-          severity: suspicious.severity || 'medium',
-          userId: (req as AuthenticatedRequest).user?.id,
+          severity,
+          userId: req.user?.id,
           ip: String(req.ip ?? ''),
           userAgent: req.get('User-Agent') ?? '',
           endpoint: req.path,
           method: req.method,
-          details: suspicious as Record<string, unknown>
+          details: { ...suspicious, severity } as Record<string, unknown>
         });
 
-        if (suspicious.severity === 'high' || suspicious.severity === 'critical') {
+        if (severity === 'high' || severity === 'critical') {
           res
             .status(403)
             .json(
               createErrorResponse(
                 'SUSPICIOUS_ACTIVITY',
                 '请求被标记为可疑活动，已被阻止',
-                suspicious as Record<string, unknown>
+                { ...suspicious, severity } as Record<string, unknown>
               )
             );
           return;
@@ -202,24 +166,23 @@ export const securityAudit = (
     const originalSend = res.send.bind(res);
     const originalJson = res.json.bind(res);
     const startTime = Date.now();
-    const authReq = req as AuthenticatedRequest;
 
     const audit = (statusCode: number, data: unknown) => {
       const auditData = {
         method: req.method,
         endpoint: req.path,
         statusCode,
-        userId: authReq.user?.id,
+        userId: req.user?.id,
         ip: String(req.ip ?? ''),
         userAgent: req.get('User-Agent') ?? '',
         responseTime: Date.now() - startTime,
-        requestData: options.includeRequestData ? authReq.body : undefined,
+        requestData: options.includeRequestData ? req.body : undefined,
         responseData: options.includeResponseData ? data : undefined
       };
       securityService.logSecurityEvent({
         type: 'data_access',
         severity: statusCode >= 400 ? 'medium' : 'low',
-        userId: authReq.user?.id,
+        userId: req.user?.id,
         ip: String(req.ip ?? ''),
         endpoint: req.path,
         method: req.method,

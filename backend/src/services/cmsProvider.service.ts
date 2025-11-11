@@ -293,11 +293,11 @@ class CmsProviderService {
     return secret.substring(0, 4) + '****' + secret.substring(secret.length - 4);
   }
 
-  sanitizeTestResult(testResult: string | null): TestResult | null {
+  sanitizeTestResult(testResult: string | TestResult | null | undefined): TestResult | null {
     if (!testResult) return null;
     try {
       const result: TestResult =
-        typeof testResult === 'string' ? JSON.parse(testResult) : testResult;
+        typeof testResult === 'string' ? (JSON.parse(testResult) as TestResult) : testResult;
       if (result.details && result.details.headers) {
         const headers = { ...result.details.headers };
         delete headers.authorization;

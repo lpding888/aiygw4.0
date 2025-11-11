@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { db } from '../config/database.js';
 import logger from '../utils/logger.js';
 import type { UserRole } from '../utils/rbac.js';
+import type { AuthRequest } from './auth.middleware.js';
 
 interface AdminInfo {
   id: string;
@@ -9,21 +10,13 @@ interface AdminInfo {
   role: UserRole | string;
 }
 
-interface AdminRequest extends Request {
-  user?: {
-    id: string;
-    [key: string]: unknown;
-  };
-  admin?: AdminInfo;
-}
-
 export async function requireAdmin(
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  const adminReq = req as AuthRequest;
   try {
-    const adminReq = req as AdminRequest;
     const userId = adminReq.user?.id;
 
     if (!userId) {

@@ -77,7 +77,8 @@ export class TencentCiProvider extends BaseProvider {
       return '输入参数必须是对象';
     }
 
-    const { action, bucket, region, objectKey, params } = input as TencentCiInput;
+    const payload = input as TencentCiInput;
+    const { action, bucket, region, objectKey, params, auth } = payload;
 
     // 校验action
     if (!action || typeof action !== 'string') {
@@ -111,8 +112,8 @@ export class TencentCiProvider extends BaseProvider {
     }
 
     // 校验auth（可选）
-    if (input.auth) {
-      if (!input.auth.secretId || !input.auth.secretKey) {
+    if (auth) {
+      if (!auth.secretId || !auth.secretKey) {
         return 'auth配置不完整，需要secretId和secretKey';
       }
     }

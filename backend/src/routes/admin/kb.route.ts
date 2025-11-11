@@ -10,18 +10,6 @@ import { addIngestJob, getQueueStats } from '../../rag/ingest/worker.js';
 import db from '../../db/index.js';
 import logger from '../../utils/logger.js';
 
-// 扩展Express Request类型以支持自定义属性
-declare global {
-  namespace Express {
-    interface Request {
-      id: string;
-      user: {
-        id: string;
-      };
-    }
-  }
-}
-
 const router = express.Router();
 
 /**
@@ -57,7 +45,11 @@ router.post(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { code: 4010, message: '未登录' } });
+        return;
+      }
       const { kbId, title, content, format, sourceUrl } = req.body;
 
       logger.info(`[KBRoute] 创建文档: userId=${userId} kbId=${kbId} title=${title}`);
@@ -114,7 +106,11 @@ router.get(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { code: 4010, message: '未登录' } });
+        return;
+      }
       const { kbId, status, page = 1, limit = 20 } = req.query;
 
       const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
@@ -130,17 +126,16 @@ router.get(
         query = query.where('status', status as string);
       }
 
-      const [documents, countResult] = await Promise.all([
+      const [documents, totalRow] = await Promise.all([
         query
           .select('*')
           .orderBy('created_at', 'desc')
           .limit(parseInt(limit as string))
           .offset(offset),
-        query.count('* as total')
+        query.clone().count<{ total: number }>('id as total').first()
       ]);
 
-      type CountResult = { total: number };
-      const total = (countResult as CountResult[])[0]?.total ?? 0;
+      const total = totalRow?.total ?? 0;
 
       res.json({
         success: true,
@@ -176,7 +171,11 @@ router.post(
   validate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user.id;
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { code: 4010, message: '未登录' } });
+        return;
+      }
       const { query: searchQuery, kbId, topK = 5, filters = {} } = req.body;
 
       logger.info(`[KBRoute] 检索知识库: userId=${userId} query=${searchQuery}`);

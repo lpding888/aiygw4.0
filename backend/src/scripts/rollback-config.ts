@@ -13,19 +13,11 @@ import {
   listSnapshots,
   rollbackToSnapshot,
   createSnapshot,
-  getSnapshotById
+  getSnapshotById,
+  type ConfigSnapshot,
+  type ConfigData
 } from '../services/configSnapshot.service.js'; // 艹，加上.js扩展名！
 import { db } from '../config/database.js'; // 艹，使用TS版本的database配置！
-
-interface ConfigSnapshot {
-  id: number;
-  snapshot_name: string;
-  config_type: string;
-  config_ref?: string;
-  description?: string;
-  created_at: string;
-  is_rollback: boolean;
-}
 
 /**
  * 解析命令行参数
@@ -145,7 +137,7 @@ async function createSnapshotCommand(args: Record<string, string>): Promise<void
   console.log('\n艹，正在创建快照...\n');
 
   // 根据类型读取当前配置
-  let config_data: unknown;
+  let config_data: ConfigData | null = null;
 
   switch (type) {
     case 'provider':
@@ -154,12 +146,13 @@ async function createSnapshotCommand(args: Record<string, string>): Promise<void
         process.exit(1);
       }
 
-      config_data = await db('provider_endpoints').where({ provider_ref: ref }).first();
+      const provider = await db('provider_endpoints').where({ provider_ref: ref }).first();
 
-      if (!config_data) {
+      if (!provider) {
         console.error(`Provider不存在: ${ref}`);
         process.exit(1);
       }
+      config_data = provider as ConfigData;
       break;
 
     default:
@@ -173,7 +166,7 @@ async function createSnapshotCommand(args: Record<string, string>): Promise<void
     description: '手动创建的快照',
     config_type: type,
     config_ref: ref,
-    config_data,
+    config_data: config_data ?? {},
     created_by: 1 // 管理员
   });
 

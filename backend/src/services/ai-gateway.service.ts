@@ -13,6 +13,7 @@
 
 import axios, { AxiosInstance } from 'axios';
 import * as providerEndpointsRepo from '../repositories/providerEndpoints.repo.js';
+import type { ProviderEndpoint } from '../repositories/providerEndpoints.repo.js';
 import logger from '../utils/logger.js';
 import { EventEmitter } from 'events';
 
@@ -266,7 +267,7 @@ class AIGatewayService {
    * 选择Provider（负载均衡）
    * @private
    */
-  private async selectProvider(model: string): Promise<Record<string, unknown>> {
+  private async selectProvider(_model: string): Promise<ProviderEndpoint> {
     // 简化实现：选择第一个可用的Provider
     // 实际项目中应该实现负载均衡、权重选择等策略
 
@@ -277,20 +278,17 @@ class AIGatewayService {
     }
 
     // 按权重选择
-    const totalWeight = providers.reduce(
-      (sum: number, p: Record<string, unknown>) => sum + ((p.weight as number) || 100),
-      0
-    );
+    const totalWeight = providers.reduce((sum, p) => sum + (p.weight ?? 100), 0) || 1;
     let random = Math.random() * totalWeight;
 
     for (const provider of providers) {
-      random -= ((provider as Record<string, unknown>).weight as number) || 100;
+      random -= provider.weight ?? 100;
       if (random <= 0) {
-        return provider as Record<string, unknown>;
+        return provider;
       }
     }
 
-    return providers[0] as Record<string, unknown>;
+    return providers[0];
   }
 
   /**
@@ -317,10 +315,10 @@ class AIGatewayService {
    * 获取认证头
    * @private
    */
-  private getAuthHeaders(provider: Record<string, unknown>): Record<string, string> {
+  private getAuthHeaders(provider: ProviderEndpoint): Record<string, string> {
     const headers: Record<string, string> = {};
 
-    const authType = provider.auth_type as string | undefined;
+    const authType = provider.auth_type;
     const credentials = provider.credentials_encrypted as Record<string, unknown> | undefined;
 
     if (authType === 'bearer' && credentials?.api_key) {
@@ -350,7 +348,7 @@ class OpenAIAdapter implements ProviderAdapter {
   }
 
   adaptResponse(response: Record<string, unknown>): ChatResponse {
-    return response as ChatResponse; // OpenAI格式即标准格式
+    return response as unknown as ChatResponse; // OpenAI格式即标准格式
   }
 
   adaptStreamChunk(chunk: string): ChatResponse | null {
@@ -456,7 +454,7 @@ class BuildingAIAdapter implements ProviderAdapter {
   }
 
   adaptResponse(response: Record<string, unknown>): ChatResponse {
-    return response as ChatResponse; // BuildingAI返回标准格式
+    return response as unknown as ChatResponse; // BuildingAI返回标准格式
   }
 
   adaptStreamChunk(chunk: string): ChatResponse | null {

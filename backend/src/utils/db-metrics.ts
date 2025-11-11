@@ -46,7 +46,7 @@ interface PerformanceMetrics {
 /**
  * EXPLAIN分析结果
  */
-export interface ExplainAnalysis {
+export interface ExplainAnalysis extends Record<string, unknown> {
   id: number;
   select_type: string;
   table: string;
