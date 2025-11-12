@@ -1,7 +1,6 @@
 import {
   Queue,
   QueueEvents,
-  QueueScheduler,
   type JobsOptions,
   type BulkJobOptions,
   Worker,
@@ -29,7 +28,6 @@ interface ProcessorEntry {
 class QueueService {
   private queues = new Map<string, Queue>();
   private queueEvents = new Map<string, QueueEvents>();
-  private schedulers = new Map<string, QueueScheduler>();
   private workers = new Map<string, Worker>();
   private processors = new Map<string, ProcessorEntry>(); // key: `${queue}:${jobName}`
   private universalProcessor = new Map<string, ProcessorEntry>(); // key: queueName
@@ -99,17 +97,10 @@ class QueueService {
       logger.error(`[QueueService] 任务失败: ${queueName}:${jobId}`, { failedReason });
     });
 
-    const scheduler = new QueueScheduler(queueName, {
-      connection: this.buildConnection('scheduler', queueName),
-      prefix: bullQueueSettings.prefix
-    });
-    scheduler.waitUntilReady().catch((error) => {
-      logger.error(`[QueueService] 队列调度器初始化失败: ${queueName}`, error);
-    });
+    // Note: QueueScheduler已在BullMQ v5中移除，延迟任务现由Queue自动处理
 
     this.queues.set(queueName, queue);
     this.queueEvents.set(queueName, events);
-    this.schedulers.set(queueName, scheduler);
 
     if (!this.concurrencyControllers.has(queueName)) {
       this.concurrencyControllers.set(queueName, pLimit(this.getConcurrencyLimit(queueName)));

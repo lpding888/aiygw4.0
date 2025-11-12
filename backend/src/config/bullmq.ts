@@ -13,12 +13,11 @@ const baseConnection: RedisOptions = {
   db: parseNumber(process.env.REDIS_BULLMQ_DB, redisConfig.db ?? 2),
   maxRetriesPerRequest: null, // BullMQ官方要求
   enableReadyCheck: false,
-  keyPrefix: process.env.BULLMQ_PREFIX ?? 'ai_photo',
   lazyConnect: false
 };
 
 export const bullQueueSettings = {
-  prefix: baseConnection.keyPrefix
+  prefix: process.env.BULLMQ_PREFIX ?? 'ai_photo'
 };
 
 export const bullJobDefaults = {

@@ -29,7 +29,7 @@ const createConnection = () => {
     port: Number(redisConfig.port ?? 6379),
     password: redisConfig.password,
     db: Number(redisConfig.db ?? 3),
-    maxRetriesPerRequest: (redisConfig as unknown as RedisConfigExtended).maxRetriesPerRequest ?? 3
+    maxRetriesPerRequest: null // BullMQ要求必须为null
   });
 };
 
