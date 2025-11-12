@@ -1,8 +1,11 @@
 {
   "dependencies": {
     "@types/dompurify": "^3.0.5",
+    "@types/nodemailer": "^7.0.3",
+    "@types/ws": "^8.18.1",
     "dompurify": "^3.3.0",
-    "isomorphic-dompurify": "^2.31.0"
+    "isomorphic-dompurify": "^2.31.0",
+    "nodemailer": "^7.0.10"
   },
   "devDependencies": {
     "@types/node": "^20.11.5",
