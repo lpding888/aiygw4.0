@@ -36,17 +36,18 @@ class TaskController {
           .json({ success: false, error: { code: 4001, message: 'inputData必须是一个对象' } });
         return;
       }
-      const task: TaskCreateResult = await taskService.createByFeature(userId, featureId, inputData);
+      const task: TaskCreateResult = await taskService.createByFeature(
+        userId,
+        featureId,
+        inputData
+      );
       logger.info(
         `[TaskController] Feature任务创建成功 taskId=${task.taskId} userId=${userId} featureId=${featureId}`
       );
       res.json({ success: true, data: task });
     } catch (error) {
       const err = error as TaskError;
-      logger.error(
-        `[TaskController] 创建Feature任务失败: ${err.message || String(error)}`,
-        error
-      );
+      logger.error(`[TaskController] 创建Feature任务失败: ${err.message || String(error)}`, error);
       if (err?.errorCode === 4029) {
         res.status(429).json({
           success: false,
@@ -55,7 +56,9 @@ class TaskController {
         return;
       }
       if (err?.errorCode) {
-        res.status(400).json({ success: false, error: { code: err.errorCode, message: err.message } });
+        res
+          .status(400)
+          .json({ success: false, error: { code: err.errorCode, message: err.message } });
         return;
       }
       next(error);
@@ -89,13 +92,11 @@ class TaskController {
           });
       }
       if (type === 'model_pose12') {
-        aiModelService
-          .createModelTask(task.taskId, inputImageUrl, params)
-          .catch((err: Error) => {
-            logger.error(`[TaskController] AI模特任务创建失败: ${err.message}`, {
-              taskId: task.taskId
-            });
+        aiModelService.createModelTask(task.taskId, inputImageUrl, params).catch((err: Error) => {
+          logger.error(`[TaskController] AI模特任务创建失败: ${err.message}`, {
+            taskId: task.taskId
           });
+        });
       }
       res.json({ success: true, data: task });
     } catch (error) {
@@ -181,10 +182,7 @@ class TaskController {
       res.json({ success: true, data: result.data, pagination: result.pageInfo });
     } catch (error) {
       const err = error as Error;
-      logger.error(
-        `[TaskController] 管理员获取任务列表失败: ${err.message}`,
-        error
-      );
+      logger.error(`[TaskController] 管理员获取任务列表失败: ${err.message}`, error);
       next(error);
     }
   }
@@ -196,7 +194,13 @@ class TaskController {
         res.status(403).json({ success: false, error: { code: 4003, message: '需要管理员权限' } });
         return;
       }
-      const { q: searchTerm, page = '1', limit = '20', status, type } = req.query as TaskSearchQuery;
+      const {
+        q: searchTerm,
+        page = '1',
+        limit = '20',
+        status,
+        type
+      } = req.query as TaskSearchQuery;
       if (!searchTerm || String(searchTerm).trim().length === 0) {
         res
           .status(400)
@@ -248,10 +252,7 @@ class TaskController {
       });
     } catch (error) {
       const err = error as Error;
-      logger.error(
-        `[TaskController] 获取数据库性能分析失败: ${err.message}`,
-        error
-      );
+      logger.error(`[TaskController] 获取数据库性能分析失败: ${err.message}`, error);
       next(error);
     }
   }

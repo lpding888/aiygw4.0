@@ -101,9 +101,7 @@ class CircuitBreakerController {
     } catch (error) {
       const err = error as Error;
       logger.error('[CircuitBreakerController] 获取Provider状态失败:', error);
-      res
-        .status(500)
-        .json({ success: false, error: '获取Provider状态失败', message: err.message });
+      res.status(500).json({ success: false, error: '获取Provider状态失败', message: err.message });
     }
   }
 
@@ -129,9 +127,7 @@ class CircuitBreakerController {
     } catch (error) {
       const err = error as Error;
       logger.error('[CircuitBreakerController] 获取Provider状态失败:', error);
-      res
-        .status(500)
-        .json({ success: false, error: '获取Provider状态失败', message: err.message });
+      res.status(500).json({ success: false, error: '获取Provider状态失败', message: err.message });
     }
   }
 
@@ -143,9 +139,7 @@ class CircuitBreakerController {
     } catch (error) {
       const err = error as Error;
       logger.error('[CircuitBreakerController] 重置Provider统计失败:', error);
-      res
-        .status(500)
-        .json({ success: false, error: '重置Provider统计失败', message: err.message });
+      res.status(500).json({ success: false, error: '重置Provider统计失败', message: err.message });
     }
   }
 
@@ -168,9 +162,7 @@ class CircuitBreakerController {
     } catch (error) {
       const err = error as Error;
       logger.error('[CircuitBreakerController] 执行Provider方法失败:', error);
-      res
-        .status(500)
-        .json({ success: false, error: '执行Provider方法失败', message: err.message });
+      res.status(500).json({ success: false, error: '执行Provider方法失败', message: err.message });
     }
   }
 

@@ -47,7 +47,9 @@ class MembershipController {
     try {
       const callbackData = req.body;
       if (!isValidCallbackData(callbackData)) {
-        res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: '回调参数无效' } });
+        res
+          .status(400)
+          .json({ success: false, error: { code: 'VALIDATION_ERROR', message: '回调参数无效' } });
         return;
       }
       await membershipService.handlePaymentCallback(callbackData);

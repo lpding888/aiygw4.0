@@ -187,13 +187,21 @@ class PaginationService {
       if (hasNextPage) results.pop();
       let nextCursor: string | null = null;
       if (hasNextPage && results.length > 0)
-        nextCursor = this.buildCursor(results[results.length - 1] as Record<string, unknown>, orderBy);
+        nextCursor = this.buildCursor(
+          results[results.length - 1] as Record<string, unknown>,
+          orderBy
+        );
       const pageInfo: CursorPageInfo = {
         hasNextPage,
         hasPreviousPage: !!cursor,
-        startCursor: results.length > 0 ? this.buildCursor(results[0] as Record<string, unknown>, orderBy) : null,
+        startCursor:
+          results.length > 0
+            ? this.buildCursor(results[0] as Record<string, unknown>, orderBy)
+            : null,
         endCursor:
-          results.length > 0 ? this.buildCursor(results[results.length - 1] as Record<string, unknown>, orderBy) : null,
+          results.length > 0
+            ? this.buildCursor(results[results.length - 1] as Record<string, unknown>, orderBy)
+            : null,
         nextCursor,
         limit: validatedLimit,
         totalCount: results.length

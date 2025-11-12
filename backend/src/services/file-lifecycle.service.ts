@@ -364,9 +364,7 @@ class FileLifecycleService {
     }
 
     // 检查是否需要转移存储类别
-    const nextTransition = file.transitions.find(
-      (t) => new Date(t.at) <= now && !t.completed
-    );
+    const nextTransition = file.transitions.find((t) => new Date(t.at) <= now && !t.completed);
 
     if (nextTransition) {
       await this.transferFileStorage(file, nextTransition);
@@ -397,7 +395,9 @@ class FileLifecycleService {
       transition.completedAt = new Date().toISOString();
 
       // 更新数据库记录
-      const updatedTransitions = file.transitions.map((t) => (t.at === transition.at ? transition : t));
+      const updatedTransitions = file.transitions.map((t) =>
+        t.at === transition.at ? transition : t
+      );
 
       await this.updateFileStatus(file.id, {
         storage_class: transition.storageClass,
@@ -671,7 +671,10 @@ class FileLifecycleService {
    * @returns {Object} 生命周期时间表
    * @private
    */
-  private calculateLifecycleSchedule(strategy: LifecycleStrategyConfig, now: Date): LifecycleSchedule {
+  private calculateLifecycleSchedule(
+    strategy: LifecycleStrategyConfig,
+    now: Date
+  ): LifecycleSchedule {
     const transitions: LifecycleTransitionState[] = strategy.transitions.map(
       (transition: LifecycleTransitionConfig, index: number) => ({
         at: new Date(now.getTime() + transition.after).toISOString(),

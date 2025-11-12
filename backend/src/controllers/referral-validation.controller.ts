@@ -44,8 +44,12 @@ class ReferralValidationController {
    */
   async validateReferral(req: Request, res: Response, next: NextFunction) {
     try {
-      const { referralCode, referrerId, refereeId, referralData = {} } =
-        (req.body ?? {}) as ReferralValidationBody;
+      const {
+        referralCode,
+        referrerId,
+        refereeId,
+        referralData = {}
+      } = (req.body ?? {}) as ReferralValidationBody;
 
       // 优先使用 referrerId + refereeId 的关系验证
       if (referrerId && refereeId) {
@@ -71,9 +75,9 @@ class ReferralValidationController {
         });
       }
 
-      const referral = (await db('referrals')
-        .where('referral_code', referralCode)
-        .first()) as ReferralRecord | undefined;
+      const referral = (await db('referrals').where('referral_code', referralCode).first()) as
+        | ReferralRecord
+        | undefined;
       if (!referral) {
         res.status(404).json({
           success: false,
@@ -142,9 +146,7 @@ class ReferralValidationController {
         .select('status')
         .count('* as cnt')
         .groupBy('status')) as StatsRow[];
-      const total = (await db('referrals')
-        .count('* as cnt')
-        .first()) as CountResult | undefined;
+      const total = (await db('referrals').count('* as cnt').first()) as CountResult | undefined;
       res.json({
         success: true,
         data: { total: Number(total?.cnt ?? 0), byStatus: rows }

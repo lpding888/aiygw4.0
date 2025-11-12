@@ -3,7 +3,11 @@ import pipelineExecutionService from '../services/pipelineExecution.service.js';
 import logger from '../utils/logger.js';
 import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
-import type { ExecutionMode, ExecutionStatus, PipelineExecution } from '../engine/pipeline-types.js';
+import type {
+  ExecutionMode,
+  ExecutionStatus,
+  PipelineExecution
+} from '../engine/pipeline-types.js';
 
 interface CreateExecutionBody {
   schema_id: string;

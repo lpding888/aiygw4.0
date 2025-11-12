@@ -117,7 +117,11 @@ export function replaceVariables(
     const result: Record<string, unknown> = {};
     for (const key in template) {
       if ((template as Record<string, unknown>).hasOwnProperty(key)) {
-        result[key] = replaceVariables((template as Record<string, unknown>)[key], variables, options);
+        result[key] = replaceVariables(
+          (template as Record<string, unknown>)[key],
+          variables,
+          options
+        );
       }
     }
     return result;

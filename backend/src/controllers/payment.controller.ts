@@ -29,7 +29,9 @@ const toNumber = (value: unknown): number => {
 const requireUserId = (req: Request, res: Response): string | null => {
   const userId = req.user?.id;
   if (!userId) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未授权操作' } });
+    res
+      .status(401)
+      .json({ success: false, error: { code: 'UNAUTHORIZED', message: '未授权操作' } });
     return null;
   }
   return userId;
@@ -180,12 +182,7 @@ class PaymentController {
     try {
       const userId = requireUserId(req, res);
       if (!userId) return;
-      const {
-        page = '1',
-        limit = '20',
-        status,
-        paymentMethod
-      } = req.query as PaymentRecordsQuery;
+      const { page = '1', limit = '20', status, paymentMethod } = req.query as PaymentRecordsQuery;
       const offset = (parseInt(page, 10) - 1) * parseInt(limit, 10);
       let query: Knex.QueryBuilder = db('payment_orders')
         .where('user_id', userId)
@@ -273,9 +270,9 @@ class PaymentController {
       if (orderId) {
         order = await paymentSvc.getOrderStatus(orderId);
       } else if (out_trade_no) {
-        const orderRecord = (await db('payment_orders')
-          .where('order_no', out_trade_no)
-          .first()) as PaymentOrder | undefined;
+        const orderRecord = (await db('payment_orders').where('order_no', out_trade_no).first()) as
+          | PaymentOrder
+          | undefined;
         if (orderRecord) {
           order = await paymentSvc.getOrderStatus(orderRecord.id);
         }
@@ -308,9 +305,9 @@ class PaymentController {
       if (orderId) {
         order = await paymentSvc.getOrderStatus(orderId);
       } else if (out_trade_no) {
-        const orderRecord = (await db('payment_orders')
-          .where('order_no', out_trade_no)
-          .first()) as PaymentOrder | undefined;
+        const orderRecord = (await db('payment_orders').where('order_no', out_trade_no).first()) as
+          | PaymentOrder
+          | undefined;
         if (orderRecord) {
           order = await paymentSvc.getOrderStatus(orderRecord.id);
         }

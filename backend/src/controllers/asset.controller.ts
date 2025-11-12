@@ -27,7 +27,9 @@ class AssetController {
     try {
       const userId = req.user?.id;
       if (!userId) {
-        res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } });
+        res
+          .status(401)
+          .json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } });
         return;
       }
       const { type, featureId, startDate, endDate, page, limit } = req.query as AssetQueryParams;
@@ -52,7 +54,9 @@ class AssetController {
     try {
       const userId = req.user?.id;
       if (!userId) {
-        res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } });
+        res
+          .status(401)
+          .json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } });
         return;
       }
       const { assetId } = req.params as { assetId?: string };
@@ -75,7 +79,8 @@ class AssetController {
 
   async getAllAssets(req: Request, res: Response, next: NextFunction) {
     try {
-      const { userId, type, featureId, startDate, endDate, page, limit } = req.query as AssetQueryParams;
+      const { userId, type, featureId, startDate, endDate, page, limit } =
+        req.query as AssetQueryParams;
       const result = await assetService.getAllAssets({
         ...(userId ? { userId } : {}),
         type,

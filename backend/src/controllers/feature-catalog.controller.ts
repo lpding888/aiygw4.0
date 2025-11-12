@@ -179,17 +179,12 @@ class FeatureCatalogController {
       }
 
       if (req.user) {
-        const roles = Array.isArray(
-          (req.user as unknown as Record<string, unknown>)?.roles
-        )
+        const roles = Array.isArray((req.user as unknown as Record<string, unknown>)?.roles)
           ? ((req.user as unknown as Record<string, unknown>).roles as string[])
           : undefined;
         const membership =
-          typeof (
-            req.user as unknown as Record<string, unknown>
-          )?.membership === 'string'
-            ? ((req.user as unknown as Record<string, unknown>)
-                .membership as string)
+          typeof (req.user as unknown as Record<string, unknown>)?.membership === 'string'
+            ? ((req.user as unknown as Record<string, unknown>).membership as string)
             : undefined;
 
         const hasAccess = await featureCatalogService.checkFeatureAccess(featureKey, req.user.id, {
@@ -388,16 +383,12 @@ class FeatureCatalogController {
 
       const { featureKey } = req.params;
 
-      const roles = Array.isArray(
-        (req.user as unknown as Record<string, unknown>)?.roles
-      )
+      const roles = Array.isArray((req.user as unknown as Record<string, unknown>)?.roles)
         ? ((req.user as unknown as Record<string, unknown>).roles as string[])
         : undefined;
       const membership =
-        typeof (req.user as unknown as Record<string, unknown>)
-          ?.membership === 'string'
-          ? ((req.user as unknown as Record<string, unknown>)
-              .membership as string)
+        typeof (req.user as unknown as Record<string, unknown>)?.membership === 'string'
+          ? ((req.user as unknown as Record<string, unknown>).membership as string)
           : undefined;
 
       const hasAccess = await featureCatalogService.checkFeatureAccess(featureKey, req.user.id, {

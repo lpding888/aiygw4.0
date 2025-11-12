@@ -259,7 +259,8 @@ class DatabaseOptimizationService {
 
     recommended.forEach((rec) => {
       const exists = Array.from(indexMap.values()).some(
-        (cols) => cols.length === rec.columns.length && cols.every((col) => rec.columns.includes(col))
+        (cols) =>
+          cols.length === rec.columns.length && cols.every((col) => rec.columns.includes(col))
       );
 
       if (!exists) {

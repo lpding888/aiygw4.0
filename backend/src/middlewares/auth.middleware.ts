@@ -63,11 +63,7 @@ function normalizeUserPayload(payload: unknown): UserPayload | null {
 /**
  * JWT认证中间件
  */
-export async function authenticate(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
+export async function authenticate(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const authReq = req as AuthRequest;
     // 获取token

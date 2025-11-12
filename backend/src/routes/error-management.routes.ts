@@ -129,7 +129,9 @@ router.get('/export', authenticate, requireRole('admin'), (req: Request, res: Re
       ''
     ]);
     const csv = [csvHeaders, ...rows]
-      .map((row: Array<string | number>) => row.map((cell: string | number) => `"${String(cell)}"`).join(','))
+      .map((row: Array<string | number>) =>
+        row.map((cell: string | number) => `"${String(cell)}"`).join(',')
+      )
       .join('\n');
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader(

@@ -186,9 +186,14 @@ export type AuthenticatedRequest = AuthRequest;
  * 支付服务接口（用于controller调用）
  */
 export interface PaymentService {
-  createPaymentOrder(userId: string, data: CreatePaymentOrderRequest): Promise<CreatePaymentOrderResponse>;
+  createPaymentOrder(
+    userId: string,
+    data: CreatePaymentOrderRequest
+  ): Promise<CreatePaymentOrderResponse>;
   handleAlipayCallback(data: Record<string, unknown>): Promise<{ success: boolean }>;
-  handleWechatCallback(data: Record<string, unknown>): Promise<{ success: boolean; message?: string }>;
+  handleWechatCallback(
+    data: Record<string, unknown>
+  ): Promise<{ success: boolean; message?: string }>;
   createRefund(
     orderId: string,
     userId: string,

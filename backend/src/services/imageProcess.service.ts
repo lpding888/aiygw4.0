@@ -63,7 +63,11 @@ class ImageProcessService {
     }
   }
 
-  async processBasicClean(taskId: string, inputImageUrl: string, params: Record<string, unknown> = {}) {
+  async processBasicClean(
+    taskId: string,
+    inputImageUrl: string,
+    params: Record<string, unknown> = {}
+  ) {
     try {
       logger.info(`[ImageProcessService] 开始处理基础修图 taskId=${taskId}`, {
         inputImageUrl,

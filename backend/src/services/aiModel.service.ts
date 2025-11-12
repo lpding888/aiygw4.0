@@ -131,7 +131,11 @@ class AIModelService {
     return prompt;
   }
 
-  async createModelTask(taskId: string, inputImageUrl: string, params: Record<string, unknown> = {}) {
+  async createModelTask(
+    taskId: string,
+    inputImageUrl: string,
+    params: Record<string, unknown> = {}
+  ) {
     try {
       const scene = (params.scene as string) || 'street';
       const category = (params.category as string) || 'dress';
@@ -254,13 +258,17 @@ class AIModelService {
           logger.info('[AIModelService] AI模特任务完成', { taskId, count: resultUrls.length });
           return;
         } else if (status === 'FAILED') {
-          await taskService.updateStatus(taskId, 'failed', { errorMessage: 'RunningHub处理失败' } as TaskStatusPayload);
+          await taskService.updateStatus(taskId, 'failed', {
+            errorMessage: 'RunningHub处理失败'
+          } as TaskStatusPayload);
           return;
         }
         if (attempts < maxAttempts) {
           setTimeout(poll, 3000);
         } else {
-          await taskService.updateStatus(taskId, 'failed', { errorMessage: '处理超时(3分钟)' } as TaskStatusPayload);
+          await taskService.updateStatus(taskId, 'failed', {
+            errorMessage: '处理超时(3分钟)'
+          } as TaskStatusPayload);
         }
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -275,10 +283,13 @@ class AIModelService {
 
   async queryRunningHubStatus(runningHubTaskId: string): Promise<'SUCCESS' | 'FAILED' | 'PENDING'> {
     try {
-      const response = await axios.get<RunningHubResponse>(`${this.config.apiUrl}/v1/status/${runningHubTaskId}`, {
-        headers: { Authorization: `Bearer ${this.config.apiKey}` },
-        timeout: 10000
-      });
+      const response = await axios.get<RunningHubResponse>(
+        `${this.config.apiUrl}/v1/status/${runningHubTaskId}`,
+        {
+          headers: { Authorization: `Bearer ${this.config.apiKey}` },
+          timeout: 10000
+        }
+      );
       const status = String(response.data?.status || 'PENDING');
       if (['SUCCESS', 'FAILED', 'PENDING'].includes(status)) {
         return status as 'SUCCESS' | 'FAILED' | 'PENDING';
@@ -295,10 +306,13 @@ class AIModelService {
 
   async fetchResults(runningHubTaskId: string): Promise<string[]> {
     try {
-      const response = await axios.get<RunningHubResponse>(`${this.config.apiUrl}/v1/outputs/${runningHubTaskId}`, {
-        headers: { Authorization: `Bearer ${this.config.apiKey}` },
-        timeout: 30000
-      });
+      const response = await axios.get<RunningHubResponse>(
+        `${this.config.apiUrl}/v1/outputs/${runningHubTaskId}`,
+        {
+          headers: { Authorization: `Bearer ${this.config.apiKey}` },
+          timeout: 30000
+        }
+      );
       const outputs = response.data?.outputs;
       if (Array.isArray(outputs)) {
         return outputs as string[];

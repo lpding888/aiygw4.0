@@ -1,9 +1,18 @@
-import { Queue, QueueEvents, type JobsOptions, type BulkJobOptions, Worker, Job } from 'bullmq';
+import {
+  Queue,
+  QueueEvents,
+  QueueScheduler,
+  type JobsOptions,
+  type BulkJobOptions,
+  Worker,
+  Job
+} from 'bullmq';
 import { Redis as IORedis } from 'ioredis';
-import { redisConfig } from '../config/redis.js';
 import pLimit from 'p-limit';
 import logger from '../utils/logger.js';
 import type { QueuesHealthReport } from './health.service.js';
+import { bullJobDefaults, bullQueueSettings, createBullConnection } from '../config/bullmq.js';
+import metricsService from './metrics.service.js';
 
 interface JobData {
   [key: string]: unknown;
@@ -20,11 +29,13 @@ interface ProcessorEntry {
 class QueueService {
   private queues = new Map<string, Queue>();
   private queueEvents = new Map<string, QueueEvents>();
+  private schedulers = new Map<string, QueueScheduler>();
   private workers = new Map<string, Worker>();
   private processors = new Map<string, ProcessorEntry>(); // key: `${queue}:${jobName}`
   private universalProcessor = new Map<string, ProcessorEntry>(); // key: queueName
   private concurrencyControllers = new Map<string, ReturnType<typeof pLimit>>(); // per-queue control
   private concurrencyLimits = new Map<string, number>();
+  private queueMetricsTimer?: NodeJS.Timeout;
 
   private defaultConcurrency = 5;
   private maxConcurrency = 20;
@@ -42,77 +53,152 @@ class QueueService {
     this.initializeQueues();
   }
 
-  private buildConnection() {
-    // BullMQ 接受 IORedis 实例或连接配置。这里用实例，继承 redis.ts 配置。
-    const config = redisConfig as Record<string, unknown>;
-    return new IORedis({
-      host: redisConfig.host,
-      port: Number(redisConfig.port ?? 6379),
-      password: redisConfig.password,
-      db: Number(redisConfig.db ?? 2),
-      maxRetriesPerRequest: (config.maxRetriesPerRequest as number) ?? 3
+  private buildConnection(role: string, queueName: string): IORedis {
+    return createBullConnection({
+      connectionName: `${bullQueueSettings.prefix}:${queueName}:${role}`
     });
   }
 
+  private mergeJobDefaults(overrides?: JobsOptions): JobsOptions {
+    return {
+      ...bullJobDefaults,
+      ...overrides,
+      removeOnComplete: overrides?.removeOnComplete ?? bullJobDefaults.removeOnComplete,
+      removeOnFail: overrides?.removeOnFail ?? bullJobDefaults.removeOnFail,
+      attempts: overrides?.attempts ?? bullJobDefaults.attempts,
+      backoff: overrides?.backoff ?? bullJobDefaults.backoff
+    };
+  }
+
   private ensureQueueInfrastructure(queueName: string, opts?: { defaultJobOptions?: JobsOptions }) {
-    if (!this.queues.has(queueName)) {
-      const connection = this.buildConnection();
-      const queue = new Queue(queueName, {
-        connection,
-        defaultJobOptions: opts?.defaultJobOptions
-      });
-      const events = new QueueEvents(queueName, { connection: this.buildConnection() });
-      events.on('completed', ({ jobId }) => {
-        this.stats.totalCompleted++;
-        this.stats.activeJobs = Math.max(0, this.stats.activeJobs - 1);
-        logger.debug(`[QueueService] 任务完成: ${queueName}:${jobId}`);
-      });
-      events.on('failed', ({ jobId, failedReason }) => {
-        this.stats.totalFailed++;
-        this.stats.activeJobs = Math.max(0, this.stats.activeJobs - 1);
-        logger.error(`[QueueService] 任务失败: ${queueName}:${jobId}`, { failedReason });
-      });
-      this.queues.set(queueName, queue);
-      this.queueEvents.set(queueName, events);
-      if (!this.concurrencyControllers.has(queueName)) {
-        this.concurrencyControllers.set(queueName, pLimit(this.getConcurrencyLimit(queueName)));
-      }
-      // 单 Worker 负责队列内所有 jobName，由 dispatcher 分发
-      const worker = new Worker(
-        queueName,
-        async (job) => {
-          const procKey = `${queueName}:${job.name}`;
-          const entry = this.processors.get(procKey) || this.universalProcessor.get(queueName);
-          if (!entry) {
-            logger.warn(`[QueueService] 未注册处理器: ${procKey}`);
-            return;
-          }
-          const limiter = this.concurrencyControllers.get(queueName)!;
-          const start = Date.now();
-          try {
-            this.stats.activeJobs++;
-            const result = await limiter(() => entry.processor(job));
-            const duration = Date.now() - start;
-            this.stats.totalProcessed++;
-            logger.info(`[QueueService] 任务完成: ${queueName}:${job.id}:${job.name}`, {
-              duration
-            });
-            return result;
-          } catch (error: unknown) {
-            const err = error as Error;
-            logger.error(`[QueueService] 任务处理失败: ${queueName}:${job.id}:${job.name}`, {
-              error: err?.message
-            });
-            throw error;
-          }
-        },
-        {
-          concurrency: this.getConcurrencyLimit(queueName),
-          connection: this.buildConnection()
+    if (this.queues.has(queueName)) {
+      return;
+    }
+
+    const defaultJobOptions = this.mergeJobDefaults(opts?.defaultJobOptions);
+    const queue = new Queue(queueName, {
+      connection: this.buildConnection('queue', queueName),
+      defaultJobOptions,
+      prefix: bullQueueSettings.prefix
+    });
+
+    const events = new QueueEvents(queueName, {
+      connection: this.buildConnection('events', queueName),
+      prefix: bullQueueSettings.prefix
+    });
+
+    events.on('completed', ({ jobId }) => {
+      this.stats.totalCompleted++;
+      this.stats.activeJobs = Math.max(0, this.stats.activeJobs - 1);
+      logger.debug(`[QueueService] 任务完成: ${queueName}:${jobId}`);
+    });
+
+    events.on('failed', ({ jobId, failedReason }) => {
+      this.stats.totalFailed++;
+      this.stats.activeJobs = Math.max(0, this.stats.activeJobs - 1);
+      logger.error(`[QueueService] 任务失败: ${queueName}:${jobId}`, { failedReason });
+    });
+
+    const scheduler = new QueueScheduler(queueName, {
+      connection: this.buildConnection('scheduler', queueName),
+      prefix: bullQueueSettings.prefix
+    });
+    scheduler.waitUntilReady().catch((error) => {
+      logger.error(`[QueueService] 队列调度器初始化失败: ${queueName}`, error);
+    });
+
+    this.queues.set(queueName, queue);
+    this.queueEvents.set(queueName, events);
+    this.schedulers.set(queueName, scheduler);
+
+    if (!this.concurrencyControllers.has(queueName)) {
+      this.concurrencyControllers.set(queueName, pLimit(this.getConcurrencyLimit(queueName)));
+    }
+
+    const worker = new Worker(
+      queueName,
+      async (job) => {
+        const procKey = `${queueName}:${job.name}`;
+        const entry = this.processors.get(procKey) || this.universalProcessor.get(queueName);
+        if (!entry) {
+          logger.warn(`[QueueService] 未注册处理器: ${procKey}`);
+          return;
         }
+        const limiter = this.concurrencyControllers.get(queueName)!;
+        const start = Date.now();
+        try {
+          this.stats.activeJobs++;
+          const result = await limiter(() => entry.processor(job));
+          const duration = Date.now() - start;
+          this.stats.totalProcessed++;
+          const metricTaskType = `${queueName}:${job.name}`;
+          metricsService.recordTaskCompleted(metricTaskType, duration / 1000);
+          logger.info(`[QueueService] 任务完成: ${queueName}:${job.id}:${job.name}`, {
+            duration
+          });
+          return result;
+        } catch (error: unknown) {
+          const err = error as Error;
+          metricsService.recordTaskFailed(`${queueName}:${job.name}`, err?.name ?? 'error');
+          logger.error(`[QueueService] 任务处理失败: ${queueName}:${job.id}:${job.name}`, {
+            error: err?.message
+          });
+          throw error;
+        }
+      },
+      {
+        concurrency: this.getConcurrencyLimit(queueName),
+        connection: this.buildConnection('worker', queueName),
+        prefix: bullQueueSettings.prefix
+      }
+    );
+
+    this.workers.set(queueName, worker);
+    this.startQueueMetricsCollector();
+    void this.updateQueueMetrics(queueName, queue);
+    logger.info(`[QueueService] 队列创建成功: ${queueName}`);
+  }
+
+  private startQueueMetricsCollector(): void {
+    if (this.queueMetricsTimer) {
+      return;
+    }
+    this.queueMetricsTimer = setInterval(() => {
+      void this.collectQueueMetrics();
+    }, 15000);
+    this.queueMetricsTimer.unref?.();
+  }
+
+  private async collectQueueMetrics(): Promise<void> {
+    await Promise.all(
+      Array.from(this.queues.entries()).map(([name, queue]) => this.updateQueueMetrics(name, queue))
+    );
+  }
+
+  private async updateQueueMetrics(queueName: string, queue?: Queue): Promise<void> {
+    const targetQueue = queue ?? this.queues.get(queueName);
+    if (!targetQueue) {
+      return;
+    }
+    try {
+      const counts = await targetQueue.getJobCounts(
+        'active',
+        'waiting',
+        'completed',
+        'failed',
+        'delayed',
+        'paused'
       );
-      this.workers.set(queueName, worker);
-      logger.info(`[QueueService] 队列创建成功: ${queueName}`);
+      metricsService.setQueueStats(queueName, {
+        active: counts.active ?? 0,
+        waiting: counts.waiting ?? 0,
+        completed: counts.completed ?? 0,
+        failed: counts.failed ?? 0,
+        delayed: counts.delayed ?? 0,
+        paused: counts.paused ?? 0
+      });
+    } catch (error) {
+      logger.warn(`[QueueService] 队列指标更新失败: ${queueName}`, error);
     }
   }
 
@@ -175,16 +261,15 @@ class QueueService {
   ) {
     const queue = this.queues.get(queueName);
     if (!queue) throw new Error(`队列不存在: ${queueName}`);
-    const defaultOptions: JobsOptions = {
+    const jobOptions = this.mergeJobDefaults({
       priority: 0,
       delay: 0,
-      attempts: 3,
-      removeOnComplete: 10,
-      removeOnFail: 50
-    };
-    const jobOptions = { ...defaultOptions, ...options } satisfies JobsOptions;
+      ...options
+    });
     const job = await queue.add(jobName, data, jobOptions);
     this.stats.totalQueued++;
+    metricsService.recordTaskCreated(`${queueName}:${jobName}`);
+    void this.updateQueueMetrics(queueName, queue);
     logger.info(`[QueueService] 任务已添加: ${queueName}:${job.id}`, { jobName });
     return job;
   }

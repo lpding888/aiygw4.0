@@ -106,7 +106,9 @@ class InviteCodeController {
         });
       }
       const result = await inviteCodeService.validateInviteCode(code);
-      logger.info(`[InviteCodeController] Invite code validation: ${code} -> ${(result as { valid?: unknown })?.valid}`);
+      logger.info(
+        `[InviteCodeController] Invite code validation: ${code} -> ${(result as { valid?: unknown })?.valid}`
+      );
       res.json({ success: true, data: result });
     } catch (error) {
       logger.error('[InviteCodeController] Failed to validate invite code:', error);
@@ -166,7 +168,9 @@ class InviteCodeController {
       const user = req.user as { id?: string } | undefined;
       const targetUserId = (req.params?.userId as string | undefined) ?? user?.id;
       if (!targetUserId) {
-        res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: '缺少用户ID' } });
+        res
+          .status(400)
+          .json({ success: false, error: { code: 'VALIDATION_ERROR', message: '缺少用户ID' } });
         return;
       }
       const stats = await inviteCodeService.getUserInviteStats(targetUserId);

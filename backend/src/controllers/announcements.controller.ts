@@ -101,7 +101,9 @@ export class AnnouncementsController {
     try {
       const userId = req.user?.id;
       if (!userId) {
-        res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } });
+        res
+          .status(401)
+          .json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } });
         return;
       }
 

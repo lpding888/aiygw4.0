@@ -3,8 +3,10 @@ import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended'
 
 export default [
   {
+    ignores: ['dist/**', 'node_modules/**', '**/*.js', '**/*.d.ts']
+  },
+  {
     files: ['src/**/*.ts', 'tests/**/*.ts', 'scripts/**/*.ts'],
-    ignores: ['dist/**', 'node_modules/**', '**/*.js'],
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: {
@@ -24,4 +26,3 @@ export default [
   },
   eslintPluginPrettierRecommended
 ];
-

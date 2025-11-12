@@ -7,7 +7,6 @@ import { Request, Response, NextFunction } from 'express';
 import * as textRepo from '../repositories/contentTexts.repo.js';
 import type { CreateTextInput } from '../repositories/contentTexts.repo.js';
 
-
 export class ContentTextsController {
   /**
    * 列出文案（管理端）

@@ -177,15 +177,17 @@ class SwaggerService {
   getSchemas(): SchemaEntry[] {
     const spec = this.generatedSpec as Record<string, unknown>;
     if (!spec?.components?.schemas) return [];
-    return Object.entries(spec.components.schemas as Record<string, unknown>).map(([name, schema]) => {
-      const schemaRecord = schema as Record<string, unknown>;
-      return {
-        name,
-        schema,
-        required: (schemaRecord.required || []) as unknown[],
-        properties: (schemaRecord.properties || {}) as Record<string, unknown>
-      };
-    });
+    return Object.entries(spec.components.schemas as Record<string, unknown>).map(
+      ([name, schema]) => {
+        const schemaRecord = schema as Record<string, unknown>;
+        return {
+          name,
+          schema,
+          required: (schemaRecord.required || []) as unknown[],
+          properties: (schemaRecord.properties || {}) as Record<string, unknown>
+        };
+      }
+    );
   }
 
   validateDocs(): ValidationResult {
@@ -197,8 +199,7 @@ class SwaggerService {
       if (!specRecord.openapi) errors.push('缺少OpenAPI版本');
       if (!specRecord.info) errors.push('缺少API信息');
       const paths = specRecord.paths as Record<string, unknown> | undefined;
-      if (!paths || Object.keys(paths).length === 0)
-        errors.push('未定义API路径');
+      if (!paths || Object.keys(paths).length === 0) errors.push('未定义API路径');
       for (const [p, methods] of Object.entries(paths || {})) {
         for (const [method, mSpec] of Object.entries(methods as Record<string, unknown>)) {
           const mSpecRecord = mSpec as Record<string, unknown>;
@@ -276,8 +277,11 @@ class SwaggerService {
     const servers = (spec.servers || []) as ServerEntry[];
     const tags = (spec.tags || []) as TagEntry[];
     const specInfo = spec.info as Record<string, unknown>;
-    const componentSchemas = (spec.components as Record<string, unknown> | undefined)?.schemas ?? {};
-    const yamlContent = `openapi: 3.0.0\ninfo:\n  title: ${specInfo.title}\n  version: ${specInfo.version}\n  description: ${specInfo.description}\nservers:\n${servers.map((s) => `  - url: ${s.url}\n    description: ${s.description}`).join('\n')}\n\ntags:\n${tags.map((t) => `  - name: ${t.name}\n    description: ${t.description}`).join('\n')}\n\npaths:\n${JSON.stringify(spec.paths, null, 2)}\n\ncomponents:\n  securitySchemes:\n    bearerAuth:\n      type: http\n      scheme: bearer\n      bearerFormat: JWT\n  schemas:\n${Object.entries(componentSchemas as Record<string, unknown>)
+    const componentSchemas =
+      (spec.components as Record<string, unknown> | undefined)?.schemas ?? {};
+    const yamlContent = `openapi: 3.0.0\ninfo:\n  title: ${specInfo.title}\n  version: ${specInfo.version}\n  description: ${specInfo.description}\nservers:\n${servers.map((s) => `  - url: ${s.url}\n    description: ${s.description}`).join('\n')}\n\ntags:\n${tags.map((t) => `  - name: ${t.name}\n    description: ${t.description}`).join('\n')}\n\npaths:\n${JSON.stringify(spec.paths, null, 2)}\n\ncomponents:\n  securitySchemes:\n    bearerAuth:\n      type: http\n      scheme: bearer\n      bearerFormat: JWT\n  schemas:\n${Object.entries(
+      componentSchemas as Record<string, unknown>
+    )
       .map(([name, schema]) => `    ${name}:\n${JSON.stringify(schema, null, 4)}`)
       .join('\n')}\n`;
     const yamlFile = this.outputFile.replace('.json', '.yaml');
@@ -290,7 +294,8 @@ class SwaggerService {
     if (spec?.paths) {
       const paths = spec.paths as Record<string, unknown>;
       endpointCount = Object.values(paths).reduce(
-        (acc: number, methods: unknown) => acc + Object.keys(methods as Record<string, unknown>).length,
+        (acc: number, methods: unknown) =>
+          acc + Object.keys(methods as Record<string, unknown>).length,
         0
       );
     }
@@ -308,7 +313,7 @@ class SwaggerService {
       try {
         await this.generateDocs();
       } catch (error) {
-      const err = error as Error;
+        const err = error as Error;
         logger.error('[Swagger] 自动更新文档失败:', error);
       }
     }, this.config.updateInterval);

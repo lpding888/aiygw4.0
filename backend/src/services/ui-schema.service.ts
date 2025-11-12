@@ -425,7 +425,11 @@ class UISchemaService {
         properties: {
           name: { type: 'string', title: '功能名称' } as PropertySchema,
           description: { type: 'string', title: '描述' } as PropertySchema,
-          category: { type: 'string', title: '分类', enum: ['image', 'video', 'text'] } as PropertySchema,
+          category: {
+            type: 'string',
+            title: '分类',
+            enum: ['image', 'video', 'text']
+          } as PropertySchema,
           quota_cost: { type: 'number', title: '配额消耗' } as PropertySchema,
           enabled: { type: 'boolean', title: '启用' } as PropertySchema
         },

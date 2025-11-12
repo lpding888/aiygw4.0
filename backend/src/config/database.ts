@@ -6,6 +6,7 @@
 import knex from 'knex';
 import knexConfig, { type Environment as KnexEnvironment } from './knex-config.js';
 import logger from '../utils/logger.js';
+import metricsService from '../services/metrics.service.js';
 
 const environment = (process.env.NODE_ENV ?? 'development') as KnexEnvironment;
 const config = knexConfig[environment] ?? knexConfig.development;
@@ -54,13 +55,17 @@ if (process.env.NODE_ENV !== 'test') {
 
       const pool = (db.client as unknown as { pool?: PoolStats }).pool;
       if (pool) {
+        const used = pool.numUsed?.() ?? 0;
+        const free = pool.numFree?.() ?? 0;
+        const pending = pool.numPendingAcquires?.() ?? 0;
         logger.info('[DATABASE POOL] 📊 连接池状态:', {
-          used: pool.numUsed?.() ?? 0, // 正在使用的连接数
-          free: pool.numFree?.() ?? 0, // 空闲连接数
-          pending: pool.numPendingAcquires?.() ?? 0, // 等待获取连接的请求数
-          min: pool.min ?? 0, // 最小连接数
-          max: pool.max ?? 0 // 最大连接数
+          used,
+          free,
+          pending,
+          min: pool.min ?? 0,
+          max: pool.max ?? 0
         });
+        metricsService.setDbPoolStats({ used, free, pending });
       }
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));

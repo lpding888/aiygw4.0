@@ -122,7 +122,9 @@ interface CSVRow {
 /**
  * 导出文案为JSON
  */
-export async function exportContentTextsJSON(options?: ExportOptions): Promise<ContentTextExport[]> {
+export async function exportContentTextsJSON(
+  options?: ExportOptions
+): Promise<ContentTextExport[]> {
   const texts = await textRepo.listTexts({
     page: options?.page,
     language: options?.language,
@@ -320,7 +322,14 @@ export async function exportEntity(
   entityType: string,
   format: 'json' | 'csv' = 'json',
   options?: ExportOptions
-): Promise<ContentTextExport[] | AnnouncementExport[] | BannerExport[] | PlanExport[] | BenefitExport[] | string> {
+): Promise<
+  | ContentTextExport[]
+  | AnnouncementExport[]
+  | BannerExport[]
+  | PlanExport[]
+  | BenefitExport[]
+  | string
+> {
   let data: CSVRow[];
 
   switch (entityType) {

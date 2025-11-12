@@ -108,21 +108,23 @@ async function processIngestJob(job: JobProcessor) {
     logger.info(`[IngestWorker] 切块完成: documentId=${documentId} chunks=${chunks.length}`);
 
     await job.updateProgress(60);
-    const chunkRecords = chunks.map((chunk: Chunk): Record<string, unknown> => ({
-      document_id: documentId,
-      chunk_index: chunk.index,
-      text: chunk.text,
-      start_pos: chunk.metadata.start,
-      end_pos: chunk.metadata.end,
-      length: chunk.metadata.length,
-      embedding_status: 'pending',
-      metadata: JSON.stringify({
-        format,
-        parseMetadata: parseResult.metadata
-      }),
-      created_at: new Date(),
-      updated_at: new Date()
-    }));
+    const chunkRecords = chunks.map(
+      (chunk: Chunk): Record<string, unknown> => ({
+        document_id: documentId,
+        chunk_index: chunk.index,
+        text: chunk.text,
+        start_pos: chunk.metadata.start,
+        end_pos: chunk.metadata.end,
+        length: chunk.metadata.length,
+        embedding_status: 'pending',
+        metadata: JSON.stringify({
+          format,
+          parseMetadata: parseResult.metadata
+        }),
+        created_at: new Date(),
+        updated_at: new Date()
+      })
+    );
 
     await db('kb_chunks').insert(chunkRecords);
 

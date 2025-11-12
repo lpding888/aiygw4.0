@@ -821,9 +821,7 @@ class FeatureCatalogService {
         featureKey: row.feature_key,
         featureName: row.feature_name,
         category: row.category,
-        usageDate: row.usage_date
-          ? new Date(row.usage_date).toISOString().split('T')[0]
-          : null,
+        usageDate: row.usage_date ? new Date(row.usage_date).toISOString().split('T')[0] : null,
         userId: row.user_id ?? null,
         totalUsage: Number(row.total_usage ?? 0),
         totalCost: Number(row.total_cost ?? 0),

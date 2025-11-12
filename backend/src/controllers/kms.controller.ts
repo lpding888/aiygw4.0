@@ -11,6 +11,12 @@ import type {
   DeleteKeyOptions
 } from '../types/kms.types.js';
 import type { Knex } from 'knex';
+type KmsServiceInstance = typeof import('../services/kms.service.js').default;
+
+const loadKmsService = async (): Promise<KmsServiceInstance> => {
+  const module = await import('../services/kms.service.js');
+  return (module.default ?? module) as KmsServiceInstance;
+};
 
 class KMSController {
   async generateKey(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -53,8 +59,7 @@ class KMSController {
         else if (keyType === 'RSA') validKeySize = 2048;
       }
 
-      const kmsMod = await import('../services/kms.service.js');
-      const svc: any = kmsMod.default ?? kmsMod;
+      const svc = await loadKmsService();
       const key = await svc.generateKey({
         keyName: String(keyName).trim(),
         keyAlias,
@@ -96,8 +101,7 @@ class KMSController {
           message: '密钥名称或ID不能为空'
         });
       }
-      const kmsMod = await import('../services/kms.service.js');
-      const svc: any = kmsMod.default ?? kmsMod;
+      const svc = await loadKmsService();
       const result = await svc.encrypt({
         data,
         keyNameOrId: String(keyNameOrId).trim(),
@@ -132,8 +136,7 @@ class KMSController {
           message: '密钥名称或ID不能为空'
         });
       }
-      const kmsMod = await import('../services/kms.service.js');
-      const svc: any = kmsMod.default ?? kmsMod;
+      const svc = await loadKmsService();
       const result = await svc.decrypt({
         cipherText,
         keyNameOrId: String(keyNameOrId).trim(),
@@ -156,8 +159,7 @@ class KMSController {
           message: '密钥名称或ID不能为空'
         });
       }
-      const kmsMod = await import('../services/kms.service.js');
-      const svc: any = kmsMod.default ?? kmsMod;
+      const svc = await loadKmsService();
       const options: DeleteKeyOptions = {
         force: force === 'true' || force === true
       };
@@ -242,8 +244,7 @@ class KMSController {
   async getKey(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params as { id: string };
-      const kmsMod = await import('../services/kms.service.js');
-      const svc: any = kmsMod.default ?? kmsMod;
+      const svc = await loadKmsService();
       const info = await svc.getKeyInfo?.(String(id));
       res.json({ success: true, data: info ?? [], requestId: req.id });
     } catch (error) {

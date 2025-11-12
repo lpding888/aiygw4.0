@@ -277,5 +277,8 @@ export interface VariableResolver {
    * @param context - 上下文数据
    * @returns 解析后的数据对象
    */
-  resolveAll(data: Record<string, unknown>, context: Record<string, unknown>): Record<string, unknown>;
+  resolveAll(
+    data: Record<string, unknown>,
+    context: Record<string, unknown>
+  ): Record<string, unknown>;
 }

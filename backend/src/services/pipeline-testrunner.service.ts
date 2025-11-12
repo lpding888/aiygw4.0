@@ -361,7 +361,10 @@ class PipelineTestRunnerService extends EventEmitter {
   /**
    * 执行真实节点
    */
-  private async executeRealNode(node: PipelineNode, context: Record<string, unknown>): Promise<MockNodeResult> {
+  private async executeRealNode(
+    node: PipelineNode,
+    context: Record<string, unknown>
+  ): Promise<MockNodeResult> {
     const startTime = Date.now();
     const logs: string[] = [];
 
@@ -412,7 +415,10 @@ class PipelineTestRunnerService extends EventEmitter {
   /**
    * 执行图片处理节点
    */
-  private async executeImageProcessNode(node: PipelineNode, context: Record<string, unknown>): Promise<unknown> {
+  private async executeImageProcessNode(
+    node: PipelineNode,
+    context: Record<string, unknown>
+  ): Promise<unknown> {
     // 模拟图片处理逻辑
     await this.delay(Math.random() * 2000 + 1000);
 
@@ -431,7 +437,10 @@ class PipelineTestRunnerService extends EventEmitter {
   /**
    * 执行AI分析节点
    */
-  private async executeAIAnalysisNode(node: PipelineNode, context: Record<string, unknown>): Promise<unknown> {
+  private async executeAIAnalysisNode(
+    node: PipelineNode,
+    context: Record<string, unknown>
+  ): Promise<unknown> {
     // 模拟AI分析逻辑
     await this.delay(Math.random() * 3000 + 2000);
 
@@ -449,7 +458,10 @@ class PipelineTestRunnerService extends EventEmitter {
   /**
    * 执行数据转换节点
    */
-  private async executeDataTransformNode(node: PipelineNode, context: Record<string, unknown>): Promise<unknown> {
+  private async executeDataTransformNode(
+    node: PipelineNode,
+    context: Record<string, unknown>
+  ): Promise<unknown> {
     // 模拟数据转换逻辑
     await this.delay(Math.random() * 500 + 200);
 
@@ -464,7 +476,10 @@ class PipelineTestRunnerService extends EventEmitter {
   /**
    * 执行通用节点
    */
-  private async executeGenericNode(node: PipelineNode, context: Record<string, unknown>): Promise<unknown> {
+  private async executeGenericNode(
+    node: PipelineNode,
+    context: Record<string, unknown>
+  ): Promise<unknown> {
     // 通用节点处理逻辑
     await this.delay(Math.random() * 1000 + 500);
 
@@ -545,7 +560,11 @@ class PipelineTestRunnerService extends EventEmitter {
   /**
    * 发送执行事件
    */
-  private emitExecutionEvent(executionId: string, eventType: string, data: Record<string, unknown>): void {
+  private emitExecutionEvent(
+    executionId: string,
+    eventType: string,
+    data: Record<string, unknown>
+  ): void {
     // 通过WebSocket发送事件
     websocketService.sendTaskEvent(executionId, {
       event: eventType,

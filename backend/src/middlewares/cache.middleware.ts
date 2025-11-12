@@ -225,8 +225,7 @@ class CacheMiddleware {
       const headersObj = req.headers as Record<string, unknown>;
 
       if (queryObj.nocache === 'true') {
-        const namespace =
-          (headersObj['x-cache-namespace'] as string | undefined) || 'api_response';
+        const namespace = (headersObj['x-cache-namespace'] as string | undefined) || 'api_response';
         const pattern = headersObj['x-cache-pattern'] as string | undefined;
 
         if (pattern) {

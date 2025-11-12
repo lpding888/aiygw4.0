@@ -6,7 +6,10 @@ exports.up = async function (knex) {
     table.string('phone', 11).nullable().alter();
   });
 
-  const [indexes] = await knex.raw('SHOW INDEX FROM ?? WHERE Key_name = ?', ['users', 'uq_users_email']);
+  const [indexes] = await knex.raw('SHOW INDEX FROM ?? WHERE Key_name = ?', [
+    'users',
+    'uq_users_email'
+  ]);
   if (!indexes || indexes.length === 0) {
     await knex.schema.alterTable('users', (table) => {
       table.unique(['email'], 'uq_users_email');

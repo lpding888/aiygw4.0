@@ -562,9 +562,7 @@ router.post(
         test?: unknown;
       };
       const maskedValue =
-        typeof maskedResult.test === 'string'
-          ? maskedResult.test
-          : String(maskedResult.test ?? '');
+        typeof maskedResult.test === 'string' ? maskedResult.test : String(maskedResult.test ?? '');
 
       logger.info('数据脱敏测试', {
         testType,

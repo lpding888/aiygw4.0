@@ -36,7 +36,12 @@ interface CmsCache {
 class PromptTemplateService {
   private readonly CACHE_SCOPE = 'prompt_templates';
   private readonly VARIABLE_PATTERN = /\{\{(\w+)\}\}/g; // {{variable}}
-  private readonly VALID_CATEGORIES: TemplateCategory[] = ['system', 'user', 'assistant', 'function'];
+  private readonly VALID_CATEGORIES: TemplateCategory[] = [
+    'system',
+    'user',
+    'assistant',
+    'function'
+  ];
   private readonly VALID_STATUSES: TemplateStatus[] = ['draft', 'published', 'archived'];
 
   async getTemplates(options: TemplateQueryOptions = {}): Promise<TemplateListResponse> {

@@ -181,41 +181,41 @@ class DatabaseMetrics {
         const pool = client.pool;
 
         pool.on('acquire', (connection: unknown) => {
-        this.metrics.connections.active++;
-        this.metrics.connections.idle--;
-        logger.debug('[DB Metrics] 连接获取', {
-          active: this.metrics.connections.active,
-          idle: this.metrics.connections.idle,
-          total: this.metrics.connections.total
+          this.metrics.connections.active++;
+          this.metrics.connections.idle--;
+          logger.debug('[DB Metrics] 连接获取', {
+            active: this.metrics.connections.active,
+            idle: this.metrics.connections.idle,
+            total: this.metrics.connections.total
+          });
         });
-      });
 
-      pool.on('release', (connection: unknown) => {
-        this.metrics.connections.active--;
-        this.metrics.connections.idle++;
-        logger.debug('[DB Metrics] 连接释放', {
-          active: this.metrics.connections.active,
-          idle: this.metrics.connections.idle
+        pool.on('release', (connection: unknown) => {
+          this.metrics.connections.active--;
+          this.metrics.connections.idle++;
+          logger.debug('[DB Metrics] 连接释放', {
+            active: this.metrics.connections.active,
+            idle: this.metrics.connections.idle
+          });
         });
-      });
 
-      pool.on('destroy', (connection: unknown) => {
-        this.metrics.connections.total--;
-        logger.info('[DB Metrics] 连接销毁', {
-          total: this.metrics.connections.total
+        pool.on('destroy', (connection: unknown) => {
+          this.metrics.connections.total--;
+          logger.info('[DB Metrics] 连接销毁', {
+            total: this.metrics.connections.total
+          });
         });
-      });
 
-      pool.on('enqueue', () => {
-        this.metrics.connections.waiting++;
-        logger.warn('[DB Metrics] 连接等待', {
-          waiting: this.metrics.connections.waiting
+        pool.on('enqueue', () => {
+          this.metrics.connections.waiting++;
+          logger.warn('[DB Metrics] 连接等待', {
+            waiting: this.metrics.connections.waiting
+          });
         });
-      });
 
-      pool.on('dequeue', () => {
-        this.metrics.connections.waiting--;
-      });
+        pool.on('dequeue', () => {
+          this.metrics.connections.waiting--;
+        });
       }
     }
   }
@@ -434,7 +434,9 @@ class DatabaseMetrics {
   /**
    * 生成优化建议
    */
-  private generateRecommendations(row: Record<string, unknown>): ExplainAnalysis['recommendations'] {
+  private generateRecommendations(
+    row: Record<string, unknown>
+  ): ExplainAnalysis['recommendations'] {
     const recommendations: ExplainAnalysis['recommendations'] = [];
     const extra = row.extra || '';
 

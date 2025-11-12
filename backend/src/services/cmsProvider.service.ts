@@ -96,9 +96,9 @@ class CmsProviderService {
 
   async getProviderById(id: string): Promise<ProviderWithSecret> {
     try {
-      const provider = (await db('provider_endpoints')
-        .where('id', id)
-        .first()) as Provider | undefined;
+      const provider = (await db('provider_endpoints').where('id', id).first()) as
+        | Provider
+        | undefined;
       if (!provider) throw AppError.custom(ERROR_CODES.USER_NOT_FOUND, '供应商不存在');
       const secret = await this.getProviderSecret(id);
       return { ...provider, secret: secret ? this.maskSecret(secret) : null };
@@ -166,9 +166,9 @@ class CmsProviderService {
 
   async testProvider(id: string, userId: string): Promise<TestResult> {
     try {
-      const provider = (await db('provider_endpoints')
-        .where('id', id)
-        .first()) as Provider | undefined;
+      const provider = (await db('provider_endpoints').where('id', id).first()) as
+        | Provider
+        | undefined;
       if (!provider) throw AppError.custom(ERROR_CODES.USER_NOT_FOUND, '供应商不存在');
 
       const start = Date.now();

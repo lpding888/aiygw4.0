@@ -276,7 +276,9 @@ export class ProviderHealthService {
           last_check_at: now,
           response_time_ms: responseTime,
           error_message: errorMessage,
-          consecutive_failures: isHealthy ? 0 : (existing.consecutive_failures as number || 0) + 1,
+          consecutive_failures: isHealthy
+            ? 0
+            : ((existing.consecutive_failures as number) || 0) + 1,
           updated_at: now
         };
 

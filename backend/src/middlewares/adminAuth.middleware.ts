@@ -10,11 +10,7 @@ interface AdminInfo {
   role: UserRole | string;
 }
 
-export async function requireAdmin(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
+export async function requireAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
   const adminReq = req as AuthRequest;
   try {
     const userId = adminReq.user?.id;

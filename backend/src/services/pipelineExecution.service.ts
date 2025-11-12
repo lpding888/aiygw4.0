@@ -244,7 +244,9 @@ class PipelineExecutionService extends EventEmitter {
 
   executeInputNode(execution: PipelineExecution, node: ExecutionStep): Record<string, unknown> {
     const { input_data } = execution;
-    const { input_config } = (node.config || {}) as { input_config?: { mapping?: Record<string, string> } };
+    const { input_config } = (node.config || {}) as {
+      input_config?: { mapping?: Record<string, string> };
+    };
     let result = input_data;
     if (input_config && input_config.mapping) {
       result = this.mapInputData(input_data, input_config.mapping);
@@ -329,7 +331,13 @@ class PipelineExecutionService extends EventEmitter {
     const { branches = [] } = parallel_config || {};
     const promises = branches.map(async (branch, index) => {
       try {
-        const result = await this.executeParallelBranch(execution, node, branch, previousResults, index);
+        const result = await this.executeParallelBranch(
+          execution,
+          node,
+          branch,
+          previousResults,
+          index
+        );
         return { ...result, success: true };
       } catch (error) {
         return {
@@ -410,10 +418,7 @@ class PipelineExecutionService extends EventEmitter {
     return true;
   }
 
-  async completeExecution(
-    executionId: string,
-    outputData: Record<string, unknown>
-  ): Promise<void> {
+  async completeExecution(executionId: string, outputData: Record<string, unknown>): Promise<void> {
     const execution = this.executions.get(executionId);
     if (!execution) return;
     execution.status = this.EXECUTION_STATUS.COMPLETED;
@@ -494,13 +499,15 @@ class PipelineExecutionService extends EventEmitter {
     return execution;
   }
 
-  getExecutions(options: {
-    schema_id?: string;
-    status?: ExecutionStatus;
-    mode?: ExecutionMode;
-    limit?: number;
-    offset?: number;
-  } = {}) {
+  getExecutions(
+    options: {
+      schema_id?: string;
+      status?: ExecutionStatus;
+      mode?: ExecutionMode;
+      limit?: number;
+      offset?: number;
+    } = {}
+  ) {
     const { schema_id, status, mode, limit = 20, offset = 0 } = options;
     let executions: PipelineExecution[] = Array.from(this.executions.values());
     if (schema_id) executions = executions.filter((e) => e.schema_id === schema_id);
@@ -587,11 +594,7 @@ class PipelineExecutionService extends EventEmitter {
     }
   }
 
-  emitExecutionEvent(
-    executionId: string,
-    eventType: string,
-    data: Record<string, unknown>
-  ): void {
+  emitExecutionEvent(executionId: string, eventType: string, data: Record<string, unknown>): void {
     const event = {
       type: eventType,
       execution_id: executionId,

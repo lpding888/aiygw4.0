@@ -438,7 +438,9 @@ class CosStorageService {
         : Number(listOptions.maxKeys ?? 1000);
     const marker = typeof listOptions.marker === 'string' ? listOptions.marker : '';
     const delimiter = typeof listOptions.delimiter === 'string' ? listOptions.delimiter : '';
-    const maxKeys = Number.isFinite(maxKeysValue) ? Math.max(1, Math.min(1000, maxKeysValue)) : 1000;
+    const maxKeys = Number.isFinite(maxKeysValue)
+      ? Math.max(1, Math.min(1000, maxKeysValue))
+      : 1000;
 
     try {
       const searchPrefix = category ? `${category}/` : prefix;
@@ -481,9 +483,10 @@ class CosStorageService {
       await this.initialize();
     }
 
-    const categories: FileCategory[] = Array.isArray(options.categories) && options.categories.length
-      ? options.categories
-      : ['temp', 'intermediate'];
+    const categories: FileCategory[] =
+      Array.isArray(options.categories) && options.categories.length
+        ? options.categories
+        : ['temp', 'intermediate'];
     const olderThanDays = options.olderThanDays ?? 7;
     const dryRun = options.dryRun ?? false;
     const batchSize = options.batchSize ?? 100;
@@ -606,9 +609,7 @@ class CosStorageService {
           totalFiles: overallTotals.totalFiles,
           totalSize: overallTotals.totalSize,
           averageSize:
-            overallTotals.totalFiles > 0
-              ? overallTotals.totalSize / overallTotals.totalFiles
-              : 0
+            overallTotals.totalFiles > 0 ? overallTotals.totalSize / overallTotals.totalFiles : 0
         },
         storageClassDistribution: await this.getStorageClassDistribution(),
         lastCleanup: this.stats.lastCleanup ? this.stats.lastCleanup.toISOString() : null
@@ -658,9 +659,7 @@ class CosStorageService {
           uploadCount: this.stats.uploadCount,
           downloadCount: this.stats.downloadCount,
           deleteCount: this.stats.deleteCount,
-          lastCleanup: this.stats.lastCleanup
-            ? this.stats.lastCleanup.toISOString()
-            : null
+          lastCleanup: this.stats.lastCleanup ? this.stats.lastCleanup.toISOString() : null
         },
         timestamp: new Date().toISOString()
       };
@@ -678,9 +677,7 @@ class CosStorageService {
           uploadCount: this.stats.uploadCount,
           downloadCount: this.stats.downloadCount,
           deleteCount: this.stats.deleteCount,
-          lastCleanup: this.stats.lastCleanup
-            ? this.stats.lastCleanup.toISOString()
-            : null
+          lastCleanup: this.stats.lastCleanup ? this.stats.lastCleanup.toISOString() : null
         },
         timestamp: new Date().toISOString(),
         error: err.message

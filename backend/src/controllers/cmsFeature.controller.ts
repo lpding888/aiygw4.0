@@ -80,11 +80,15 @@ class CmsFeatureController {
       const userId = requireUserId(req);
       const payload = req.body as Partial<CreateFeatureData>;
       if (!payload.key || typeof payload.key !== 'string' || !payload.key.trim()) {
-        res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'key不能为空' } });
+        res
+          .status(400)
+          .json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'key不能为空' } });
         return;
       }
       if (!payload.name || typeof payload.name !== 'string' || !payload.name.trim()) {
-        res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'name不能为空' } });
+        res
+          .status(400)
+          .json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'name不能为空' } });
         return;
       }
       const featureData: CreateFeatureData = {

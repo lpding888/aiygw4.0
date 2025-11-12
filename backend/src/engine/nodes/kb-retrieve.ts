@@ -57,9 +57,7 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
       // 解析查询变量
       const resolvedQueryRaw = this.resolveValue(config.query, context.flowContext.state);
       const resolvedQuery =
-        typeof resolvedQueryRaw === 'string'
-          ? resolvedQueryRaw
-          : String(resolvedQueryRaw ?? '');
+        typeof resolvedQueryRaw === 'string' ? resolvedQueryRaw : String(resolvedQueryRaw ?? '');
 
       // 执行检索
       const results = await this.retrieve(
@@ -132,9 +130,10 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
 
     const kbId = typeof rawConfig.kbId === 'string' ? rawConfig.kbId : undefined;
     const topK = typeof rawConfig.topK === 'number' ? rawConfig.topK : undefined;
-    const filters = (rawConfig.filters && typeof rawConfig.filters === 'object'
-      ? (rawConfig.filters as Record<string, unknown>)
-      : undefined) ?? {};
+    const filters =
+      (rawConfig.filters && typeof rawConfig.filters === 'object'
+        ? (rawConfig.filters as Record<string, unknown>)
+        : undefined) ?? {};
     const outputKey = typeof rawConfig.outputKey === 'string' ? rawConfig.outputKey : undefined;
 
     return {
@@ -179,13 +178,15 @@ class KBRetrieveNodeExecutor implements NodeExecutor {
         )
         .limit(topK);
 
-      return results.map((r: { id: string; text: string; metadata: string; title: string; kb_id: string }) => ({
-        id: r.id,
-        text: r.text,
-        metadata: JSON.parse(r.metadata || '{}'),
-        title: r.title,
-        kbId: r.kb_id
-      }));
+      return results.map(
+        (r: { id: string; text: string; metadata: string; title: string; kb_id: string }) => ({
+          id: r.id,
+          text: r.text,
+          metadata: JSON.parse(r.metadata || '{}'),
+          title: r.title,
+          kbId: r.kb_id
+        })
+      );
     } catch (error) {
       logger.error('[KBRetrieve] 数据库查询失败:', error);
       throw error;

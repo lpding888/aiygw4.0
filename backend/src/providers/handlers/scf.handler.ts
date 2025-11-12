@@ -234,7 +234,10 @@ export class ScfProvider extends BaseProvider {
     } catch (error: unknown) {
       // 艹，SCF调用失败了！
       const err = error instanceof Error ? error : new Error(String(error));
-      const errorCode = typeof error === 'object' && error !== null && 'code' in error ? (error as Record<string, unknown>).code : undefined;
+      const errorCode =
+        typeof error === 'object' && error !== null && 'code' in error
+          ? (error as Record<string, unknown>).code
+          : undefined;
 
       this.logger.error(`[${this.key}] SCF调用失败`, {
         taskId: context.taskId,
@@ -254,7 +257,10 @@ export class ScfProvider extends BaseProvider {
    * @param invokeType - 调用类型
    * @returns 解析后的结果
    */
-  private parseScfResponse(response: Record<string, unknown>, invokeType: 'sync' | 'async'): unknown {
+  private parseScfResponse(
+    response: Record<string, unknown>,
+    invokeType: 'sync' | 'async'
+  ): unknown {
     const scfResponse = response as {
       RequestId?: string;
       Result?: string | (Record<string, unknown> & { FunctionRequestId?: string; RetMsg?: string });
@@ -277,7 +283,9 @@ export class ScfProvider extends BaseProvider {
       // 艹，Result是JSON字符串，需要解析
       const resultPayload = scfResponse.Result;
       const resultValue =
-        typeof resultPayload === 'object' && resultPayload !== null && 'FunctionRequestId' in resultPayload
+        typeof resultPayload === 'object' &&
+        resultPayload !== null &&
+        'FunctionRequestId' in resultPayload
           ? (resultPayload as { RetMsg?: string }).RetMsg
           : resultPayload;
 
@@ -314,7 +322,10 @@ export class ScfProvider extends BaseProvider {
     const details: Record<string, unknown> = {
       taskId,
       functionName,
-      originalCode: typeof error === 'object' && error !== null && 'code' in error ? (error as Record<string, unknown>).code : undefined,
+      originalCode:
+        typeof error === 'object' && error !== null && 'code' in error
+          ? (error as Record<string, unknown>).code
+          : undefined,
       originalMessage: error instanceof Error ? error.message : String(error)
     };
 

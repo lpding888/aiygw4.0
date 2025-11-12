@@ -304,7 +304,8 @@ class BuildingAIClientService {
       const response = err.response as Record<string, unknown>;
       const status = response.status as number;
       const data = response.data as Record<string, unknown>;
-      const message = (data?.message as string) || (data?.error as string) || 'BuildingAI service error';
+      const message =
+        (data?.message as string) || (data?.error as string) || 'BuildingAI service error';
 
       const normalizedError = new Error(message) as NormalizedError;
       normalizedError.code = (data?.code as string) || `BUILDINGAI_${status}`;

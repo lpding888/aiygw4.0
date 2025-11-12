@@ -496,7 +496,9 @@ class InviteCodeService {
     );
   }
 
-  async getInviteUsageLogs(options: InviteUsageLogOptions = {}): Promise<Record<string, unknown>[]> {
+  async getInviteUsageLogs(
+    options: InviteUsageLogOptions = {}
+  ): Promise<Record<string, unknown>[]> {
     const {
       inviteCodeId,
       inviterId,

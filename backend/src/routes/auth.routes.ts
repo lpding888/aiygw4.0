@@ -14,6 +14,7 @@ const router = Router();
  * POST /api/auth/register
  */
 router.post('/register', authController.register.bind(authController));
+router.post('/email/register', authController.registerWithEmail.bind(authController));
 
 /**
  * 用户登录
@@ -21,6 +22,7 @@ router.post('/register', authController.register.bind(authController));
  */
 router.post('/login', authController.loginCode.bind(authController));
 router.post('/login/password', authController.loginPassword.bind(authController));
+router.post('/email/login', authController.loginWithEmailCode.bind(authController));
 
 /**
  * 刷新Token
@@ -35,6 +37,7 @@ router.post('/refresh', authController.refresh.bind(authController));
 router.post('/logout', authenticate, authController.logout.bind(authController));
 // 发送验证码
 router.post('/send-code', authController.sendCode.bind(authController));
+router.post('/email/send-code', authController.sendEmailCode.bind(authController));
 
 // 获取当前登录用户
 router.get('/me', authenticate, authController.getMe.bind(authController));
@@ -47,5 +50,6 @@ router.post('/set-password', authenticate, authController.setPassword.bind(authC
 
 // 重置密码（忘记密码）
 router.post('/reset-password', authController.resetPassword.bind(authController));
+router.post('/email/reset-password', authController.resetPassword.bind(authController));
 
 export default router;

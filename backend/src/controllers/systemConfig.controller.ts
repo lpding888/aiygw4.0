@@ -92,10 +92,7 @@ class SystemConfigController {
     try {
       const { category } = req.params as { category: string };
       const { includeSecrets = false } = req.query as unknown as GetCategoryQuery;
-      const configs = await systemConfigService.getByCategory(
-        category,
-        includeSecrets === 'true'
-      );
+      const configs = await systemConfigService.getByCategory(category, includeSecrets === 'true');
       res.json({ success: true, data: { category, configs } });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));

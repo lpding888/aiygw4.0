@@ -272,7 +272,9 @@ class UserProfileController {
       const updateData = req.body;
 
       // 需要先检查工作经历是否存在且属于当前用户
-      const workExperience = (await userProfileService.getUserWorkExperience(userId)) as Array<{ id: string }>;
+      const workExperience = (await userProfileService.getUserWorkExperience(userId)) as Array<{
+        id: string;
+      }>;
       const existingWork = workExperience.find((work: { id: string }) => work.id === workId);
 
       if (!existingWork) {
@@ -325,7 +327,9 @@ class UserProfileController {
       const { workId } = req.params;
 
       // 需要先检查工作经历是否存在且属于当前用户
-      const workExperience = (await userProfileService.getUserWorkExperience(userId)) as Array<{ id: string }>;
+      const workExperience = (await userProfileService.getUserWorkExperience(userId)) as Array<{
+        id: string;
+      }>;
       const existingWork = workExperience.find((work: { id: string }) => work.id === workId);
 
       if (!existingWork) {

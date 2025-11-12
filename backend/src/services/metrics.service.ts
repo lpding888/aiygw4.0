@@ -11,6 +11,21 @@
 import promClient from 'prom-client';
 import logger from '../utils/logger.js';
 
+type QueueStatsSnapshot = {
+  waiting: number;
+  active: number;
+  delayed: number;
+  failed: number;
+  completed: number;
+  paused: number;
+};
+
+type DbPoolStats = {
+  used: number;
+  free: number;
+  pending: number;
+};
+
 class MetricsService {
   private enabled: boolean;
   private register: promClient.Registry;
@@ -47,6 +62,8 @@ class MetricsService {
   // 缓存指标
   private cacheHits: promClient.Counter<string>;
   private cacheMisses: promClient.Counter<string>;
+  private queueJobGauge: promClient.Gauge<string>;
+  private dbPoolGauge: promClient.Gauge<string>;
 
   constructor() {
     // 默认启用Prometheus指标收集
@@ -75,6 +92,8 @@ class MetricsService {
       this.commissionTotal = new promClient.Counter({ name: 'dummy17', help: 'dummy' });
       this.cacheHits = new promClient.Counter({ name: 'dummy18', help: 'dummy' });
       this.cacheMisses = new promClient.Counter({ name: 'dummy19', help: 'dummy' });
+      this.queueJobGauge = new promClient.Gauge({ name: 'dummy20', help: 'dummy' });
+      this.dbPoolGauge = new promClient.Gauge({ name: 'dummy21', help: 'dummy' });
       return;
     }
 
@@ -251,6 +270,20 @@ class MetricsService {
       registers: [this.register]
     });
 
+    this.queueJobGauge = new promClient.Gauge({
+      name: 'aiphoto_queue_jobs',
+      help: 'BullMQ队列任务数量',
+      labelNames: ['queue', 'status'],
+      registers: [this.register]
+    });
+
+    this.dbPoolGauge = new promClient.Gauge({
+      name: 'aiphoto_db_pool_connections',
+      help: '数据库连接池状态',
+      labelNames: ['state'],
+      registers: [this.register]
+    });
+
     logger.info('[Metrics] ✅ Prometheus监控服务已启动');
   }
 
@@ -369,6 +402,20 @@ class MetricsService {
   recordCacheMiss(cacheName: string): void {
     if (!this.enabled) return;
     this.cacheMisses.inc({ cache_name: cacheName });
+  }
+
+  setQueueStats(queueName: string, stats: QueueStatsSnapshot): void {
+    if (!this.enabled) return;
+    Object.entries(stats).forEach(([status, value]) => {
+      this.queueJobGauge.set({ queue: queueName, status }, value);
+    });
+  }
+
+  setDbPoolStats(stats: DbPoolStats): void {
+    if (!this.enabled) return;
+    this.dbPoolGauge.set({ state: 'used' }, stats.used);
+    this.dbPoolGauge.set({ state: 'idle' }, stats.free);
+    this.dbPoolGauge.set({ state: 'pending' }, stats.pending);
   }
 
   // ========== Prometheus端点方法 ==========

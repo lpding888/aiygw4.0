@@ -142,7 +142,10 @@ export abstract class BaseProvider implements IProvider {
 
       // 处理超时错误
       if (
-        (typeof error === 'object' && error !== null && 'name' in error && (error as Record<string, unknown>).name === 'AbortError') ||
+        (typeof error === 'object' &&
+          error !== null &&
+          'name' in error &&
+          (error as Record<string, unknown>).name === 'AbortError') ||
         abortController.signal.aborted
       ) {
         this.logger.error(`[${this.key}] 执行超时`, {
@@ -251,9 +254,7 @@ export abstract class BaseProvider implements IProvider {
         }
 
         const errorCode =
-          typeof error === 'object' &&
-          error !== null &&
-          'code' in error
+          typeof error === 'object' && error !== null && 'code' in error
             ? (error as Record<string, unknown>).code
             : ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED;
 
@@ -264,10 +265,7 @@ export abstract class BaseProvider implements IProvider {
           throw error;
         }
 
-        const errorMessage =
-          error instanceof Error
-            ? error.message
-            : String(error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
 
         // 如果已经达到最大重试次数，不throw，让循环结束后返回MAX_RETRIES_EXCEEDED
         if (attempt >= this.retryPolicy.maxRetries) {

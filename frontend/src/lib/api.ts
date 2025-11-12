@@ -263,6 +263,9 @@ class APIClient {
     sendCode: (phone: string) =>
       this.client.post<APIResponse>('/auth/send-code', { phone }),
 
+    sendEmailCode: (email: string, scene?: string) =>
+      this.client.post<APIResponse>('/auth/email/send-code', { email, scene }),
+
     loginWithCode: (phone: string, code: string) =>
       this.client.post<APIResponse>('/auth/login', { phone, code }),
 
@@ -275,6 +278,21 @@ class APIClient {
     passwordLogin: (phone: string, password: string) =>
       this.client.post<APIResponse>('/auth/login/password', { phone, password }),
 
+    loginWithEmailCode: (email: string, code: string, referrerId?: string | null) =>
+      this.client.post<APIResponse>('/auth/email/login', {
+        email,
+        code,
+        referrer_id: referrerId ?? null,
+      }),
+
+    registerWithEmail: (email: string, code: string, password: string, referrerId?: string | null) =>
+      this.client.post<APIResponse>('/auth/email/register', {
+        email,
+        code,
+        password,
+        referrer_id: referrerId ?? null,
+      }),
+
     wechatLogin: (code: string) =>
       this.client.post<APIResponse>('/auth/wechat-login', { code }),
 
@@ -284,12 +302,8 @@ class APIClient {
         oldPassword,
       }),
 
-    resetPassword: (phone: string, code: string, newPassword: string) =>
-      this.client.post<APIResponse>('/auth/reset-password', {
-        phone,
-        code,
-        newPassword,
-      }),
+    resetPassword: (params: { phone?: string; email?: string; code: string; newPassword: string }) =>
+      this.client.post<APIResponse>('/auth/reset-password', params),
 
     me: () => this.client.get<APIResponse>('/auth/me'),
   };

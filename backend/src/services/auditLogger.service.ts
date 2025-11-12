@@ -25,7 +25,8 @@ function extractRequestInfo(req?: Request) {
   return {
     user_id: Number.isFinite(parsedUserId) ? (parsedUserId as number) : undefined,
     user_name: user?.name || user?.email,
-    ip_address: req?.ip || (req?.connection as unknown as { remoteAddress?: string })?.remoteAddress,
+    ip_address:
+      req?.ip || (req?.connection as unknown as { remoteAddress?: string })?.remoteAddress,
     user_agent: req?.get('user-agent')
   };
 }

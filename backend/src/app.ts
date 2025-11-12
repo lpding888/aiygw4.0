@@ -80,6 +80,26 @@ const routeDefinitions: RouteDefinition[] = [
   { mountPath: '/api/prompt-templates', modulePath: './routes/promptTemplates.routes.js' }
 ];
 
+const normalizeOrigin = (origin: string): string | null => {
+  try {
+    const parsed = new URL(origin);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return null;
+  }
+};
+
+const buildCorsWhitelist = (input?: string | string[]): Set<string> => {
+  const rawList = Array.isArray(input) ? input : typeof input === 'string' ? input.split(',') : [];
+  const normalized = rawList
+    .map((origin) => normalizeOrigin(origin.trim()))
+    .filter((value): value is string => Boolean(value));
+  if (normalized.length === 0) {
+    normalized.push('http://localhost:3001');
+  }
+  return new Set(normalized);
+};
+
 const loadRouter = async (modulePath: string): Promise<express.Router> => {
   const module = (await import(modulePath)) as RouterModule;
   const rawRouter = module && 'default' in module ? module.default : module;
@@ -120,16 +140,27 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Express
   // 防止NoSQL注入（艹！虽然用的是MySQL，但防患于未然）
   app.use(mongoSanitize());
 
-  const allowedOrigins =
-    options.corsOrigins ??
-    (process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : ['http://localhost:3001']);
+  const originConfig = options.corsOrigins ?? process.env.FRONTEND_URL;
+  const corsWhitelist = buildCorsWhitelist(originConfig);
 
   app.use(
     cors({
-      origin: allowedOrigins,
+      origin: (origin, callback) => {
+        if (!origin) {
+          return callback(null, true);
+        }
+        const normalized = normalizeOrigin(origin);
+        if (normalized && corsWhitelist.has(normalized)) {
+          return callback(null, true);
+        }
+        logger.warn(`[CORS] 拦截来源: ${origin}`);
+        return callback(new Error('Not allowed by CORS'));
+      },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID']
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'Accept', 'Origin'],
+      exposedHeaders: ['X-Request-ID'],
+      maxAge: 600
     })
   );
 

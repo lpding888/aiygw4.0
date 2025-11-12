@@ -1,7 +1,5 @@
 import logger from '../utils/logger.js';
-import providerWrapperService, {
-  type HealthCheckResponse
-} from './provider-wrapper.service.js';
+import providerWrapperService, { type HealthCheckResponse } from './provider-wrapper.service.js';
 import imageProcessService from './imageProcess.service.js';
 import aiModelService from './aiModel.service.js';
 
@@ -29,38 +27,30 @@ class ProviderRegistryService {
   }
 
   private async registerBuiltinProviders() {
-    this.registerProvider(
-      'imageProcess',
-      imageProcessService as ProviderInstance,
-      {
-        circuitBreaker: {
-          failureThreshold: 3,
-          resetTimeout: 30000,
-          monitoringPeriod: 10000,
-          halfOpenMaxCalls: 2,
-          successThreshold: 2
-        },
-        retry: { maxAttempts: 2, baseDelay: 1000, maxDelay: 8000, backoff: 'exponential' },
-        timeout: 60000,
-        cache: { ttl: 300, enabled: true }
-      }
-    );
-    this.registerProvider(
-      'aiModel',
-      aiModelService as ProviderInstance,
-      {
-        circuitBreaker: {
-          failureThreshold: 2,
-          resetTimeout: 60000,
-          monitoringPeriod: 15000,
-          halfOpenMaxCalls: 1,
-          successThreshold: 1
-        },
-        retry: { maxAttempts: 1, baseDelay: 2000, maxDelay: 5000, backoff: 'linear' },
-        timeout: 120000,
-        cache: { ttl: 600, enabled: true }
-      }
-    );
+    this.registerProvider('imageProcess', imageProcessService as ProviderInstance, {
+      circuitBreaker: {
+        failureThreshold: 3,
+        resetTimeout: 30000,
+        monitoringPeriod: 10000,
+        halfOpenMaxCalls: 2,
+        successThreshold: 2
+      },
+      retry: { maxAttempts: 2, baseDelay: 1000, maxDelay: 8000, backoff: 'exponential' },
+      timeout: 60000,
+      cache: { ttl: 300, enabled: true }
+    });
+    this.registerProvider('aiModel', aiModelService as ProviderInstance, {
+      circuitBreaker: {
+        failureThreshold: 2,
+        resetTimeout: 60000,
+        monitoringPeriod: 15000,
+        halfOpenMaxCalls: 1,
+        successThreshold: 1
+      },
+      retry: { maxAttempts: 1, baseDelay: 2000, maxDelay: 5000, backoff: 'linear' },
+      timeout: 120000,
+      cache: { ttl: 600, enabled: true }
+    });
   }
 
   private async registerExternalProviders() {

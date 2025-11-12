@@ -257,7 +257,8 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
         : {};
 
     const outputKey = typeof rawConfig.outputKey === 'string' ? rawConfig.outputKey : undefined;
-    const validateSchema = rawConfig.validateSchema === undefined ? true : Boolean(rawConfig.validateSchema);
+    const validateSchema =
+      rawConfig.validateSchema === undefined ? true : Boolean(rawConfig.validateSchema);
 
     return {
       mcpEndpointRef,
@@ -475,12 +476,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
    * @private
    */
   private handleError(error: unknown): NodeError {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      'type' in error
-    ) {
+    if (typeof error === 'object' && error !== null && 'code' in error && 'type' in error) {
       return error as NodeError; // 已经是NodeError
     }
 
@@ -505,11 +501,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
       }
 
       if ('message' in err && typeof err.message === 'string') {
-        return this.createError(
-          'EXECUTION_FAILED',
-          err.message,
-          NodeErrorType.EXECUTION_FAILED
-        );
+        return this.createError('EXECUTION_FAILED', err.message, NodeErrorType.EXECUTION_FAILED);
       }
     }
 

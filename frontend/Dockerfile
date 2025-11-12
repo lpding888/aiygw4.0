@@ -1,41 +1,55 @@
 # ================================
 # AI照前端 - 生产环境Dockerfile
 # ================================
-# 艹！Next.js 14多阶段构建，极致优化
+# 艹！Next.js 14多阶段构建，极致优化，兼容CI/CD
 
-# ========== 依赖安装阶段 ==========
-FROM node:18-alpine AS deps
+# ========== 基础镜像 ==========
+FROM node:20-alpine AS base
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# 艹！只复制package文件，利用缓存层
-COPY package*.json ./
-RUN npm ci --only=production
+# ========== 依赖安装阶段 ==========
+FROM base AS deps
+# 只复制依赖文件，利用缓存层
+COPY package.json package-lock.json ./
+# 生产构建也需要devDependencies（Next构建依赖）
+RUN npm ci
 
 # ========== 构建阶段 ==========
-FROM node:18-alpine AS builder
+FROM base AS builder
 WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
-# 复制依赖
+# 注入构建期可覆盖的公开环境变量
+ARG NEXT_PUBLIC_API_BASE=http://localhost:3000/api
+ARG NEXT_PUBLIC_API_URL=http://localhost:3000/api
+ARG NEXT_PUBLIC_WS_URL=ws://localhost:3000
+ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
+
+# 复制源代码 & node_modules
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# 艹！Next.js构建
-ENV NEXT_TELEMETRY_DISABLED 1
+# Next.js构建Standalone产物
 RUN npm run build
 
-# ========== 生产运行阶段 ==========
-FROM node:18-alpine AS runner
+# ========== 运行阶段 ==========
+FROM node:20-alpine AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3001
+ENV HOSTNAME=0.0.0.0
 
-# 艹！创建非root用户
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# 创建非root用户
+RUN addgroup --system --gid 1001 nodejs \
+  && adduser --system --uid 1001 nextjs
 
-# 艹！只复制必要文件
+# 复制构建结果
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
@@ -44,8 +58,5 @@ USER nextjs
 
 EXPOSE 3001
 
-ENV PORT 3001
-ENV HOSTNAME "0.0.0.0"
-
-# 艹！启动Next.js
+# 使用内置server.js启动
 CMD ["node", "server.js"]

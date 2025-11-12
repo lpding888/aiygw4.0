@@ -23,7 +23,7 @@ const nextConfig = {
     },
   },
   // 艹!P2-SSR-204任务:输出模式优化(静态导出&SSG)
-  // output: 'standalone', // Docker部署用standalone,默认先注释
+  output: 'standalone', // Docker部署和无服务器环境必备
   // 艹!静态页面生成配置(模板中心等高访问页启用ISR)
   images: {
     domains: [
@@ -89,7 +89,7 @@ const nextConfig = {
             reuseExistingChunk: true,
           },
           formio: {
-            test: /[\\/]node_modules[\\/](formiojs|react-formio)[\\/]/,
+            test: /[\\/]node_modules[\\/](formiojs)[\\/]/,
             name: 'formio',
             priority: 30,
             reuseExistingChunk: true,
@@ -133,7 +133,6 @@ const nextConfig = {
   // 跨平台部署优化配置
   experimental: {
     esmExternals: 'loose',
-    serverComponentsExternalPackages: ['antd', '@ant-design/icons'],
     swcMinify: true,
     // 艹!P2-SSR-204:优化并发渲染
     optimizeCss: true,

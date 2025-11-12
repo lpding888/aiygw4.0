@@ -13,6 +13,39 @@ const baseConnection = {
   charset: 'utf8mb4'
 } satisfies Partial<Knex.MySql2ConnectionConfig>;
 
+type PoolDefaults = {
+  min: number;
+  max: number;
+  acquireTimeoutMillis: number;
+  createTimeoutMillis: number;
+  destroyTimeoutMillis: number;
+  idleTimeoutMillis: number;
+};
+
+const buildPoolConfig = (defaults: PoolDefaults): Knex.PoolConfig => ({
+  min: parseIntWithFallback(process.env.DATABASE_POOL_MIN, defaults.min),
+  max: parseIntWithFallback(process.env.DATABASE_POOL_MAX, defaults.max),
+  acquireTimeoutMillis: parseIntWithFallback(
+    process.env.DATABASE_POOL_ACQUIRE_TIMEOUT,
+    defaults.acquireTimeoutMillis
+  ),
+  createTimeoutMillis: parseIntWithFallback(
+    process.env.DATABASE_POOL_CREATE_TIMEOUT,
+    defaults.createTimeoutMillis
+  ),
+  destroyTimeoutMillis: parseIntWithFallback(
+    process.env.DATABASE_POOL_DESTROY_TIMEOUT,
+    defaults.destroyTimeoutMillis
+  ),
+  idleTimeoutMillis: parseIntWithFallback(
+    process.env.DATABASE_POOL_IDLE,
+    defaults.idleTimeoutMillis
+  ),
+  reapIntervalMillis: 1000,
+  createRetryIntervalMillis: 200,
+  propagateCreateError: false
+});
+
 export type Environment = 'development' | 'test' | 'production';
 
 export const knexConfig: Record<Environment, Knex.Config> = {
@@ -22,18 +55,14 @@ export const knexConfig: Record<Environment, Knex.Config> = {
       ...baseConnection,
       database: process.env.DB_NAME ?? 'ai_photo'
     },
-    pool: {
-      // P0-003优化: 提高连接池大小,避免冷启动和高并发时的连接等待
-      min: parseIntWithFallback(process.env.DATABASE_POOL_MIN, 10), // 避免冷启动,保持至少10个连接
-      max: parseIntWithFallback(process.env.DATABASE_POOL_MAX, 100), // 支持高并发,最多100个连接
-      acquireTimeoutMillis: 10_000, // 获取连接超时10秒(原60秒太长)
-      createTimeoutMillis: 5_000, // 创建连接超时5秒(原30秒太长)
-      destroyTimeoutMillis: 5_000,
-      idleTimeoutMillis: 30_000, // 空闲连接30秒后回收
-      reapIntervalMillis: 1_000, // 每秒检查一次过期连接
-      createRetryIntervalMillis: 200,
-      propagateCreateError: false // 不传播创建错误(允许重试)
-    },
+    pool: buildPoolConfig({
+      min: 2,
+      max: 15,
+      acquireTimeoutMillis: 8_000,
+      createTimeoutMillis: 4_000,
+      destroyTimeoutMillis: 4_000,
+      idleTimeoutMillis: 30_000
+    }),
     migrations: {
       directory: './src/db/migrations',
       tableName: 'knex_migrations'
@@ -48,10 +77,14 @@ export const knexConfig: Record<Environment, Knex.Config> = {
       ...baseConnection,
       database: 'test_ai_photo'
     },
-    pool: {
-      min: 2,
-      max: 5
-    },
+    pool: buildPoolConfig({
+      min: 1,
+      max: 5,
+      acquireTimeoutMillis: 5_000,
+      createTimeoutMillis: 3_000,
+      destroyTimeoutMillis: 3_000,
+      idleTimeoutMillis: 10_000
+    }),
     migrations: {
       directory: './src/db/migrations',
       tableName: 'knex_migrations'
@@ -66,18 +99,14 @@ export const knexConfig: Record<Environment, Knex.Config> = {
       ...baseConnection,
       database: process.env.DB_NAME ?? 'ai_photo'
     },
-    pool: {
-      // P0-003优化: 提高生产环境连接池大小,支持高并发
-      min: parseIntWithFallback(process.env.DATABASE_POOL_MIN, 10), // 避免冷启动,保持至少10个连接
-      max: parseIntWithFallback(process.env.DATABASE_POOL_MAX, 100), // 支持高并发,最多100个连接
-      acquireTimeoutMillis: 10_000, // 获取连接超时10秒(原60秒太长)
-      createTimeoutMillis: 5_000, // 创建连接超时5秒(原30秒太长)
+    pool: buildPoolConfig({
+      min: 5,
+      max: 40,
+      acquireTimeoutMillis: 10_000,
+      createTimeoutMillis: 5_000,
       destroyTimeoutMillis: 5_000,
-      idleTimeoutMillis: 30_000, // 空闲连接30秒后回收(原5分钟太长)
-      reapIntervalMillis: 1_000, // 每秒检查一次过期连接
-      createRetryIntervalMillis: 200, // 创建连接失败后重试间隔(原100ms改200ms)
-      propagateCreateError: false // 不传播创建错误(允许重试)
-    },
+      idleTimeoutMillis: 30_000
+    }),
     migrations: {
       directory: './src/db/migrations',
       tableName: 'knex_migrations'

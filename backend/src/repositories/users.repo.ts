@@ -5,18 +5,23 @@
 
 import { db } from '../config/database.js';
 
+const normalizeEmail = (email: string): string => email.trim().toLowerCase();
+
 /**
  * 用户接口
  */
 export interface User {
   id: string;
-  phone: string;
+  phone: string | null;
+  email: string | null;
   password: string | null;
   role: string;
   isMember: boolean;
   quota_remaining: number;
   quota_expireAt: Date | null;
   referrer_id: string | null;
+  email_verified: boolean;
+  email_verified_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -26,12 +31,15 @@ export interface User {
  */
 export interface SafeUser {
   id: string;
-  phone: string;
+  phone: string | null;
+  email: string | null;
   role: string;
   isMember: boolean;
   quota_remaining: number;
   quota_expireAt: Date | null;
   referrer_id: string | null;
+  email_verified: boolean;
+  email_verified_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -41,12 +49,15 @@ export interface SafeUser {
  */
 export interface CreateUserInput {
   id: string; // nanoid生成
-  phone: string;
-  password: string; // bcrypt hash
+  phone?: string | null;
+  email?: string | null;
+  password?: string | null; // bcrypt hash
   role?: string;
   isMember?: boolean;
   quota_remaining?: number;
   referrer_id?: string | null;
+  email_verified?: boolean;
+  email_verified_at?: Date | null;
 }
 
 /**
@@ -55,6 +66,15 @@ export interface CreateUserInput {
  */
 export async function findUserByPhone(phone: string): Promise<User | null> {
   const user = await db('users').where({ phone }).first();
+  return user || null;
+}
+
+/**
+ * 根据邮箱查找用户
+ */
+export async function findUserByEmail(email: string): Promise<User | null> {
+  const normalized = normalizeEmail(email);
+  const user = await db('users').whereRaw('LOWER(email) = ?', [normalized]).first();
   return user || null;
 }
 
@@ -75,13 +95,16 @@ export async function createUser(input: CreateUserInput): Promise<User> {
 
   const userData = {
     id: input.id,
-    phone: input.phone,
-    password: input.password,
+    phone: input.phone ?? null,
+    email: input.email ? normalizeEmail(input.email) : null,
+    password: input.password ?? null,
     role: input.role || 'user',
     isMember: input.isMember || false,
     quota_remaining: input.quota_remaining || 0,
     quota_expireAt: null,
     referrer_id: input.referrer_id || null,
+    email_verified: input.email_verified ?? false,
+    email_verified_at: input.email_verified_at ?? null,
     created_at: now,
     updated_at: now
   };
@@ -135,6 +158,19 @@ export async function deleteUser(id: string): Promise<boolean> {
  */
 export async function phoneExists(phone: string): Promise<boolean> {
   const result = await db('users').where({ phone }).count('* as count').first();
+  const count = result?.count ? Number(result.count) : 0;
+  return count > 0;
+}
+
+/**
+ * 检查邮箱是否已存在
+ */
+export async function emailExists(email: string): Promise<boolean> {
+  const normalized = normalizeEmail(email);
+  const result = await db('users')
+    .whereRaw('LOWER(email) = ?', [normalized])
+    .count('* as count')
+    .first();
   const count = result?.count ? Number(result.count) : 0;
   return count > 0;
 }

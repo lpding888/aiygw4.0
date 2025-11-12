@@ -252,10 +252,7 @@ class WechatLoginService {
    * @param state - 状态参数
    * @returns 授权URL
    */
-  generateOpenPlatformOAuthUrl(
-    redirectUri: string,
-    state: string | null = null
-  ): AuthUrlResult {
+  generateOpenPlatformOAuthUrl(redirectUri: string, state: string | null = null): AuthUrlResult {
     try {
       const config = wechatConfig.getConfig('openPlatform');
 
@@ -592,9 +589,7 @@ class WechatLoginService {
       const response = await axios.get<TokenData>(tokenUrl, { params, timeout: 10000 });
 
       if (response.data.errcode) {
-        throw new Error(
-          `微信API错误: ${response.data.errcode} - ${response.data.errmsg}`
-        );
+        throw new Error(`微信API错误: ${response.data.errcode} - ${response.data.errmsg}`);
       }
 
       return response.data;
@@ -659,9 +654,7 @@ class WechatLoginService {
       const response = await axios.get<TokenData>(sessionUrl, { params, timeout: 10000 });
 
       if (response.data.errcode) {
-        throw new Error(
-          `微信API错误: ${response.data.errcode} - ${response.data.errmsg}`
-        );
+        throw new Error(`微信API错误: ${response.data.errcode} - ${response.data.errmsg}`);
       }
 
       return response.data;
@@ -693,9 +686,7 @@ class WechatLoginService {
       const response = await axios.get<TokenData>(tokenUrl, { params, timeout: 10000 });
 
       if (response.data.errcode) {
-        throw new Error(
-          `微信API错误: ${response.data.errcode} - ${response.data.errmsg}`
-        );
+        throw new Error(`微信API错误: ${response.data.errcode} - ${response.data.errmsg}`);
       }
 
       return response.data;
@@ -854,9 +845,12 @@ class WechatLoginService {
    */
   private startCleanupJob(): void {
     // 每30分钟清理一次过期数据
-    setInterval((): void => {
-      this.cleanupExpiredData();
-    }, 30 * 60 * 1000);
+    setInterval(
+      (): void => {
+        this.cleanupExpiredData();
+      },
+      30 * 60 * 1000
+    );
 
     logger.info('[WechatLogin] 清理任务已启动');
   }

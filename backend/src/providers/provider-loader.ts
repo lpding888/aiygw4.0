@@ -103,7 +103,8 @@ class ProviderLoader {
       const module = await importFn();
 
       // 获取默认导出或命名导出
-      const ProviderClass = module.default || (module as Record<string, unknown>)[Object.keys(module)[0]];
+      const ProviderClass =
+        module.default || (module as Record<string, unknown>)[Object.keys(module)[0]];
 
       if (!ProviderClass) {
         throw new Error(`Provider模块没有导出有效的类: ${handlerKey}`);
@@ -146,7 +147,11 @@ class ProviderLoader {
       throw new ProviderError(
         ProviderErrorCode.ERR_PROVIDER_LOAD_FAILED,
         `Provider加载失败: ${handlerKey}. 错误: ${err.message}`,
-        { handlerKey, originalError: err.message, stack: err instanceof Error ? err.stack : undefined }
+        {
+          handlerKey,
+          originalError: err.message,
+          stack: err instanceof Error ? err.stack : undefined
+        }
       );
     }
   }

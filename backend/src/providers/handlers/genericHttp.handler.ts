@@ -189,8 +189,14 @@ export class GenericHttpProvider extends BaseProvider {
 
       // 处理AbortError（超时）
       if (
-        (typeof error === 'object' && error !== null && 'name' in error && (error as Record<string, unknown>).name === 'AbortError') ||
-        (typeof error === 'object' && error !== null && 'name' in error && (error as Record<string, unknown>).name === 'CanceledError')
+        (typeof error === 'object' &&
+          error !== null &&
+          'name' in error &&
+          (error as Record<string, unknown>).name === 'AbortError') ||
+        (typeof error === 'object' &&
+          error !== null &&
+          'name' in error &&
+          (error as Record<string, unknown>).name === 'CanceledError')
       ) {
         return {
           success: false,

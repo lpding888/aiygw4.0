@@ -83,10 +83,7 @@ class ContentAuditService {
     }
   }
 
-  async auditTaskResults(
-    taskId: string,
-    imageUrls: string[]
-  ): Promise<IAuditTaskResult> {
+  async auditTaskResults(taskId: string, imageUrls: string[]): Promise<IAuditTaskResult> {
     try {
       const audits: IAuditImageResult[] = [];
       const violationReasons: string[] = [];

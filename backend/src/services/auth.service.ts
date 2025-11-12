@@ -17,7 +17,8 @@ import logger from '../utils/logger.js';
 import * as userRepo from '../repositories/users.repo.js';
 import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
-import { setCache, getCache, delCache } from '../config/redis.js';
+import cacheService from './cache.service.js';
+import { sendVerificationEmail } from './email.service.js';
 
 export interface TokenSigner {
   generateTokenPair(user: UserForToken): TokenPair;
@@ -40,10 +41,19 @@ export interface AuthProvider {
     password: string,
     referrerId?: string | null
   ): Promise<AuthResult>;
+  sendEmailCode(email: string, ip: string): Promise<{ expireIn: number }>;
+  loginWithEmailCode(email: string, code: string, referrerId?: string | null): Promise<AuthResult>;
+  registerWithEmail(
+    email: string,
+    code: string,
+    password: string,
+    referrerId?: string | null
+  ): Promise<AuthResult>;
   getUser(userId: string): Promise<userRepo.SafeUser>;
   refreshToken(refreshToken: string): Promise<TokenPair | null>;
   logout(userId: string): Promise<boolean>;
   verifyTokenStatus(userId: string, jti?: string): Promise<boolean>;
+  resetPasswordWithEmail(email: string, code: string, newPassword: string): Promise<boolean>;
 }
 
 /**
@@ -63,6 +73,16 @@ function generateId(length: number = 16): string {
   return nanoid(length * 2);
 }
 
+interface VerificationCodeRecord {
+  id: number;
+  phone: string | null;
+  email: string | null;
+  code: string;
+  channel: 'sms' | 'email';
+  expireAt: Date;
+  used: boolean;
+}
+
 /**
  * 认证服务类
  */
@@ -74,7 +94,7 @@ class AuthService implements AuthProvider {
    */
   async sendCode(phone: string, ip: string): Promise<{ expireIn: number }> {
     // 1. 防刷限制检查
-    await this.checkRateLimit(phone, ip);
+    await this.checkSmsRateLimit(phone, ip);
 
     // 2. 生成验证码
     const code = generateCode(6);
@@ -95,7 +115,7 @@ class AuthService implements AuthProvider {
     await this.sendSMS(phone, code);
 
     // 5. 写入缓存用于后续校验
-    await setCache(`sms:${phone}`, code, 5 * 60);
+    await cacheService.set(`sms:${phone}`, code, { ttl: 5 * 60, skipMemoryCache: true });
 
     logger.info(`[AuthService] 验证码已发送: phone=${phone}, ip=${ip}`);
 
@@ -108,7 +128,7 @@ class AuthService implements AuthProvider {
    * 防刷限制检查
    * 艹，不能让恶意用户刷爆短信！
    */
-  private async checkRateLimit(phone: string, ip: string): Promise<void> {
+  private async checkSmsRateLimit(phone: string, ip: string): Promise<void> {
     const now = new Date();
     const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
@@ -138,6 +158,35 @@ class AuthService implements AuthProvider {
     }
   }
 
+  private async checkEmailRateLimit(email: string, ip: string): Promise<void> {
+    const normalized = this.normalizeEmail(email);
+    const now = new Date();
+    const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+    const emailCount = await db('verification_codes')
+      .where('email', normalized)
+      .where('channel', 'email')
+      .where('created_at', '>=', oneMinuteAgo)
+      .count('* as count')
+      .first();
+
+    if ((emailCount?.count ? Number(emailCount.count) : 0) >= 1) {
+      throw new Error('邮箱验证码发送过于频繁，请1分钟后再试');
+    }
+
+    const ipCount = await db('verification_codes')
+      .where('ip', ip)
+      .where('channel', 'email')
+      .where('created_at', '>=', oneHourAgo)
+      .count('* as count')
+      .first();
+
+    if ((ipCount?.count ? Number(ipCount.count) : 0) >= 50) {
+      throw new Error('请求过于频繁，请稍后再试');
+    }
+  }
+
   /**
    * 发送短信验证码
    * 艹，生产环境要对接腾讯云短信！
@@ -163,7 +212,7 @@ class AuthService implements AuthProvider {
     referrerId?: string | null
   ): Promise<AuthResult> {
     // 1. 验证码校验
-    await this.verifyCode(phone, code);
+    const record = await this.verifyCode(phone, code);
 
     // 2. 查询或创建用户
     let user = await db('users').where('phone', phone).first();
@@ -201,7 +250,7 @@ class AuthService implements AuthProvider {
     }
 
     // 3. 标记验证码已使用
-    await db('verification_codes').where('phone', phone).where('code', code).update({ used: true });
+    await this.markCodeUsed(record.id);
 
     // 4. 生成双Token对
     const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
@@ -287,21 +336,202 @@ class AuthService implements AuthProvider {
   }
 
   /**
+   * 发送邮箱验证码
+   */
+  async sendEmailCode(email: string, ip: string): Promise<{ expireIn: number }> {
+    if (!email) {
+      throw new Error('邮箱不能为空');
+    }
+    if (!this.isValidEmail(email)) {
+      throw new Error('邮箱格式不正确');
+    }
+
+    const normalized = this.normalizeEmail(email);
+    await this.checkEmailRateLimit(normalized, ip);
+
+    const code = generateCode(6);
+    const expireAt = new Date(Date.now() + 5 * 60 * 1000);
+
+    await db('verification_codes').insert({
+      phone: null,
+      email: normalized,
+      code,
+      ip,
+      channel: 'email',
+      expireAt,
+      used: false,
+      created_at: new Date(),
+      updated_at: new Date()
+    });
+
+    await sendVerificationEmail(normalized, code);
+    await cacheService.set(`email:${normalized}`, code, { ttl: 5 * 60, skipMemoryCache: true });
+
+    logger.info(`[AuthService] 邮箱验证码已发送: email=${normalized}, ip=${ip}`);
+
+    return { expireIn: 300 };
+  }
+
+  /**
+   * 邮箱验证码登录（不存在则自动注册）
+   */
+  async loginWithEmailCode(
+    email: string,
+    code: string,
+    referrerId?: string | null
+  ): Promise<AuthResult> {
+    if (!email || !code) {
+      throw new Error('邮箱和验证码不能为空');
+    }
+    if (!this.isValidEmail(email)) {
+      throw new Error('邮箱格式不正确');
+    }
+
+    const normalized = this.normalizeEmail(email);
+    const record = await this.verifyEmailCode(normalized, code);
+
+    let user = await userRepo.findUserByEmail(normalized);
+
+    if (!user) {
+      const userId = generateId();
+      await db('users').insert({
+        id: userId,
+        email: normalized,
+        email_verified: true,
+        email_verified_at: new Date(),
+        referrer_id: referrerId || null,
+        isMember: false,
+        quota_remaining: 0,
+        quota_expireAt: null,
+        role: 'user',
+        created_at: new Date(),
+        updated_at: new Date()
+      });
+      user = await userRepo.findUserById(userId);
+    } else if (!user.email_verified) {
+      await userRepo.updateUser(user.id, {
+        email_verified: true,
+        email_verified_at: new Date()
+      });
+      user = await userRepo.findUserById(user.id);
+    }
+
+    await this.markCodeUsed(record.id);
+    await cacheService.delete(`email:${normalized}`);
+
+    const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
+    logger.info(`[AuthService] 邮箱验证码登录成功: email=${normalized}, userId=${user?.id}`);
+
+    return {
+      ...tokens,
+      user: userRepo.toSafeUser(user)
+    };
+  }
+
+  /**
+   * 邮箱注册（验证码 + 密码）
+   */
+  async registerWithEmail(
+    email: string,
+    code: string,
+    password: string,
+    referrerId?: string | null
+  ): Promise<AuthResult> {
+    if (!email || !code || !password) {
+      throw new Error('邮箱、验证码和密码不能为空');
+    }
+    if (!this.isValidEmail(email)) {
+      throw new Error('邮箱格式不正确');
+    }
+
+    const normalized = this.normalizeEmail(email);
+    const exists = await userRepo.emailExists(normalized);
+    if (exists) {
+      throw new Error('邮箱已被注册');
+    }
+
+    if (password.length < 6) {
+      throw new Error('密码长度不能少于6位');
+    }
+
+    const record = await this.verifyEmailCode(normalized, code);
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = await userRepo.createUser({
+      id: nanoid(32),
+      email: normalized,
+      password: hashedPassword,
+      role: 'user',
+      isMember: false,
+      quota_remaining: 0,
+      referrer_id: referrerId || null,
+      email_verified: true,
+      email_verified_at: new Date()
+    });
+
+    await this.markCodeUsed(record.id);
+    await cacheService.delete(`email:${normalized}`);
+
+    const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
+    logger.info(`[AuthService] 邮箱注册成功: email=${normalized}, userId=${user.id}`);
+
+    return {
+      ...tokens,
+      user: userRepo.toSafeUser(user)
+    };
+  }
+
+  /**
    * 验证验证码
    * 艹，检查验证码是否有效！
    */
-  private async verifyCode(phone: string, code: string): Promise<void> {
-    const record = await db('verification_codes')
+  private async verifyCode(phone: string, code: string): Promise<VerificationCodeRecord> {
+    const record = (await db('verification_codes')
       .where('phone', phone)
       .where('code', code)
+      .where('channel', 'sms')
       .where('used', false)
       .where('expireAt', '>=', new Date())
       .orderBy('created_at', 'desc')
-      .first();
+      .first()) as VerificationCodeRecord | undefined;
 
     if (!record) {
       throw new Error('验证码错误或已过期');
     }
+
+    return record;
+  }
+
+  private normalizeEmail(email: string): string {
+    return email.trim().toLowerCase();
+  }
+
+  private isValidEmail(email: string): boolean {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }
+
+  private async verifyEmailCode(email: string, code: string): Promise<VerificationCodeRecord> {
+    const normalized = this.normalizeEmail(email);
+    const record = (await db('verification_codes')
+      .where('email', normalized)
+      .where('code', code)
+      .where('channel', 'email')
+      .where('used', false)
+      .where('expireAt', '>=', new Date())
+      .orderBy('created_at', 'desc')
+      .first()) as VerificationCodeRecord | undefined;
+
+    if (!record) {
+      throw new Error('验证码错误或已过期');
+    }
+
+    return record;
+  }
+
+  private async markCodeUsed(recordId: number): Promise<void> {
+    await db('verification_codes')
+      .where({ id: recordId })
+      .update({ used: true, updated_at: new Date() });
   }
 
   /**
@@ -316,6 +546,37 @@ class AuthService implements AuthProvider {
     }
 
     return userRepo.toSafeUser(user);
+  }
+
+  /**
+   * 邮箱验证码重置密码
+   */
+  async resetPasswordWithEmail(email: string, code: string, newPassword: string): Promise<boolean> {
+    if (!email || !code || !newPassword) {
+      throw new Error('邮箱、验证码和新密码不能为空');
+    }
+    if (!this.isValidEmail(email)) {
+      throw new Error('邮箱格式不正确');
+    }
+    if (newPassword.length < 6) {
+      throw new Error('密码至少6位');
+    }
+
+    const normalized = this.normalizeEmail(email);
+    const record = await this.verifyEmailCode(normalized, code);
+    const user = await userRepo.findUserByEmail(normalized);
+
+    if (!user) {
+      throw new Error('用户不存在');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await userRepo.updateUser(user.id, { password: hashedPassword });
+    await this.markCodeUsed(record.id);
+    await cacheService.delete(`email:${normalized}`);
+
+    logger.info(`[AuthService] 邮箱密码重置成功: email=${normalized}, userId=${user.id}`);
+    return true;
   }
 
   /**

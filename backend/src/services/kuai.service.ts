@@ -86,7 +86,10 @@ class KuaiService {
 
       throw new Error('KUAI API返回格式异常');
     } catch (error: unknown) {
-      const err = error as Error & { response?: { data?: unknown; status?: number }; code?: string };
+      const err = error as Error & {
+        response?: { data?: unknown; status?: number };
+        code?: string;
+      };
       logger.error('[KuaiService] 创建视频任务失败', {
         imageUrl,
         error: err.message,

@@ -57,16 +57,31 @@ services:
     image: redis:7-alpine
     container_name: ai-photo-redis
     restart: always
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-your_redis_password}
+    command:
+      [
+        "redis-server",
+        "/usr/local/etc/redis/redis.conf",
+        "--requirepass",
+        "${REDIS_PASSWORD:-your_redis_password}"
+      ]
     ports:
       - "6379:6379"
     volumes:
       # 艹！Redis持久化（AOF模式）
       - redis_data:/data
+      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     networks:
       - ai-photo-network
     healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      test:
+        [
+          "CMD",
+          "redis-cli",
+          "-a",
+          "${REDIS_PASSWORD:-your_redis_password}",
+          "--raw",
+          "ping"
+        ]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -197,7 +197,9 @@ class ProviderWrapperService {
     return await wrapper.execute(methodName, args, options);
   }
 
-  getAllProviderStates(): Omit<HealthCheckResponse, 'status' | 'error'> & { providers: Record<string, unknown> } {
+  getAllProviderStates(): Omit<HealthCheckResponse, 'status' | 'error'> & {
+    providers: Record<string, unknown>;
+  } {
     const states: Record<string, unknown> = {};
     for (const [name, wrapper] of this.wrappers) {
       states[name] = wrapper.getState();

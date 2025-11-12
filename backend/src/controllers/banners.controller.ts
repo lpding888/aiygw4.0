@@ -99,7 +99,9 @@ export class BannersController {
     try {
       const userId = req.user?.id;
       if (!userId) {
-        res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } });
+        res
+          .status(401)
+          .json({ success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } });
         return;
       }
 
@@ -284,9 +286,11 @@ export class BannersController {
 
       // 这里需要使用multer等中间件处理文件上传
       // 暂时假设文件已经通过body传过来（需要配置multer）
-      const file = (req as Request & {
-        file?: { originalname: string; buffer: Buffer; mimetype: string };
-      }).file;
+      const file = (
+        req as Request & {
+          file?: { originalname: string; buffer: Buffer; mimetype: string };
+        }
+      ).file;
 
       if (!file) {
         res.status(400).json({

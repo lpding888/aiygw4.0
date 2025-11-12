@@ -10,6 +10,7 @@ import * as userRepo from '../repositories/users.repo.js';
 import authService from '../services/auth.service.js';
 import tokenService from '../services/token.service.js';
 import { verifyToken } from '../utils/jwt.js';
+import cacheService from '../services/cache.service.js';
 
 /**
  * Cookie配置
@@ -36,6 +37,31 @@ export class AuthController {
       }
       const ip = (req.ip || (req.socket?.remoteAddress ?? '')) as string;
       const result = await authService.sendCode(phone, ip);
+      res.json({ success: true, data: result, message: '验证码已发送' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * 发送邮箱验证码
+   * POST /api/auth/email/send-code
+   */
+  async sendEmailCode(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { email } = req.body as { email?: string };
+      if (!email) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'EMAIL_REQUIRED',
+            message: '邮箱不能为空'
+          }
+        });
+        return;
+      }
+      const ip = (req.ip || (req.socket?.remoteAddress ?? '')) as string;
+      const result = await authService.sendEmailCode(email, ip);
       res.json({ success: true, data: result, message: '验证码已发送' });
     } catch (error) {
       next(error);
@@ -144,6 +170,65 @@ export class AuthController {
   }
 
   /**
+   * 邮箱注册
+   * POST /api/auth/email/register
+   */
+  async registerWithEmail(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { email, code, password, referrer_id } = req.body as {
+        email?: string;
+        code?: string;
+        password?: string;
+        referrer_id?: string | null;
+      };
+
+      if (!email || !code || !password) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: '邮箱、验证码和密码不能为空'
+          }
+        });
+        return;
+      }
+
+      if (password.length < 6) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_PASSWORD',
+            message: '密码长度不能少于6位'
+          }
+        });
+        return;
+      }
+
+      const result = await authService.registerWithEmail(
+        email,
+        code,
+        password,
+        referrer_id ?? null
+      );
+
+      res.cookie('access_token', result.accessToken, COOKIE_OPTIONS);
+      res.cookie('refresh_token', result.refreshToken, COOKIE_OPTIONS);
+      res.cookie('roles', result.user.role, { ...COOKIE_OPTIONS, httpOnly: false });
+
+      res.status(201).json({
+        success: true,
+        data: {
+          user: result.user,
+          access_token: result.accessToken,
+          refresh_token: result.refreshToken
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * 用户登录
    * POST /api/auth/login
    */
@@ -226,6 +311,48 @@ export class AuthController {
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       console.error('[AuthController] 登录失败:', err.message);
+      next(error);
+    }
+  }
+
+  /**
+   * 邮箱验证码登录
+   * POST /api/auth/email/login
+   */
+  async loginWithEmailCode(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { email, code, referrer_id } = req.body as {
+        email?: string;
+        code?: string;
+        referrer_id?: string | null;
+      };
+
+      if (!email || !code) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: '邮箱和验证码不能为空'
+          }
+        });
+        return;
+      }
+
+      const result = await authService.loginWithEmailCode(email, code, referrer_id ?? null);
+
+      res.cookie('access_token', result.accessToken, COOKIE_OPTIONS);
+      res.cookie('refresh_token', result.refreshToken, COOKIE_OPTIONS);
+      res.cookie('roles', result.user.role, { ...COOKIE_OPTIONS, httpOnly: false });
+
+      res.json({
+        success: true,
+        data: {
+          user: result.user,
+          access_token: result.accessToken,
+          refresh_token: result.refreshToken
+        }
+      });
+    } catch (error) {
       next(error);
     }
   }
@@ -368,7 +495,9 @@ export class AuthController {
    */
   async getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as unknown as { userId?: string }).userId ?? (req.user as { id?: string } | undefined)?.id;
+      const userId =
+        (req as unknown as { userId?: string }).userId ??
+        (req.user as { id?: string } | undefined)?.id;
       if (!userId) {
         res
           .status(401)
@@ -397,7 +526,9 @@ export class AuthController {
         return;
       }
       const ok = await authService.verifyTokenStatus(userId, jti);
-      const getTokenRemainingTime = (tokenService as unknown as { getTokenRemainingTime?: (token: unknown) => unknown }).getTokenRemainingTime;
+      const getTokenRemainingTime = (
+        tokenService as unknown as { getTokenRemainingTime?: (token: unknown) => unknown }
+      ).getTokenRemainingTime;
       const token = (req as unknown as { token?: unknown }).token;
       const iat = (req.user as { iat?: unknown } | undefined)?.iat;
       const exp = (req.user as { exp?: unknown } | undefined)?.exp;
@@ -490,9 +621,14 @@ export class AuthController {
    */
   async resetPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { phone, code, newPassword } = req.body;
+      const { phone, email, code, newPassword } = req.body as {
+        phone?: string;
+        email?: string;
+        code?: string;
+        newPassword?: string;
+      };
 
-      if (!phone || !code || !newPassword) {
+      if (!code || !newPassword || (!phone && !email)) {
         res.status(400).json({
           success: false,
           error: { code: 'MISSING_PARAMS', message: '缺少必要参数' }
@@ -508,9 +644,24 @@ export class AuthController {
         return;
       }
 
-      // 验证验证码（从Redis读取）
-      const { getCache, delCache } = await import('../config/redis.js');
-      const cachedCode = await getCache<string>(`sms:${phone}`);
+      if (email) {
+        await authService.resetPasswordWithEmail(email, code, newPassword);
+        res.json({
+          success: true,
+          message: '密码重置成功'
+        });
+        return;
+      }
+
+      if (!phone) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'MISSING_PARAMS', message: '请提供手机号或邮箱' }
+        });
+        return;
+      }
+
+      const cachedCode = await cacheService.get<string>(`sms:${phone}`);
       if (!cachedCode || cachedCode !== code) {
         res.status(400).json({
           success: false,
@@ -519,7 +670,6 @@ export class AuthController {
         return;
       }
 
-      // 查找用户
       const user = await userRepo.findUserByPhone(phone);
       if (!user) {
         res.status(404).json({
@@ -529,10 +679,9 @@ export class AuthController {
         return;
       }
 
-      // 重置密码
       const hashedPassword = await bcrypt.hash(newPassword, 10);
       await userRepo.updateUser(user.id, { password: hashedPassword });
-      await delCache(`sms:${phone}`);
+      await cacheService.delete(`sms:${phone}`);
 
       res.json({
         success: true,

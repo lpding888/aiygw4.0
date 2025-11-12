@@ -19,7 +19,9 @@ export class ImportExportController {
     try {
       const { entityType } = req.params as { entityType?: string };
       if (!entityType) {
-        res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: '缺少实体类型' } });
+        res
+          .status(400)
+          .json({ success: false, error: { code: 'VALIDATION_ERROR', message: '缺少实体类型' } });
         return;
       }
       const { format = 'json', ...options } = req.query as ImportExportOptions &
@@ -79,15 +81,19 @@ export class ImportExportController {
 
       if (format === 'csv') {
         if (typeof data !== 'string') {
-          res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'CSV数据必须是字符串' } });
+          res.status(400).json({
+            success: false,
+            error: { code: 'VALIDATION_ERROR', message: 'CSV数据必须是字符串' }
+          });
           return;
         }
         parsedData = importExportService.parseCSV(data) as unknown as ContentTextExport[];
       } else {
         // 艹，解析JSON
-        parsedData = (typeof data === 'string'
-          ? (JSON.parse(data as string) as unknown as ContentTextExport[])
-          : (data as ContentTextExport[]));
+        parsedData =
+          typeof data === 'string'
+            ? (JSON.parse(data as string) as unknown as ContentTextExport[])
+            : (data as ContentTextExport[]);
       }
 
       if (!Array.isArray(parsedData) || parsedData.length === 0) {

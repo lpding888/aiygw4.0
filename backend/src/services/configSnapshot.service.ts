@@ -133,7 +133,10 @@ export async function listSnapshots(options: {
  * @param userId - 操作用户ID
  * @returns 回滚后的配置数据
  */
-export async function rollbackToSnapshot(snapshotId: number, userId?: number): Promise<RollbackResult> {
+export async function rollbackToSnapshot(
+  snapshotId: number,
+  userId?: number
+): Promise<RollbackResult> {
   // 1. 获取快照
   const snapshot = await getSnapshotById(snapshotId);
   if (!snapshot) {

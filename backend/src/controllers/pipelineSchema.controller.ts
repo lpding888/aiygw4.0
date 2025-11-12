@@ -1,7 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import pipelineSchemaService, {
-  type ValidationType
-} from '../services/pipelineSchema.service.js';
+import pipelineSchemaService, { type ValidationType } from '../services/pipelineSchema.service.js';
 import logger from '../utils/logger.js';
 import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';

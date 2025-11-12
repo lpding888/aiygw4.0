@@ -266,7 +266,9 @@ export function decryptFields(
       try {
         // 解析JSON并解密
         const encryptedData: EncryptedData =
-          typeof obj[field] === 'string' ? JSON.parse(obj[field] as string) : (obj[field] as EncryptedData);
+          typeof obj[field] === 'string'
+            ? JSON.parse(obj[field] as string)
+            : (obj[field] as EncryptedData);
 
         result[field] = decrypt(encryptedData);
 

@@ -2,6 +2,7 @@ import Redis from 'ioredis';
 import type { Redis as RedisInstance } from 'ioredis';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
+import metricsService from './metrics.service.js';
 
 type RedisConstructor = new (...args: unknown[]) => RedisInstance;
 const RedisCtor = Redis as unknown as RedisConstructor;
@@ -129,6 +130,7 @@ class CacheService {
           this.stats.hits += 1;
           this.stats.memoryHits += 1;
           logger.debug(`[CacheService] 内存缓存命中: ${key}`);
+          metricsService.recordCacheHit('cache_l1_memory');
           return item.value as T;
         }
         this.memoryCache.delete(key);
@@ -139,6 +141,7 @@ class CacheService {
       if (redisValue !== null) {
         this.stats.hits += 1;
         this.stats.redisHits += 1;
+        metricsService.recordCacheHit('cache_l2_redis');
 
         // 解析缓存数据
         let parsedValue: T | null = null;
@@ -158,6 +161,7 @@ class CacheService {
       // 3. 缓存未命中
       this.stats.misses += 1;
       logger.debug(`[CacheService] 缓存未命中: ${key}`);
+      metricsService.recordCacheMiss('cache_service');
 
       const queryTime = Date.now() - startTime;
       if (queryTime > 100) {
@@ -168,6 +172,7 @@ class CacheService {
     } catch (error: unknown) {
       this.stats.errors += 1;
       logger.error(`[CacheService] 获取缓存失败: ${key}`, error);
+      metricsService.recordCacheMiss('cache_service');
       return null;
     }
   }

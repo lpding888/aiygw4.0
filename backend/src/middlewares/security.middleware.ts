@@ -114,7 +114,9 @@ export const securityCheck = (options: { skipCriticalCheck?: boolean } = {}) => 
 export const suspiciousActivityDetection = (options: Record<string, unknown> = {}) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const suspicious = (await securityService.detectSuspiciousActivity(req.ip as string)) as SuspiciousActivityResult;
+      const suspicious = (await securityService.detectSuspiciousActivity(
+        req.ip as string
+      )) as SuspiciousActivityResult;
 
       if (suspicious.suspicious) {
         const severity: SuspiciousActivityResult['severity'] =
@@ -138,15 +140,12 @@ export const suspiciousActivityDetection = (options: Record<string, unknown> = {
         });
 
         if (severity === 'high' || severity === 'critical') {
-          res
-            .status(403)
-            .json(
-              createErrorResponse(
-                'SUSPICIOUS_ACTIVITY',
-                '请求被标记为可疑活动，已被阻止',
-                { ...suspicious, severity } as Record<string, unknown>
-              )
-            );
+          res.status(403).json(
+            createErrorResponse('SUSPICIOUS_ACTIVITY', '请求被标记为可疑活动，已被阻止', {
+              ...suspicious,
+              severity
+            } as Record<string, unknown>)
+          );
           return;
         }
       }

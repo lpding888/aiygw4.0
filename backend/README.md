@@ -47,6 +47,17 @@ npm run lint       # 代码检查
 npm run format     # 代码格式化
 ```
 
+## 邮箱验证登录/注册
+
+现在支持通过邮箱验证码完成注册、登录以及找回密码，便于海外用户或无手机号的场景。
+
+- `POST /api/auth/email/send-code`：发送邮箱验证码（需要配置 SMTP）
+- `POST /api/auth/email/register`：邮箱 + 验证码注册并设置密码
+- `POST /api/auth/email/login`：邮箱验证码登录，未注册将自动创建账号
+- `POST /api/auth/email/reset-password`：邮箱验证码重置密码
+
+> ⚠️ 生产环境必须在 `.env` 中配置 `SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD/SMTP_FROM` 等参数，否则无法发送邮箱验证码。
+
 ## 项目结构
 
 ```

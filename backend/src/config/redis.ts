@@ -26,6 +26,12 @@ export const redisConfig: RedisOptions = {
 
 export const redis = new RedisClient(redisConfig as RedisOptions);
 
+export const createRedisClient = (overrides: Partial<RedisOptions> = {}): RedisClient =>
+  new RedisClient({
+    ...redisConfig,
+    ...overrides
+  } as RedisOptions);
+
 redis.on('connect', () => {
   logger.info('[Redis] 连接成功');
 });
@@ -82,55 +88,6 @@ export async function checkRateLimit(
       resetAt: Date.now() + windowSeconds * 1000,
       current: 0
     };
-  }
-}
-
-export async function setCache<T>(key: string, value: T, ttl = 60): Promise<boolean> {
-  try {
-    const serialized = JSON.stringify(value);
-    if (ttl > 0) {
-      await redis.setex(key, ttl, serialized);
-    } else {
-      await redis.set(key, serialized);
-    }
-    return true;
-  } catch (error) {
-    logger.error(`[Redis] 设置缓存失败: ${(error as Error).message}`, { key });
-    return false;
-  }
-}
-
-export async function getCache<T>(key: string): Promise<T | null> {
-  try {
-    const cached = await redis.get(key);
-    if (!cached) return null;
-    return JSON.parse(cached) as T;
-  } catch (error) {
-    logger.error(`[Redis] 获取缓存失败: ${(error as Error).message}`, { key });
-    return null;
-  }
-}
-
-export async function delCache(key: string): Promise<boolean> {
-  try {
-    await redis.del(key);
-    return true;
-  } catch (error) {
-    logger.error(`[Redis] 删除缓存失败: ${(error as Error).message}`, { key });
-    return false;
-  }
-}
-
-export async function delCachePattern(pattern: string): Promise<number> {
-  try {
-    const keys = await redis.keys(pattern);
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
-    return keys.length;
-  } catch (error) {
-    logger.error(`[Redis] 批量删除缓存失败: ${(error as Error).message}`, { pattern });
-    return 0;
   }
 }
 
