@@ -4,6 +4,11 @@
  */
 
 exports.up = async function (knex) {
+  const hasPassword = await knex.schema.hasColumn('users', 'password');
+  if (hasPassword) {
+    console.log('✔ users表已存在password字段，跳过');
+    return;
+  }
   await knex.schema.table('users', (table) => {
     table.string('password', 255).nullable().comment('用户密码(bcrypt加密)');
   });
@@ -11,6 +16,8 @@ exports.up = async function (knex) {
 };
 
 exports.down = async function (knex) {
+  const hasPassword = await knex.schema.hasColumn('users', 'password');
+  if (!hasPassword) return;
   await knex.schema.table('users', (table) => {
     table.dropColumn('password');
   });

@@ -4,7 +4,14 @@ import { v4 as uuidv4 } from 'uuid';
 import NodeCache from 'node-cache';
 import logger from '../utils/logger.js';
 import { db } from '../config/database.js';
-import wechatConfig from '../config/wechat.config.js';
+import {
+  wechatConfig,
+  getWechatConfig,
+  getWechatApiUrl,
+  generateWechatState,
+  verifyWechatState,
+  validateWechatConfig
+} from '../config/wechat.config.js';
 import cacheService from './cache.service.js';
 import tokenService from './token.service.js';
 import type {
@@ -79,7 +86,7 @@ class WechatLoginService {
       const platforms: WechatLoginPlatform[] = ['officialAccount', 'miniProgram', 'openPlatform'];
       for (const platform of platforms) {
         try {
-          wechatConfig.validateConfig(platform);
+          validateWechatConfig(platform);
           logger.info(`[WechatLogin] ${platform} 配置验证成功`);
         } catch (error: unknown) {
           const err = error as Error;
@@ -112,10 +119,10 @@ class WechatLoginService {
     state: string | null = null
   ): AuthUrlResult {
     try {
-      const config = wechatConfig.getConfig('officialAccount');
+      const config = getWechatConfig('officialAccount');
 
       // 生成state参数
-      const finalState = state || wechatConfig.generateState();
+      const finalState = state || generateWechatState();
 
       // 存储state和回调地址
       const stateData: StateData = {
@@ -166,7 +173,7 @@ class WechatLoginService {
         throw new Error('无效的state参数或已过期');
       }
 
-      if (!wechatConfig.verifyState(state)) {
+      if (!verifyWechatState(state)) {
         throw new Error('state参数验证失败');
       }
 
@@ -254,10 +261,10 @@ class WechatLoginService {
    */
   generateOpenPlatformOAuthUrl(redirectUri: string, state: string | null = null): AuthUrlResult {
     try {
-      const config = wechatConfig.getConfig('openPlatform');
+      const config = getWechatConfig('openPlatform');
 
       // 生成state参数
-      const finalState = state || wechatConfig.generateState();
+      const finalState = state || generateWechatState();
 
       // 存储state和回调地址
       const stateData: StateData = {
@@ -576,8 +583,8 @@ class WechatLoginService {
    */
   async getOfficialAccessToken(code: string): Promise<TokenData> {
     try {
-      const config = wechatConfig.getConfig('officialAccount');
-      const tokenUrl = wechatConfig.getApiUrl('officialAccount', '/sns/oauth2/access_token');
+      const config = getWechatConfig('officialAccount');
+      const tokenUrl = getWechatApiUrl('officialAccount', '/sns/oauth2/access_token');
 
       const params: Record<string, string> = {
         appid: config.appId,
@@ -609,7 +616,7 @@ class WechatLoginService {
    */
   async getOfficialUserInfo(accessToken: string, openid: string): Promise<WechatUserInfo> {
     try {
-      const userInfoUrl = wechatConfig.getApiUrl('officialAccount', '/sns/userinfo');
+      const userInfoUrl = getWechatApiUrl('officialAccount', '/sns/userinfo');
 
       const params: Record<string, string> = {
         access_token: accessToken,
@@ -641,8 +648,8 @@ class WechatLoginService {
    */
   async getMiniProgramSession(code: string): Promise<TokenData> {
     try {
-      const config = wechatConfig.getConfig('miniProgram');
-      const sessionUrl = wechatConfig.getApiUrl('officialAccount', '/sns/jscode2session');
+      const config = getWechatConfig('miniProgram');
+      const sessionUrl = getWechatApiUrl('officialAccount', '/sns/jscode2session');
 
       const params: Record<string, string> = {
         appid: config.appId,
@@ -673,8 +680,8 @@ class WechatLoginService {
    */
   async getOpenPlatformAccessToken(code: string): Promise<TokenData> {
     try {
-      const config = wechatConfig.getConfig('openPlatform');
-      const tokenUrl = wechatConfig.getApiUrl('openPlatform', '/sns/oauth2/access_token');
+      const config = getWechatConfig('openPlatform');
+      const tokenUrl = getWechatApiUrl('openPlatform', '/sns/oauth2/access_token');
 
       const params: Record<string, string> = {
         appid: config.appId,
@@ -706,7 +713,7 @@ class WechatLoginService {
    */
   async getOpenPlatformUserInfo(accessToken: string, openid: string): Promise<WechatUserInfo> {
     try {
-      const userInfoUrl = wechatConfig.getApiUrl('openPlatform', '/sns/userinfo');
+      const userInfoUrl = getWechatApiUrl('openPlatform', '/sns/userinfo');
 
       const params: Record<string, string> = {
         access_token: accessToken,

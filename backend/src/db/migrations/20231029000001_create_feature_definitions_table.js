@@ -5,7 +5,17 @@
 exports.up = function (knex) {
   return knex.schema
     .createTable('feature_definitions', function (table) {
-      table.string('feature_id', 100).primary().comment('功能ID(唯一标识)');
+      table.string('id', 36).primary().defaultTo(knex.raw('(UUID())')).comment('主键ID');
+      table
+        .string('feature_key', 100)
+        .notNullable()
+        .unique()
+        .comment('功能唯一标识（新字段，供配置中心使用）');
+      table
+        .string('feature_id', 100)
+        .notNullable()
+        .unique()
+        .comment('功能ID(兼容旧字段，默认与feature_key一致)');
       table.string('display_name', 200).notNullable().comment('显示名称');
       table.string('category', 50).notNullable().comment('功能分类(视觉图像/视频生成/文案创作等)');
       table.text('description').nullable().comment('功能描述');
@@ -36,6 +46,8 @@ exports.up = function (knex) {
       table.index('category');
       table.index('is_enabled');
       table.index(['is_enabled', 'deleted_at']);
+      table.index('feature_key', 'idx_feature_definitions_key');
+      table.index('feature_id', 'idx_feature_definitions_legacy');
     })
     .then(() => {
       console.log('✓ feature_definitions表创建成功');

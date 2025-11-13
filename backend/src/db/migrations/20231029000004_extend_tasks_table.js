@@ -6,7 +6,12 @@ exports.up = function (knex) {
   return knex.schema
     .table('tasks', function (table) {
       // 功能卡片ID
-      table.string('feature_id', 100).nullable().comment('功能ID(引用feature_definitions)');
+      table.string('feature_id', 100).nullable().comment('功能ID(引用feature_definitions.feature_id)');
+      table
+        .foreign('feature_id')
+        .references('feature_id')
+        .inTable('feature_definitions')
+        .onDelete('SET NULL');
 
       // 输入数据(JSON格式,存储表单提交的所有参数)
       table.json('input_data').nullable().comment('输入数据(JSON对象)');
@@ -36,6 +41,7 @@ exports.up = function (knex) {
 
 exports.down = function (knex) {
   return knex.schema.table('tasks', function (table) {
+    table.dropForeign(['feature_id']);
     table.dropColumn('feature_id');
     table.dropColumn('input_data');
     table.dropColumn('artifacts');

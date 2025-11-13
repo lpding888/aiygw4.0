@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import Navigation from '@/components/Navigation';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { AppThemeProvider } from '@/shared/providers';
-import { initWebVitals } from '@/lib/monitoring/web-vitals';
 import { MSWInitializer } from '@/components/MSWInitializer';
 import { generateMetadata } from '@/lib/seo';
+import WebVitalsInitializer from '@/components/WebVitalsInitializer';
 import './fonts.css';
 import '../styles/tokens.css'; // UI-P2-TOKEN-205: Design Tokens
 import '../styles/accessibility.css'; // A11Y-P2-ACCESS-206: 可访问性样式
@@ -41,9 +41,6 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // 初始化Web Vitals监控
-  initWebVitals();
-
   return (
     <html lang="zh-CN">
       <body>
@@ -53,6 +50,7 @@ export default function RootLayout({
         </a>
         <ErrorBoundary>
           <AppThemeProvider>
+            <WebVitalsInitializer />
             <MSWInitializer />
             <Navigation />
             <main id="main-content" tabIndex={-1}>

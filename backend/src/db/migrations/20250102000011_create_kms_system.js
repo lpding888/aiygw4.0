@@ -103,7 +103,10 @@ exports.up = async function (knex) {
     table.foreign('key_id').references('id').inTable('encryption_keys').onDelete('CASCADE');
 
     // 唯一约束
-    table.unique(['key_id', 'principal_type', 'principal_id', 'permission']);
+    table.unique(
+      ['key_id', 'principal_type', 'principal_id', 'permission'],
+      'key_access_principal_unique'
+    );
 
     // 索引
     table.index(['key_id']);

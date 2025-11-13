@@ -109,7 +109,13 @@ class TaskController {
   async get(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { taskId } = req.params as { taskId: string };
-      const task = await taskService.get(taskId);
+      const requester = req.user
+        ? {
+            id: req.user.id,
+            role: req.user.role
+          }
+        : undefined;
+      const task = await taskService.get(taskId, requester);
       res.json({ success: true, data: task });
     } catch (error) {
       next(error);

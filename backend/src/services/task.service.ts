@@ -45,11 +45,11 @@ class TaskService {
       }
 
       const quotaCost = this.getQuotaCost(type);
+      taskId = nanoid();
 
       const result = await db.transaction(async (trx) => {
-        taskId = nanoid();
         // 预留配额以保持一致的补偿语义
-        await quotaService.reserve(userId, taskId, quotaCost);
+        await quotaService.reserve(userId, taskId!, quotaCost, trx);
         const now = new Date();
         await trx('tasks').insert({
           id: taskId,
@@ -134,24 +134,26 @@ class TaskService {
 
       // 4) Saga 预留配额(先拿个taskId)
       taskId = nanoid();
-      await quotaService.reserve(userId, taskId, feature.quota_cost);
-
-      // 5) 创建任务记录(兼容旧字段)
       const now = new Date();
-      await db('tasks').insert({
-        id: taskId,
-        userId,
-        feature_id: featureId,
-        status: 'pending',
-        input_data: JSON.stringify(inputData ?? {}),
-        eligible_for_refund: true,
-        refunded: false,
-        created_at: now,
-        updated_at: now,
-        // 兼容旧表结构
-        type: featureId,
-        inputUrl: inputData.imageUrl || '',
-        params: null
+      await db.transaction(async (trx) => {
+        await quotaService.reserve(userId, taskId!, feature.quota_cost, trx);
+
+        // 5) 创建任务记录(兼容旧字段)
+        await trx('tasks').insert({
+          id: taskId,
+          userId,
+          feature_id: featureId,
+          status: 'pending',
+          input_data: JSON.stringify(inputData ?? {}),
+          eligible_for_refund: true,
+          refunded: false,
+          created_at: now,
+          updated_at: now,
+          // 兼容旧表结构
+          type: featureId,
+          inputUrl: inputData.imageUrl || '',
+          params: null
+        });
       });
 
       const result: TaskCreateResult = {
@@ -188,12 +190,19 @@ class TaskService {
   }
 
   /**
-   * 获取任务详情(按当前控制器用法,不校验 userId)
+   * 获取任务详情(现在必须校验请求者身份)
    */
-  async get(taskId: string): Promise<TaskDetailResponse> {
+  async get(
+    taskId: string,
+    requester?: { id?: string; role?: string }
+  ): Promise<TaskDetailResponse> {
     try {
       const task = (await db('tasks').where('id', taskId).first()) as Task | undefined;
       if (!task) throw { errorCode: 4004, message: '任务不存在' } as TaskError;
+
+      if (requester?.role !== 'admin' && task.userId !== requester?.id) {
+        throw { errorCode: 4003, message: '无权访问该任务', statusCode: 403 } as TaskError;
+      }
 
       const params: TaskParams = task.params ? JSON.parse(task.params) : {};
       const resultUrls: string[] = task.resultUrls ? JSON.parse(task.resultUrls) : [];

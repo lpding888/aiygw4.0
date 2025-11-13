@@ -2,7 +2,11 @@
  * 创建MCP端点表
  */
 
-exports.up = function (knex) {
+exports.up = async function (knex) {
+  const exists = await knex.schema.hasTable('mcp_endpoints');
+  if (exists) {
+    return;
+  }
   return knex.schema.createTable('mcp_endpoints', function (table) {
     table.string('id').primary().defaultTo(knex.raw('(UUID())'));
     table.string('name').notNullable().comment('MCP端点名称');
@@ -32,6 +36,10 @@ exports.up = function (knex) {
   });
 };
 
-exports.down = function (knex) {
+exports.down = async function (knex) {
+  const exists = await knex.schema.hasTable('mcp_endpoints');
+  if (!exists) {
+    return;
+  }
   return knex.schema.dropTable('mcp_endpoints');
 };

@@ -5,10 +5,41 @@
  * 3. 退款记录表
  */
 
-exports.up = function (knex) {
-  return Promise.all([
-    // 支付订单表
-    knex.schema.createTable('payment_orders', function (table) {
+const enableAutoUpdate = async (knex, tableName) => {
+  const hasColumn = await knex.schema.hasColumn(tableName, 'updated_at');
+  if (!hasColumn) {
+    return;
+  }
+  await knex.raw(
+    'ALTER TABLE ?? MODIFY COLUMN ?? DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+    [tableName, 'updated_at']
+  );
+};
+
+const createTableIfMissing = async (knex, tableName, builder, afterCreate) => {
+  const exists = await knex.schema.hasTable(tableName);
+  if (exists) {
+    if (afterCreate) {
+      await afterCreate(knex, tableName);
+    }
+    console.log(`⚠️ ${tableName} 表已存在，跳过创建`);
+    return false;
+  }
+
+  await knex.schema.createTable(tableName, builder);
+  if (afterCreate) {
+    await afterCreate(knex, tableName);
+  }
+  console.log(`✓ ${tableName} 表创建完成`);
+  return true;
+};
+
+exports.up = async function (knex) {
+  // 支付订单表
+  await createTableIfMissing(
+    knex,
+    'payment_orders',
+    function (table) {
       table.string('id', 32).primary().comment('支付订单ID');
       table.string('user_id', 32).notNullable().comment('用户ID');
       table.string('order_no', 64).notNullable().unique().comment('订单号');
@@ -28,8 +59,16 @@ exports.up = function (knex) {
       table.text('payment_result').nullable().comment('支付结果(JSON)');
       table.datetime('paid_at').nullable().comment('支付时间');
       table.datetime('expired_at').nullable().comment('过期时间');
-      table.datetime('created_at').defaultTo(knex.fn.now()).comment('创建时间');
-      table.datetime('updated_at').defaultTo(knex.fn.now()).onUpdate().comment('更新时间');
+      table
+        .datetime('created_at')
+        .defaultTo(knex.fn.now())
+        .notNullable()
+        .comment('创建时间');
+      table
+        .datetime('updated_at')
+        .defaultTo(knex.fn.now())
+        .notNullable()
+        .comment('更新时间');
 
       // 外键
       table.foreign('user_id').references('users.id').onDelete('CASCADE');
@@ -41,10 +80,12 @@ exports.up = function (knex) {
       table.index('payment_method', 'idx_payment_orders_method');
       table.index('trade_no', 'idx_payment_orders_trade_no');
       table.index('created_at', 'idx_payment_orders_created');
-    }),
+    },
+    enableAutoUpdate
+  );
 
-    // 支付记录表
-    knex.schema.createTable('payment_transactions', function (table) {
+  // 支付记录表
+  await createTableIfMissing(knex, 'payment_transactions', function (table) {
       table.string('id', 32).primary().comment('支付记录ID');
       table.string('order_id', 32).notNullable().comment('支付订单ID');
       table.string('user_id', 32).notNullable().comment('用户ID');
@@ -70,10 +111,13 @@ exports.up = function (knex) {
       table.index('transaction_no', 'idx_payment_transactions_no');
       table.index('status', 'idx_payment_transactions_status');
       table.index('created_at', 'idx_payment_transactions_created');
-    }),
+    });
 
-    // 退款记录表
-    knex.schema.createTable('refund_records', function (table) {
+  // 退款记录表
+  await createTableIfMissing(
+    knex,
+    'refund_records',
+    function (table) {
       table.string('id', 32).primary().comment('退款记录ID');
       table.string('order_id', 32).notNullable().comment('原支付订单ID');
       table.string('user_id', 32).notNullable().comment('用户ID');
@@ -89,8 +133,16 @@ exports.up = function (knex) {
       table.string('gateway_refund_no', 64).nullable().comment('支付网关退款单号');
       table.text('refund_result').nullable().comment('退款结果(JSON)');
       table.datetime('refunded_at').nullable().comment('退款成功时间');
-      table.datetime('created_at').defaultTo(knex.fn.now()).comment('创建时间');
-      table.datetime('updated_at').defaultTo(knex.fn.now()).onUpdate().comment('更新时间');
+      table
+        .datetime('created_at')
+        .defaultTo(knex.fn.now())
+        .notNullable()
+        .comment('创建时间');
+      table
+        .datetime('updated_at')
+        .defaultTo(knex.fn.now())
+        .notNullable()
+        .comment('更新时间');
 
       // 外键
       table.foreign('order_id').references('payment_orders.id').onDelete('CASCADE');
@@ -102,10 +154,11 @@ exports.up = function (knex) {
       table.index('refund_no', 'idx_refund_records_no');
       table.index('status', 'idx_refund_records_status');
       table.index('created_at', 'idx_refund_records_created');
-    })
-  ]).then(() => {
-    console.log('✓ 支付相关表创建成功');
-  });
+    },
+    enableAutoUpdate
+  );
+
+  console.log('✓ 支付相关表创建成功');
 };
 
 exports.down = function (knex) {

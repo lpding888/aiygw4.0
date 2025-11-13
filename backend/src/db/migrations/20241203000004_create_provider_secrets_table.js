@@ -2,7 +2,11 @@
  * 创建供应商密钥表
  */
 
-exports.up = function (knex) {
+exports.up = async function (knex) {
+  const exists = await knex.schema.hasTable('provider_secrets');
+  if (exists) {
+    return;
+  }
   return knex.schema.createTable('provider_secrets', function (table) {
     table.string('id').primary().defaultTo(knex.raw('(UUID())'));
     table.string('provider_id').notNullable().comment('供应商ID');
@@ -24,6 +28,10 @@ exports.up = function (knex) {
   });
 };
 
-exports.down = function (knex) {
+exports.down = async function (knex) {
+  const exists = await knex.schema.hasTable('provider_secrets');
+  if (!exists) {
+    return;
+  }
   return knex.schema.dropTable('provider_secrets');
 };

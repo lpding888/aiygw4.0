@@ -93,19 +93,18 @@ export const useTaskStore = create<TaskState>()(
           };
 
           const response = await api.task.list(requestParams);
-          const payload = response.data;
 
-          if (payload?.success && payload.data) {
+          if (response?.success && response.data) {
             set({
-              tasks: payload.data.tasks || payload.data || [],
+              tasks: response.data.tasks || response.data || [],
               pagination: {
                 ...pagination,
-                total: payload.data.total || 0
+                total: response.data.total || 0
               },
               loading: false
             });
           } else {
-            throw new Error(payload?.message || '获取任务列表失败');
+            throw new Error(response?.message || '获取任务列表失败');
           }
         } catch (error: any) {
           console.error('获取任务列表失败:', error);
@@ -122,10 +121,9 @@ export const useTaskStore = create<TaskState>()(
           set({ creatingTask: true, error: null });
 
           const response = await api.task.createByFeature(data);
-          const payload = response.data;
 
-          if (payload?.success && payload.data) {
-            const newTask = payload.data;
+          if (response?.success && response.data) {
+            const newTask = response.data;
 
             // 添加到任务列表开头
             set((state) => ({
@@ -154,10 +152,9 @@ export const useTaskStore = create<TaskState>()(
           set({ loading: true, error: null });
 
           const response = await api.task.get(taskId);
-          const payload = response.data;
 
-          if (payload?.success && payload.data) {
-            const task = payload.data;
+          if (response?.success && response.data) {
+            const task = response.data;
             set({
               currentTask: task,
               loading: false
@@ -185,15 +182,15 @@ export const useTaskStore = create<TaskState>()(
           set({ loading: true, error: null });
 
           const response = await api.assets.getAll(params);
-          const payload = response.data;
 
-          if (payload?.success && payload.data) {
+          if (response?.success) {
+            const assetsList = (response as { assets?: Asset[] }).assets ?? [];
             set({
-              assets: payload.data.assets || payload.data || [],
+              assets: assetsList,
               loading: false
             });
           } else {
-            throw new Error(payload?.message || '获取素材库失败');
+            throw new Error(response?.message || '获取素材库失败');
           }
         } catch (error: any) {
           console.error('获取素材库失败:', error);
@@ -210,16 +207,15 @@ export const useTaskStore = create<TaskState>()(
           set({ loading: true, error: null });
 
           const response = await api.assets.delete(assetId, { delete_cos_file: deleteCosFile });
-          const payload = response.data;
 
-          if (payload?.success) {
+          if (response?.success) {
             // 从素材列表中移除
             set((state) => ({
               assets: state.assets.filter(asset => asset.id !== assetId),
               loading: false
             }));
           } else {
-            throw new Error(payload?.message || '删除素材失败');
+            throw new Error(response?.message || '删除素材失败');
           }
         } catch (error: any) {
           console.error('删除素材失败:', error);

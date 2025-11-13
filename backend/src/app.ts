@@ -1,4 +1,4 @@
-import express, { type Express } from 'express';
+import express, { type Express, type RequestHandler } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -41,6 +41,7 @@ const routeDefinitions: RouteDefinition[] = [
   { mountPath: '/api/ai', modulePath: './routes/ai.route.js' },
   { mountPath: '/api/admin/kb', modulePath: './routes/admin/kb.route.js' },
   { mountPath: '/api/admin/uploads', modulePath: './routes/admin/uploads.route.js' },
+  { mountPath: '/api/admin/configs', modulePath: './routes/admin/configs.route.js' },
   { mountPath: '/api/admin/features', modulePath: './routes/feature-catalog.routes.js' },
   { mountPath: '/api/admin/ui', modulePath: './routes/ui.routes.js' },
   { mountPath: '/api/admin/pipeline-schemas', modulePath: './routes/pipelineSchemas.routes.js' },
@@ -137,8 +138,21 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Express
   app.use(requestIdMiddleware);
   app.use(helmet());
 
-  // 防止NoSQL注入（艹！虽然用的是MySQL，但防患于未然）
-  app.use(mongoSanitize());
+  const sanitizePayload: RequestHandler = (req, _res, next) => {
+    const sanitizeTarget = (target: unknown) => {
+      if (target && typeof target === 'object') {
+        mongoSanitize.sanitize(target as Record<string, unknown> | unknown[]);
+      }
+    };
+    sanitizeTarget(req.body);
+    sanitizeTarget(req.params);
+    sanitizeTarget(req.headers);
+    sanitizeTarget(req.query);
+    next();
+  };
+
+  // 防止NoSQL注入（艹！虽然用的是MySQL，但防患于未然），自定义中间件避免 Express 5 对 req.query 的 getter 限制
+  app.use(sanitizePayload);
 
   const originConfig = options.corsOrigins ?? process.env.FRONTEND_URL;
   const corsWhitelist = buildCorsWhitelist(originConfig);

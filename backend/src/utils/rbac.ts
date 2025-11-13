@@ -1,3 +1,5 @@
+import logger from './logger.js';
+
 /**
  * RBAC权限控制系统
  *
@@ -318,8 +320,6 @@ export interface PermissionAuditLog {
  * 记录权限审计日志
  */
 export function logPermissionAccess(auditLog: PermissionAuditLog): void {
-  const logger = require('../utils/logger');
-
   if (auditLog.success) {
     logger.info('Permission access granted', {
       userId: auditLog.userId,

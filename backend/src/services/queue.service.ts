@@ -1,11 +1,4 @@
-import {
-  Queue,
-  QueueEvents,
-  type JobsOptions,
-  type BulkJobOptions,
-  Worker,
-  Job
-} from 'bullmq';
+import { Queue, QueueEvents, type JobsOptions, type BulkJobOptions, Worker, Job } from 'bullmq';
 import { Redis as IORedis } from 'ioredis';
 import pLimit from 'p-limit';
 import logger from '../utils/logger.js';

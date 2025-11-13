@@ -3,110 +3,297 @@
  *
  * 根据查询模式优化数据库索引，提升查询性能
  */
-exports.up = function (knex) {
-  return (
-    knex.schema
-      // 1. users表索引优化
-      .table('users', (table) => {
-        table.index(['isMember', 'quota_remaining'], 'idx_users_member_quota');
-        table.index('created_at', 'idx_users_created_at');
-        table.index('quota_expireAt', 'idx_users_quota_expire');
-      })
-      // 2. tasks表索引优化（核心查询表）
-      .table('tasks', (table) => {
-        table.index(['userId', 'created_at', 'id'], 'idx_tasks_user_time');
-        table.index(['userId', 'status'], 'idx_tasks_user_status');
-        table.index(['status', 'created_at', 'id'], 'idx_tasks_status_time');
-        table.index('type', 'idx_tasks_type');
-        table.index('vendorTaskId', 'idx_tasks_vendor_task');
-        table.index(['type', 'status'], 'idx_tasks_type_status');
-        table.index(['userId', 'type', 'status', 'created_at'], 'idx_tasks_user_type_status_time');
-      })
-      // 3. quota_transactions表索引优化
-      .table('quota_transactions', (table) => {
-        table.index('user_id', 'idx_quota_user');
-        table.index('phase', 'idx_quota_phase');
-        table.index(['user_id', 'phase'], 'idx_quota_user_phase');
-        table.index('created_at', 'idx_quota_created');
-        table.index(['user_id', 'phase', 'created_at'], 'idx_quota_user_phase_time');
-      })
-      // 4. feature_definitions表索引优化
-      .table('feature_definitions', (table) => {
-        table.index('is_enabled', 'idx_feature_enabled');
-        table.index('pipeline_schema_ref', 'idx_feature_pipeline');
-        table.index('category', 'idx_feature_category');
-        table.index(['is_enabled', 'category'], 'idx_feature_enabled_category');
-      })
-      // 5. task_steps表索引优化
-      .table('task_steps', (table) => {
-        table.index('task_id', 'idx_steps_task');
-        table.index('status', 'idx_steps_status');
-        table.index(['task_id', 'step_index'], 'idx_steps_task_index');
-        table.index(['task_id', 'status'], 'idx_steps_task_status');
-        table.index('type', 'idx_steps_type');
-        table.index('provider_ref', 'idx_steps_provider');
-        table.index(['status', 'created_at'], 'idx_steps_status_time');
-      })
-      // 6. orders表索引优化
-      .table('orders', (table) => {
-        table.index(['user_id', 'created_at'], 'idx_orders_user_time');
-        table.index('status', 'idx_orders_status');
-        table.index('type', 'idx_orders_type');
-        table.index('external_order_id', 'idx_orders_external');
-        table.index(['user_id', 'status'], 'idx_orders_user_status');
-        table.index('payment_status', 'idx_orders_payment');
-      })
-      .then(() => {
-        console.log('✓ 核心索引优化完成');
-      })
-  );
+const getRows = (result) => {
+  if (Array.isArray(result)) {
+    return result[0] ?? [];
+  }
+  if (result && typeof result === 'object' && Array.isArray(result.rows)) {
+    return result.rows;
+  }
+  return [];
 };
 
-exports.down = function (knex) {
-  return knex
-    .raw(
-      `
-    -- 删除添加的索引（忽略不存在的错误）
-    ALTER TABLE users DROP INDEX idx_users_member_quota;
-    ALTER TABLE users DROP INDEX idx_users_created_at;
-    ALTER TABLE users DROP INDEX idx_users_quota_expire;
+const tableColumnsCache = new Map();
 
-    ALTER TABLE tasks DROP INDEX idx_tasks_user_time;
-    ALTER TABLE tasks DROP INDEX idx_tasks_user_status;
-    ALTER TABLE tasks DROP INDEX idx_tasks_status_time;
-    ALTER TABLE tasks DROP INDEX idx_tasks_type;
-    ALTER TABLE tasks DROP INDEX idx_tasks_vendor_task;
-    ALTER TABLE tasks DROP INDEX idx_tasks_type_status;
-    ALTER TABLE tasks DROP INDEX idx_tasks_user_type_status_time;
+const resolveColumn = async (knex, tableName, candidates) => {
+  let columns = tableColumnsCache.get(tableName);
+  if (!columns) {
+    const raw = await knex.raw('SHOW COLUMNS FROM ??', [tableName]);
+    const rows = getRows(raw);
+    columns = rows.map((row) => row.Field);
+    tableColumnsCache.set(tableName, columns);
+  }
+  const normalize = (value) => value.replace(/_/g, '').toLowerCase();
+  const normalizedMap = new Map(columns.map((col) => [normalize(col), col]));
 
-    ALTER TABLE quota_transactions DROP INDEX idx_quota_user;
-    ALTER TABLE quota_transactions DROP INDEX idx_quota_phase;
-    ALTER TABLE quota_transactions DROP INDEX idx_quota_user_phase;
-    ALTER TABLE quota_transactions DROP INDEX idx_quota_created;
-    ALTER TABLE quota_transactions DROP INDEX idx_quota_user_phase_time;
+  for (const candidate of candidates) {
+    if (columns.includes(candidate)) {
+      console.log(
+        `[Migration:add_core_indexes] 列 ${candidate} 在 ${tableName} 直接匹配`
+      );
+      return candidate;
+    }
+    const normalizedMatch = normalizedMap.get(normalize(candidate));
+    if (normalizedMatch) {
+      console.log(
+        `[Migration:add_core_indexes] 列 ${candidate} 在 ${tableName} 映射为 ${normalizedMatch}`
+      );
+      return normalizedMatch;
+    }
+  }
+  return null;
+};
 
-    ALTER TABLE feature_definitions DROP INDEX idx_feature_enabled;
-    ALTER TABLE feature_definitions DROP INDEX idx_feature_pipeline;
-    ALTER TABLE feature_definitions DROP INDEX idx_feature_category;
-    ALTER TABLE feature_definitions DROP INDEX idx_feature_enabled_category;
+const indexExists = async (knex, tableName, indexName) => {
+  const raw = await knex.raw('SHOW INDEX FROM ?? WHERE Key_name = ?', [tableName, indexName]);
+  const rows = getRows(raw);
+  return rows.length > 0;
+};
 
-    ALTER TABLE task_steps DROP INDEX idx_steps_task;
-    ALTER TABLE task_steps DROP INDEX idx_steps_status;
-    ALTER TABLE task_steps DROP INDEX idx_steps_task_index;
-    ALTER TABLE task_steps DROP INDEX idx_steps_task_status;
-    ALTER TABLE task_steps DROP INDEX idx_steps_type;
-    ALTER TABLE task_steps DROP INDEX idx_steps_provider;
-    ALTER TABLE task_steps DROP INDEX idx_steps_status_time;
+const addIndexSafe = async (knex, tableName, columnCandidates, indexName) => {
+  const actualColumns = [];
+  for (const candidates of columnCandidates) {
+    const column = await resolveColumn(knex, tableName, Array.isArray(candidates) ? candidates : [candidates]);
+    if (!column) {
+      console.warn(
+        `[Migration:add_core_indexes] 跳过索引 ${indexName}，列 ${candidates} 在 ${tableName} 不存在`
+      );
+      return;
+    }
+    actualColumns.push(column);
+  }
 
-    ALTER TABLE orders DROP INDEX idx_orders_user_time;
-    ALTER TABLE orders DROP INDEX idx_orders_status;
-    ALTER TABLE orders DROP INDEX idx_orders_type;
-    ALTER TABLE orders DROP INDEX idx_orders_external;
-    ALTER TABLE orders DROP INDEX idx_orders_user_status;
-    ALTER TABLE orders DROP INDEX idx_orders_payment;
-  `
-    )
-    .then(() => {
-      console.log('✓ 索引优化回滚完成');
-    });
+  const exists = await indexExists(knex, tableName, indexName);
+  if (exists) {
+    return;
+  }
+
+  const placeholders = actualColumns.map(() => '??').join(', ');
+  console.log(
+    `[Migration:add_core_indexes] 创建索引 ${indexName} 于 ${tableName} 列 ${actualColumns.join(', ')}`
+  );
+  await knex.raw(`ALTER TABLE ?? ADD INDEX ?? (${placeholders})`, [
+    tableName,
+    indexName,
+    ...actualColumns
+  ]);
+};
+
+exports.up = async function (knex) {
+  // users
+  await addIndexSafe(knex, 'users', [['isMember'], ['quota_remaining']], 'idx_users_member_quota');
+  await addIndexSafe(knex, 'users', [['created_at'], ['id']], 'idx_users_created_at');
+  await addIndexSafe(knex, 'users', [['quota_expireAt']], 'idx_users_quota_expire');
+
+  // tasks
+  await addIndexSafe(
+    knex,
+    'tasks',
+    [
+      ['user_id', 'userId'],
+      ['created_at', 'createdAt'],
+      ['id']
+    ],
+    'idx_tasks_user_time'
+  );
+  await addIndexSafe(
+    knex,
+    'tasks',
+    [
+      ['user_id', 'userId'],
+      ['status']
+    ],
+    'idx_tasks_user_status'
+  );
+  await addIndexSafe(
+    knex,
+    'tasks',
+    [
+      ['status'],
+      ['created_at', 'createdAt'],
+      ['id']
+    ],
+    'idx_tasks_status_time'
+  );
+  await addIndexSafe(knex, 'tasks', [['type']], 'idx_tasks_type');
+  await addIndexSafe(knex, 'tasks', [['vendorTaskId']], 'idx_tasks_vendor_task');
+  await addIndexSafe(
+    knex,
+    'tasks',
+    [
+      ['type'],
+      ['status']
+    ],
+    'idx_tasks_type_status'
+  );
+  await addIndexSafe(
+    knex,
+    'tasks',
+    [
+      ['user_id', 'userId'],
+      ['type'],
+      ['status'],
+      ['created_at', 'createdAt']
+    ],
+    'idx_tasks_user_type_status_time'
+  );
+
+  // quota_transactions (新表使用 snake_case)
+  await addIndexSafe(knex, 'quota_transactions', [['user_id']], 'idx_quota_user');
+  await addIndexSafe(knex, 'quota_transactions', [['phase']], 'idx_quota_phase');
+  await addIndexSafe(
+    knex,
+    'quota_transactions',
+    [
+      ['user_id'],
+      ['phase']
+    ],
+    'idx_quota_user_phase'
+  );
+  await addIndexSafe(knex, 'quota_transactions', [['created_at']], 'idx_quota_created');
+  await addIndexSafe(
+    knex,
+    'quota_transactions',
+    [
+      ['user_id'],
+      ['phase'],
+      ['created_at']
+    ],
+    'idx_quota_user_phase_time'
+  );
+
+  // feature_definitions
+  await addIndexSafe(knex, 'feature_definitions', [['is_enabled']], 'idx_feature_enabled');
+  await addIndexSafe(knex, 'feature_definitions', [['pipeline_schema_ref']], 'idx_feature_pipeline');
+  await addIndexSafe(knex, 'feature_definitions', [['category']], 'idx_feature_category');
+  await addIndexSafe(
+    knex,
+    'feature_definitions',
+    [
+      ['is_enabled'],
+      ['category']
+    ],
+    'idx_feature_enabled_category'
+  );
+
+  // task_steps
+  await addIndexSafe(knex, 'task_steps', [['task_id']], 'idx_steps_task');
+  await addIndexSafe(knex, 'task_steps', [['status']], 'idx_steps_status');
+  await addIndexSafe(
+    knex,
+    'task_steps',
+    [
+      ['task_id'],
+      ['step_index']
+    ],
+    'idx_steps_task_index'
+  );
+  await addIndexSafe(
+    knex,
+    'task_steps',
+    [
+      ['task_id'],
+      ['status']
+    ],
+    'idx_steps_task_status'
+  );
+  await addIndexSafe(knex, 'task_steps', [['type']], 'idx_steps_type');
+  await addIndexSafe(knex, 'task_steps', [['provider_ref']], 'idx_steps_provider');
+  await addIndexSafe(
+    knex,
+    'task_steps',
+    [
+      ['status'],
+      ['created_at', 'createdAt']
+    ],
+    'idx_steps_status_time'
+  );
+
+  // orders
+  await addIndexSafe(
+    knex,
+    'orders',
+    [
+      ['user_id', 'userId'],
+      ['created_at', 'createdAt']
+    ],
+    'idx_orders_user_time'
+  );
+  await addIndexSafe(knex, 'orders', [['status']], 'idx_orders_status');
+  await addIndexSafe(knex, 'orders', [['type']], 'idx_orders_type');
+  await addIndexSafe(knex, 'orders', [['external_order_id', 'transactionId']], 'idx_orders_external');
+  await addIndexSafe(
+    knex,
+    'orders',
+    [
+      ['user_id', 'userId'],
+      ['status']
+    ],
+    'idx_orders_user_status'
+  );
+  await addIndexSafe(knex, 'orders', [['payment_status']], 'idx_orders_payment');
+
+  console.log('✓ 核心索引优化完成（兼容旧列名）');
+};
+
+const dropIndexIfExists = async (knex, tableName, indexName) => {
+  const exists = await indexExists(knex, tableName, indexName);
+  if (!exists) {
+    return;
+  }
+  await knex.raw('ALTER TABLE ?? DROP INDEX ??', [tableName, indexName]);
+};
+
+exports.down = async function (knex) {
+  const indexMap = {
+    users: ['idx_users_member_quota', 'idx_users_created_at', 'idx_users_quota_expire'],
+    tasks: [
+      'idx_tasks_user_time',
+      'idx_tasks_user_status',
+      'idx_tasks_status_time',
+      'idx_tasks_type',
+      'idx_tasks_vendor_task',
+      'idx_tasks_type_status',
+      'idx_tasks_user_type_status_time'
+    ],
+    quota_transactions: [
+      'idx_quota_user',
+      'idx_quota_phase',
+      'idx_quota_user_phase',
+      'idx_quota_created',
+      'idx_quota_user_phase_time'
+    ],
+    feature_definitions: [
+      'idx_feature_enabled',
+      'idx_feature_pipeline',
+      'idx_feature_category',
+      'idx_feature_enabled_category'
+    ],
+    task_steps: [
+      'idx_steps_task',
+      'idx_steps_status',
+      'idx_steps_task_index',
+      'idx_steps_task_status',
+      'idx_steps_type',
+      'idx_steps_provider',
+      'idx_steps_status_time'
+    ],
+    orders: [
+      'idx_orders_user_time',
+      'idx_orders_status',
+      'idx_orders_type',
+      'idx_orders_external',
+      'idx_orders_user_status',
+      'idx_orders_payment'
+    ]
+  };
+
+  for (const [tableName, indexes] of Object.entries(indexMap)) {
+    for (const indexName of indexes) {
+      // eslint-disable-next-line no-await-in-loop
+      await dropIndexIfExists(knex, tableName, indexName);
+    }
+  }
+
+  console.log('✓ 索引优化回滚完成');
 };

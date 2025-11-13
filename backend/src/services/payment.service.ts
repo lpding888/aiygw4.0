@@ -1,11 +1,16 @@
 // @ts-nocheck
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-import AlipaySdk from 'alipay-sdk';
-import { WxPay, Builder } from 'wechatpay-node-v3';
+import { AlipaySdk } from 'alipay-sdk';
+import WxPay from 'wechatpay-node-v3';
 import logger from '../utils/logger.js';
 import { db } from '../config/database.js';
-import paymentConfig from '../config/payment.config.js';
+import {
+  paymentConfig,
+  getPaymentConfig,
+  getPaymentProductConfig,
+  validatePaymentConfig
+} from '../config/payment.config.js';
 import cacheService from './cache.service.js';
 
 /**
@@ -43,8 +48,8 @@ class PaymentService {
     try {
       // 初始化支付宝SDK
       try {
-        paymentConfig.validateConfig('alipay');
-        const alipayConfig = paymentConfig.getConfig('alipay');
+        validatePaymentConfig('alipay');
+        const alipayConfig = getPaymentConfig('alipay');
         this.alipaySdk = new AlipaySdk({
           appId: alipayConfig.appId,
           privateKey: alipayConfig.privateKey,
@@ -61,19 +66,19 @@ class PaymentService {
 
       // 初始化微信支付SDK
       try {
-        paymentConfig.validateConfig('wechat');
-        const wechatConfig = paymentConfig.getConfig('wechat');
-        this.wxpay = new WxPay.Builder()
-          .setAppid(wechatConfig.appId)
-          .setMchid(wechatConfig.mchId)
-          .setPrivateKey(wechatConfig.privateKey)
-          .setPublicKey(wechatConfig.publicKey)
-          .setApiV3Key(wechatConfig.apiV3Key)
-          .setMerchantSerialNumber(wechatConfig.merchantSerialNumber)
-          .build();
+        validatePaymentConfig('wechat');
+        const wechatConfig = getPaymentConfig('wechat');
+        this.wxpay = new WxPay({
+          appid: wechatConfig.appId,
+          mchid: wechatConfig.mchId,
+          privateKey: Buffer.from(wechatConfig.privateKey),
+          publicKey: Buffer.from(wechatConfig.publicKey),
+          key: wechatConfig.apiV3Key,
+          serial_no: wechatConfig.merchantSerialNumber
+        });
         logger.info('[Payment] 微信支付SDK初始化成功');
       } catch (error) {
-        logger.warn('[Payment] 微信支付SDK初始化失败:', error.message);
+        logger.warn('[Payment] 微信支付SDK初始化失败:', (error as Error).message);
       }
 
       this.initialized = true;
@@ -563,7 +568,7 @@ class PaymentService {
 
     // 验证商品类型
     try {
-      paymentConfig.getProductConfig(productType);
+      getPaymentProductConfig(productType);
     } catch (error) {
       throw new Error(`不支持的商品类型: ${productType}`);
     }
@@ -578,7 +583,7 @@ class PaymentService {
    * @private
    */
   async createAlipayOrder(order, returnUrl = null, notifyUrl = null) {
-    const config = paymentConfig.getConfig('alipay');
+    const config = getPaymentConfig('alipay');
     const returnUrlUrl = returnUrl || config.callbacks.return;
     const notifyUrlUrl = notifyUrl || config.callbacks.notify;
 
@@ -611,7 +616,7 @@ class PaymentService {
    * @private
    */
   async createWechatOrder(order, notifyUrl = null) {
-    const config = paymentConfig.getConfig('wechat');
+    const config = getPaymentConfig('wechat');
     const notifyUrlUrl = notifyUrl || config.callbacks.notify;
 
     const params = {

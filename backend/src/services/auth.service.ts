@@ -11,7 +11,7 @@ import bcrypt from 'bcryptjs';
 import { nanoid } from 'nanoid';
 import axios from 'axios';
 import crypto from 'crypto';
-import db from '../db/index.js';
+import { db } from '../config/database.js';
 import tokenService, { TokenPair, UserForToken } from './token.service.js';
 import logger from '../utils/logger.js';
 import * as userRepo from '../repositories/users.repo.js';

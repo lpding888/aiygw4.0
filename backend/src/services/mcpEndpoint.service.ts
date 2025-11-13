@@ -3,7 +3,7 @@ import { spawn } from 'child_process';
 import WebSocket from 'ws';
 import fetch from 'node-fetch';
 import logger from '../utils/logger.js';
-import { AppError } from '../utils/errors.js';
+import AppError from '../utils/AppError.js';
 
 /**
  * MCP Endpoint 服务

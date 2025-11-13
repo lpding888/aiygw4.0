@@ -42,9 +42,10 @@ export default function LibraryPage() {
       setLoading(true);
       const response: any = await api.assets.getAll({ userId: 'me' });
 
-      if (response.success && response.assets) {
-        setAssets(response.assets);
-        setFilteredAssets(response.assets);
+      if (response.success) {
+        const assetsList = response.assets || [];
+        setAssets(assetsList);
+        setFilteredAssets(assetsList);
       }
     } catch (error: any) {
       message.error('获取素材库失败');

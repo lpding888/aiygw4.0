@@ -2,7 +2,11 @@
  * 创建流程执行步骤表
  */
 
-exports.up = function (knex) {
+exports.up = async function (knex) {
+  const exists = await knex.schema.hasTable('pipeline_execution_steps');
+  if (exists) {
+    return;
+  }
   return knex.schema.createTable('pipeline_execution_steps', function (table) {
     table.string('id').primary().defaultTo(knex.raw('(UUID())'));
     table.string('execution_id').notNullable().comment('执行记录ID');
@@ -31,6 +35,10 @@ exports.up = function (knex) {
   });
 };
 
-exports.down = function (knex) {
+exports.down = async function (knex) {
+  const exists = await knex.schema.hasTable('pipeline_execution_steps');
+  if (!exists) {
+    return;
+  }
   return knex.schema.dropTable('pipeline_execution_steps');
 };

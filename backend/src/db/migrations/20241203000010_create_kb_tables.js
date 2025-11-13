@@ -3,11 +3,12 @@
  * 艹，这个SB migration创建KB元数据表和chunks表！
  */
 
-exports.up = function (knex) {
-  return (
-    knex.schema
-      // 1. 知识库文档表
-      .createTable('kb_documents', (table) => {
+exports.up = async function (knex) {
+  const hasDocuments = await knex.schema.hasTable('kb_documents');
+  const hasChunks = await knex.schema.hasTable('kb_chunks');
+
+  if (!hasDocuments) {
+    await knex.schema.createTable('kb_documents', (table) => {
         table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
         table.string('user_id', 32).notNullable().comment('用户ID');
         table.string('kb_id', 32).notNullable().comment('知识库ID');
@@ -30,10 +31,11 @@ exports.up = function (knex) {
         table.index('kb_id', 'idx_kb_documents_kb');
         table.index('status', 'idx_kb_documents_status');
         table.index(['user_id', 'kb_id'], 'idx_kb_documents_user_kb');
-      })
+      });
+  }
 
-      // 2. 知识库chunks表
-      .createTable('kb_chunks', (table) => {
+  if (!hasChunks) {
+    await knex.schema.createTable('kb_chunks', (table) => {
         table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
         table.string('document_id', 36).notNullable().comment('文档ID');
         table.integer('chunk_index').unsigned().notNullable().comment('块索引');
@@ -56,10 +58,11 @@ exports.up = function (knex) {
 
         // 外键
         table.foreign('document_id').references('id').inTable('kb_documents').onDelete('CASCADE');
-      })
-  );
+      });
+  }
 };
 
-exports.down = function (knex) {
-  return knex.schema.dropTableIfExists('kb_chunks').dropTableIfExists('kb_documents');
+exports.down = async function (knex) {
+  await knex.schema.dropTableIfExists('kb_chunks');
+  await knex.schema.dropTableIfExists('kb_documents');
 };

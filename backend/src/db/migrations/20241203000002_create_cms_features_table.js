@@ -2,7 +2,11 @@
  * 创建CMS功能配置表
  */
 
-exports.up = function (knex) {
+exports.up = async function (knex) {
+  const exists = await knex.schema.hasTable('cms_features');
+  if (exists) {
+    return;
+  }
   return knex.schema.createTable('cms_features', (table) => {
     table.string('id').primary().defaultTo(knex.raw('(UUID())'));
     table.string('key').notNullable().unique().comment('功能键');
@@ -11,9 +15,9 @@ exports.up = function (knex) {
     table.string('category').notNullable().comment('功能分类');
     table.boolean('enabled').defaultTo(true).comment('是否启用');
     table.string('status').defaultTo('draft').comment('状态: draft/published/archived');
-    table.json('config').defaultTo('{}').comment('功能配置');
-    table.json('menu').defaultTo('{}').comment('菜单配置');
-    table.json('metadata').defaultTo('{}').comment('元数据');
+    table.json('config').comment('功能配置');
+    table.json('menu').comment('菜单配置');
+    table.json('metadata').comment('元数据');
     table.string('version').defaultTo('1.0.0').comment('版本号');
     table.timestamp('published_at').nullable().comment('发布时间');
     table.integer('created_by').unsigned().comment('创建者ID');
@@ -29,6 +33,10 @@ exports.up = function (knex) {
   });
 };
 
-exports.down = function (knex) {
+exports.down = async function (knex) {
+  const exists = await knex.schema.hasTable('cms_features');
+  if (!exists) {
+    return;
+  }
   return knex.schema.dropTable('cms_features');
 };

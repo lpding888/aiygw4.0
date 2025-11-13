@@ -53,7 +53,7 @@ export default function ImageUploader({
    * 自定义上传逻辑 - 使用COS SDK上传
    */
   const customUpload = async (options: any) => {
-    const { file } = options;
+    const { file, onSuccess, onError, onProgress } = options;
 
     try {
       setUploading(true);
@@ -104,15 +104,19 @@ export default function ImageUploader({
             onProgress: (progressData: any) => {
               const percent = Math.round(progressData.percent * 100);
               setProgress(percent);
+              onProgress?.({ percent });
             }
           },
           (err, data) => {
             if (err) {
+              onError?.(err);
               reject(err);
             } else {
               // 生成访问URL
               const url = `https://${bucket}.cos.${region}.myqcloud.com/${key}`;
-              resolve({ url, taskId: actualTaskId, fileName: key });
+              const result = { url, taskId: actualTaskId, fileName: key };
+              onSuccess?.(result, file);
+              resolve(result);
             }
           }
         );
@@ -124,6 +128,7 @@ export default function ImageUploader({
       setUploading(false);
       setProgress(0);
       onUploadError?.(error);
+      options.onError?.(error);
       throw error;
     }
   };

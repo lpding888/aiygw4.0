@@ -32,7 +32,6 @@ interface RunningHubResponse {
 class AIModelService {
   private config = {
     apiUrl: process.env.RUNNING_HUB_API_URL || 'https://www.runninghub.cn/task/openapi/ai-app/run',
-    apiKey: process.env.RUNNING_HUB_API_KEY || '0e6c8dc1ed9543a498189cbd331ae85c',
     timeout: 180000
   };
 
@@ -48,6 +47,7 @@ class AIModelService {
 
   private promptTemplatesCache: Record<string, unknown> | null = null;
   private initialized = false;
+  private cachedApiKey: string | null = null;
 
   private async _initialize(): Promise<void> {
     if (this.initialized) return;
@@ -80,6 +80,21 @@ class AIModelService {
       this.dynamicConfig.nodeImage = '74';
       this.initialized = true;
     }
+  }
+
+  private async getApiKey(): Promise<string> {
+    if (this.cachedApiKey) {
+      return this.cachedApiKey;
+    }
+    const configValue = (await (systemConfigService as unknown as SystemConfigService).get(
+      'runninghub_api_key'
+    )) as string | null;
+    const apiKey = (configValue ?? '').trim();
+    if (!apiKey) {
+      throw new Error('RunningHub API Key 未配置，请在系统配置 runninghub_api_key 中设置');
+    }
+    this.cachedApiKey = apiKey;
+    return apiKey;
   }
 
   async generatePrompt(scene: string, category: string): Promise<string> {
@@ -168,9 +183,10 @@ class AIModelService {
   async submitToRunningHub(imageUrl: string, prompt: string): Promise<string> {
     try {
       const imageKey = this.extractImageKey(imageUrl);
+      const apiKey = await this.getApiKey();
       const requestBody: Record<string, unknown> = {
         webappId: this.dynamicConfig.webappId,
-        apiKey: this.config.apiKey,
+        apiKey,
         nodeInfoList: [
           {
             nodeId: this.dynamicConfig.nodePrompt,
@@ -283,10 +299,11 @@ class AIModelService {
 
   async queryRunningHubStatus(runningHubTaskId: string): Promise<'SUCCESS' | 'FAILED' | 'PENDING'> {
     try {
+      const apiKey = await this.getApiKey();
       const response = await axios.get<RunningHubResponse>(
         `${this.config.apiUrl}/v1/status/${runningHubTaskId}`,
         {
-          headers: { Authorization: `Bearer ${this.config.apiKey}` },
+          headers: { Authorization: `Bearer ${apiKey}` },
           timeout: 10000
         }
       );
@@ -306,10 +323,11 @@ class AIModelService {
 
   async fetchResults(runningHubTaskId: string): Promise<string[]> {
     try {
+      const apiKey = await this.getApiKey();
       const response = await axios.get<RunningHubResponse>(
         `${this.config.apiUrl}/v1/outputs/${runningHubTaskId}`,
         {
-          headers: { Authorization: `Bearer ${this.config.apiKey}` },
+          headers: { Authorization: `Bearer ${apiKey}` },
           timeout: 30000
         }
       );

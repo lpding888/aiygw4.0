@@ -74,10 +74,9 @@ export const useFeatureStore = create<FeatureState>()(
           };
 
           const response = await api.features.getAll(requestParams);
-          const payload = response.data;
 
-          if (payload?.success && payload.data) {
-            let features = payload.data.features || payload.data;
+          if (response?.success && response.data) {
+            let features = response.data.features || response.data;
 
             // 客户端搜索过滤
             if (filters.search) {
@@ -92,12 +91,12 @@ export const useFeatureStore = create<FeatureState>()(
               features: Array.isArray(features) ? features : [],
               pagination: {
                 ...pagination,
-                total: payload.data.total || features.length
+                total: response.data.total || features.length
               },
               loading: false
             });
           } else {
-            throw new Error(payload?.message || '获取功能列表失败');
+            throw new Error(response?.message || '获取功能列表失败');
           }
         } catch (error: any) {
           console.error('获取功能列表失败:', error);
@@ -114,15 +113,15 @@ export const useFeatureStore = create<FeatureState>()(
           set({ loading: true, error: null });
 
           const response = await api.features.getFormSchema(featureId);
-          const payload = response.data;
 
-          if (payload?.success && payload.data) {
+          if (response?.success) {
+            const { success: _ignored, message: _msg, ...schema } = response as any;
             set({
-              formSchema: payload.data,
+              formSchema: schema,
               loading: false
             });
           } else {
-            throw new Error(payload?.message || '获取表单配置失败');
+            throw new Error(response?.message || '获取表单配置失败');
           }
         } catch (error: any) {
           console.error('获取表单配置失败:', error);

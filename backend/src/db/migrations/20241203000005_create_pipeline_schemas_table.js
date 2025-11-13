@@ -2,7 +2,11 @@
  * 创建流程模板表
  */
 
-exports.up = function (knex) {
+exports.up = async function (knex) {
+  const exists = await knex.schema.hasTable('pipeline_schemas');
+  if (exists) {
+    return;
+  }
   return knex.schema.createTable('pipeline_schemas', function (table) {
     table.string('id').primary().defaultTo(knex.raw('(UUID())'));
     table.string('name').notNullable().comment('流程名称');
@@ -42,6 +46,10 @@ exports.up = function (knex) {
   });
 };
 
-exports.down = function (knex) {
+exports.down = async function (knex) {
+  const exists = await knex.schema.hasTable('pipeline_schemas');
+  if (!exists) {
+    return;
+  }
   return knex.schema.dropTable('pipeline_schemas');
 };

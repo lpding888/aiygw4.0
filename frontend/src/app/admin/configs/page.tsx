@@ -38,8 +38,7 @@ import {
   Table,
   Tooltip,
   Badge,
-  Timeline,
-  Divider
+  Timeline
 } from 'antd';
 import {
   SettingOutlined,
@@ -52,11 +51,11 @@ import {
   EyeOutlined,
   EyeInvisibleOutlined,
   ReloadOutlined,
-  CheckCircleOutlined,
   ExclamationCircleOutlined,
   ClockCircleOutlined,
   DatabaseOutlined,
-  CopyOutlined
+  CopyOutlined,
+  StopOutlined
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DataTablePro, type DataTableColumn } from '@/components/base/DataTablePro';
@@ -64,46 +63,54 @@ import { api } from '@/lib/api/client';
 import { MSWInitializer } from '@/components/MSWInitializer';
 import type { ColumnsType } from 'antd/es/table';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 const { TextArea } = Input;
 const { TabPane } = Tabs;
 
 // 配置项类型
 interface ConfigItem {
   key: string;
-  value: string | number | boolean;
-  type: 'string' | 'number' | 'boolean' | 'json';
+  value: any;
+  maskedValue?: string | null;
+  type: 'string' | 'number' | 'boolean' | 'json' | 'secret';
   description?: string;
   category?: string;
   sensitive?: boolean;
   version?: number;
-  updatedBy?: string;
+  isActive?: boolean;
+  metadata?: Record<string, any> | null;
   updatedAt?: string;
   createdAt?: string;
 }
 
-// 配置快照
 interface ConfigSnapshot {
-  id: string;
-  version: number;
-  description?: string;
-  configs: Record<string, any>;
-  created_by?: string;
-  created_at: string;
-  config_count: number;
+  id: number;
+  name: string;
+  description?: string | null;
+  createdAt: string;
+  configCount: number;
 }
 
-// 配置历史
 interface ConfigHistory {
-  id: string;
+  id: number;
   key: string;
-  action: 'create' | 'update' | 'delete';
-  old_value?: any;
-  new_value?: any;
-  created_by?: string;
-  created_at: string;
+  action: string;
   version?: number;
+  createdAt: string;
+  operator?: string | null;
+  operatorName?: string | null;
+  before?: Record<string, any> | null;
+  after?: Record<string, any> | null;
 }
+
+type ConfigFormPayload = {
+  key?: string;
+  value: any;
+  type: string;
+  description?: string;
+  category?: string;
+  sensitive?: boolean;
+};
 
 export default function ConfigsPage() {
   const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -112,7 +119,6 @@ export default function ConfigsPage() {
   const [snapshotModalVisible, setSnapshotModalVisible] = useState(false);
   const [selectedConfig, setSelectedConfig] = useState<ConfigItem | null>(null);
   const [selectedHistory, setSelectedHistory] = useState<ConfigHistory[]>([]);
-  const [snapshots, setSnapshots] = useState<ConfigSnapshot[]>([]);
   const [showSensitive, setShowSensitive] = useState<Record<string, boolean>>({});
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
@@ -149,7 +155,7 @@ export default function ConfigsPage() {
 
   // 创建配置
   const createMutation = useMutation({
-    mutationFn: async (data: Partial<ConfigItem>) => {
+    mutationFn: async (data: ConfigFormPayload & { key: string }) => {
       const response = await api.post('/admin/configs', data);
       return response.data;
     },
@@ -158,6 +164,7 @@ export default function ConfigsPage() {
       setCreateModalVisible(false);
       createForm.resetFields();
       refetch();
+      queryClient.invalidateQueries({ queryKey: ['configs'] });
     },
     onError: (error: any) => {
       message.error(`创建失败: ${error.message}`);
@@ -166,7 +173,7 @@ export default function ConfigsPage() {
 
   // 更新配置
   const updateMutation = useMutation({
-    mutationFn: async ({ key, data }: { key: string; data: Partial<ConfigItem> }) => {
+    mutationFn: async ({ key, data }: { key: string; data: ConfigFormPayload }) => {
       const response = await api.put(`/admin/configs/${key}`, data);
       return response.data;
     },
@@ -176,6 +183,7 @@ export default function ConfigsPage() {
       editForm.resetFields();
       setSelectedConfig(null);
       refetch();
+      queryClient.invalidateQueries({ queryKey: ['configs'] });
     },
     onError: (error: any) => {
       message.error(`更新失败: ${error.message}`);
@@ -190,6 +198,7 @@ export default function ConfigsPage() {
     onSuccess: () => {
       message.success('配置删除成功');
       refetch();
+      queryClient.invalidateQueries({ queryKey: ['configs'] });
     },
     onError: (error: any) => {
       message.error(`删除失败: ${error.message}`);
@@ -204,7 +213,7 @@ export default function ConfigsPage() {
     },
     onSuccess: () => {
       message.success('快照创建成功');
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ['config-snapshots'] });
     },
     onError: (error: any) => {
       message.error(`创建快照失败: ${error.message}`);
@@ -220,7 +229,8 @@ export default function ConfigsPage() {
     onSuccess: () => {
       message.success('配置回滚成功');
       setSnapshotModalVisible(false);
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ['configs'] });
+      queryClient.invalidateQueries({ queryKey: ['config-snapshots'] });
     },
     onError: (error: any) => {
       message.error(`回滚失败: ${error.message}`);
@@ -256,39 +266,46 @@ export default function ConfigsPage() {
   };
 
   // 格式化值显示
-  const formatValue = (value: any, type: string, key: string) => {
+  const formatValue = (value: any, record: ConfigItem) => {
+    const type = record.type;
+    const key = record.key;
     if (value === null || value === undefined) {
       return '-';
     }
 
-    // 敏感字段处理
+    const isSensitive = record.sensitive;
     const isVisible = showSensitive[key];
-    if (type === 'boolean' && typeof value === 'boolean') {
-      return value ? 'true' : 'false';
-    }
 
-    if (type === 'json' && typeof value === 'object') {
-      const jsonStr = JSON.stringify(value, null, 2);
-      return (
-        <Space>
-          <Text code ellipsis style={{ maxWidth: 200 }}>
-            {isVisible ? jsonStr : maskValue(jsonStr)}
-          </Text>
+    const renderContent = () => {
+      if (type === 'boolean' && typeof value === 'boolean') {
+        return value ? 'true' : 'false';
+      }
+
+      if (type === 'json' && typeof value === 'object') {
+        const jsonStr = JSON.stringify(value, null, 2);
+        return isSensitive && !isVisible ? maskValue(jsonStr) : jsonStr;
+      }
+
+      return String(value);
+    };
+
+    return (
+      <Space>
+        <Text code>{isSensitive && !isVisible ? record.maskedValue ?? maskValue(String(value)) : renderContent()}</Text>
+        {isSensitive && (
           <Button
             type="text"
             size="small"
             icon={isVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-            onClick={() => setShowSensitive(prev => ({
-              ...prev,
-              [key]: !prev[key]
-            }))}
+            onClick={() =>
+              setShowSensitive((prev) => ({
+                ...prev,
+                [key]: !prev[key]
+              }))
+            }
           />
-        </Space>
-      );
-    }
-
-    return (
-      <Text code>{String(value)}</Text>
+        )}
+      </Space>
     );
   };
 
@@ -298,9 +315,41 @@ export default function ConfigsPage() {
     return value.substring(0, 4) + '*'.repeat(value.length - 8) + value.substring(value.length - 4);
   };
 
+  const renderHistorySnapshotValue = (snapshot?: Record<string, any> | null) => {
+    if (!snapshot) {
+      return '-';
+    }
+
+    if (snapshot.isSecret) {
+      return snapshot.maskedValue || '***';
+    }
+
+    if (snapshot.value === null || snapshot.value === undefined) {
+      return '-';
+    }
+
+    if (typeof snapshot.value === 'object') {
+      try {
+        return JSON.stringify(snapshot.value);
+      } catch {
+        return '[object]';
+      }
+    }
+
+    return String(snapshot.value);
+  };
+
   // 复制配置
   const copyConfig = (config: ConfigItem) => {
-    navigator.clipboard.writeText(String(config.value));
+    if (config.value === null || config.value === undefined) {
+      message.warning('没有可复制的值');
+      return;
+    }
+    const printable =
+      typeof config.value === 'object'
+        ? JSON.stringify(config.value, null, 2)
+        : String(config.value);
+    navigator.clipboard.writeText(printable);
     message.success('配置值已复制到剪贴板');
   };
 
@@ -342,15 +391,16 @@ export default function ConfigsPage() {
       }
     }
 
-    const configData = {
-      ...values,
+    const payload: ConfigFormPayload & { key: string } = {
+      key: values.key,
       value: processedValue,
-      version: 1,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      type: values.type,
+      description: values.description,
+      category: values.category,
+      sensitive: values.sensitive
     };
 
-    createMutation.mutate(configData);
+    createMutation.mutate(payload);
   };
 
   // 更新配置
@@ -373,17 +423,15 @@ export default function ConfigsPage() {
       }
     }
 
-    const updateData = {
-      ...values,
+    const updateData: ConfigFormPayload = {
       value: processedValue,
-      version: (selectedConfig.version || 1) + 1,
-      updatedAt: new Date().toISOString()
+      type: values.type,
+      description: values.description,
+      category: values.category,
+      sensitive: values.sensitive
     };
 
-    updateMutation.mutate({
-      key: selectedConfig.key,
-      data: updateData
-    });
+    updateMutation.mutate({ key: selectedConfig.key, data: updateData });
   };
 
   // 表格列定义
@@ -404,7 +452,7 @@ export default function ConfigsPage() {
       ellipsis: true,
       render: (value: any, record: ConfigItem) => (
         <Space>
-          {formatValue(value, record.type, record.key)}
+          {formatValue(value, record)}
           <Tooltip title="复制">
             <Button
               type="text"
@@ -513,7 +561,14 @@ export default function ConfigsPage() {
   ];
 
   const configs = configsData?.configs || [];
-  const stats = statsData?.stats || {};
+  const pagination = configsData?.pagination;
+  const stats = statsData?.stats;
+  const lastUpdateMinutes = stats?.lastUpdatedAt
+    ? Math.max(
+        0,
+        Math.floor((Date.now() - new Date(stats.lastUpdatedAt as string).getTime()) / 60000)
+      )
+    : null;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -553,7 +608,7 @@ export default function ConfigsPage() {
               <Card>
                 <Statistic
                   title="总配置数"
-                  value={stats.totalConfigs || 0}
+                  value={stats.total || 0}
                   prefix={<DatabaseOutlined />}
                 />
               </Card>
@@ -561,10 +616,20 @@ export default function ConfigsPage() {
             <Col span={6}>
               <Card>
                 <Statistic
-                  title="快照数量"
-                  value={stats.totalSnapshots || 0}
-                  valueStyle={{ color: '#722ed1' }}
-                  prefix={<RollbackOutlined />}
+                  title="敏感配置"
+                  value={stats.sensitive || 0}
+                  valueStyle={{ color: '#faad14' }}
+                  prefix={<EyeInvisibleOutlined />}
+                />
+              </Card>
+            </Col>
+            <Col span={6}>
+              <Card>
+                <Statistic
+                  title="禁用配置"
+                  value={stats.inactive || 0}
+                  valueStyle={{ color: '#eb2f96' }}
+                  prefix={<StopOutlined />}
                 />
               </Card>
             </Col>
@@ -572,19 +637,11 @@ export default function ConfigsPage() {
               <Card>
                 <Statistic
                   title="最近更新"
-                  value={stats.lastUpdateMinutes || 0}
-                  suffix="分钟前"
-                  valueStyle={{ color: '#eb2f96' }}
+                  value={
+                    typeof lastUpdateMinutes === 'number' ? lastUpdateMinutes : '-'
+                  }
+                  suffix={typeof lastUpdateMinutes === 'number' ? '分钟' : undefined}
                   prefix={<ClockCircleOutlined />}
-                />
-              </Card>
-            </Col>
-            <Col span={6}>
-              <Card>
-                <Statistic
-                  title="当前版本"
-                  value={stats.currentVersion || 1}
-                  prefix={<CheckCircleOutlined />}
                 />
               </Card>
             </Col>
@@ -600,6 +657,8 @@ export default function ConfigsPage() {
               <p>• 敏感配置字段默认掩码显示，点击眼睛图标可查看明文</p>
               <p>• 支持创建快照和快速回滚到历史版本</p>
               <p>• 所有配置变更都有详细的历史记录</p>
+              <p>• RunningHub 接入记得新增 `runninghub_api_key`（类型 Secret）</p>
+              <p>• 会员回调验签要设置 `membership_webhook_secret`（类型 Secret）</p>
             </div>
           }
           type="info"
@@ -615,9 +674,9 @@ export default function ConfigsPage() {
           dataSource={configs}
           loading={isLoading}
           pagination={{
-            current: 1,
-            pageSize: 20,
-            total: configs.length,
+            current: pagination?.page ?? 1,
+            pageSize: pagination?.limit ?? 20,
+            total: pagination?.total ?? configs.length,
             showSizeChanger: true,
             showQuickJumper: true,
             showTotal: true
@@ -842,29 +901,40 @@ export default function ConfigsPage() {
                 <Space direction="vertical" size="small">
                   <div>
                     <Text strong>
-                      {history.action === 'create' ? '创建' :
-                       history.action === 'update' ? '更新' : '删除'}
+                      {history.action === 'create'
+                        ? '创建'
+                        : history.action === 'update'
+                        ? '更新'
+                        : history.action === 'delete'
+                        ? '删除'
+                        : history.action === 'rollback'
+                        ? '回滚'
+                        : history.action}
                     </Text>
                     <Text type="secondary" style={{ marginLeft: 8 }}>
-                      {new Date(history.created_at).toLocaleString('zh-CN')}
+                      {new Date(history.createdAt).toLocaleString('zh-CN')}
                     </Text>
-                    {history.created_by && (
+                    {history.operator && (
                       <Text type="secondary" style={{ marginLeft: 8 }}>
-                        操作者: {history.created_by}
+                        操作者: {history.operatorName || history.operator}
                       </Text>
                     )}
                   </div>
                   <div>
                     <Text>版本: {history.version}</Text>
                   </div>
-                  {history.old_value !== undefined && (
+                  {history.before && (
                     <div>
-                      <Text type="secondary">原值: {String(history.old_value)}</Text>
+                      <Text type="secondary">
+                        原值: {renderHistorySnapshotValue(history.before)}
+                      </Text>
                     </div>
                   )}
-                  {history.new_value !== undefined && (
+                  {history.after && (
                     <div>
-                      <Text type="secondary">新值: {String(history.new_value)}</Text>
+                      <Text type="secondary">
+                        新值: {renderHistorySnapshotValue(history.after)}
+                      </Text>
                     </div>
                   )}
                 </Space>
@@ -887,19 +957,20 @@ export default function ConfigsPage() {
             key="create"
             type="primary"
             onClick={() => {
+              let descriptionValue = '';
               Modal.confirm({
                 title: '创建快照',
                 content: (
                   <Input
                     placeholder="输入快照描述（可选）"
-                    onPressEnter={(e) => {
-                      const value = (e.target as HTMLInputElement).value;
-                      createSnapshotMutation.mutate(value);
+                    onChange={(e) => {
+                      descriptionValue = e.target.value;
                     }}
                   />
                 ),
                 okText: '创建',
-                cancelText: '取消'
+                cancelText: '取消',
+                onOk: () => createSnapshotMutation.mutate(descriptionValue)
               });
             }}
           >
@@ -913,51 +984,39 @@ export default function ConfigsPage() {
           rowKey="id"
           columns={[
             {
-              title: '版本',
-              dataIndex: 'version',
-              key: 'version',
-              width: 80,
-              render: (version: number) => (
-                <Badge count={version} style={{ backgroundColor: '#52c41a' }} />
-              ),
+              title: '名称',
+              dataIndex: 'name',
+              key: 'name',
+              ellipsis: true
             },
             {
               title: '描述',
               dataIndex: 'description',
               key: 'description',
-              ellipsis: true,
+              ellipsis: true
             },
             {
               title: '配置数量',
-              dataIndex: 'config_count',
-              key: 'config_count',
-              width: 100,
+              dataIndex: 'configCount',
+              key: 'configCount',
+              width: 120
             },
             {
               title: '创建时间',
-              dataIndex: 'created_at',
-              key: 'created_at',
-              width: 180,
-              render: (time: string) => (
-                <Text>{new Date(time).toLocaleString('zh-CN')}</Text>
-              ),
-            },
-            {
-              title: '创建者',
-              dataIndex: 'created_by',
-              key: 'created_by',
-              width: 100,
-              render: (creator?: string) => creator || '-',
+              dataIndex: 'createdAt',
+              key: 'createdAt',
+              width: 200,
+              render: (time: string) => <Text>{new Date(time).toLocaleString('zh-CN')}</Text>
             },
             {
               title: '操作',
               key: 'actions',
-              width: 100,
+              width: 120,
               render: (_, record: ConfigSnapshot) => (
                 <Popconfirm
                   title="确定回滚到这个快照吗？"
                   description="当前配置将被替换，此操作不可撤销。"
-                  onConfirm={() => rollbackMutation.mutate(record.id)}
+                  onConfirm={() => rollbackMutation.mutate(String(record.id))}
                   okText="确定回滚"
                   okType="danger"
                   cancelText="取消"
@@ -966,8 +1025,8 @@ export default function ConfigsPage() {
                     回滚
                   </Button>
                 </Popconfirm>
-              ),
-            },
+              )
+            }
           ]}
           pagination={false}
         />

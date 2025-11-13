@@ -10,9 +10,14 @@ router.post(
   taskController.createByFeature.bind(taskController)
 );
 router.post('/create', authenticate, taskController.create.bind(taskController));
-router.get('/:taskId', authenticate, taskController.get.bind(taskController));
 router.get('/list', authenticate, taskController.list.bind(taskController));
-router.put('/:taskId/status', authenticate, taskController.updateStatus.bind(taskController));
+router.get('/:taskId', authenticate, taskController.get.bind(taskController));
+router.put(
+  '/:taskId/status',
+  authenticate,
+  requireRole('admin'),
+  taskController.updateStatus.bind(taskController)
+);
 
 // 管理员
 router.get(

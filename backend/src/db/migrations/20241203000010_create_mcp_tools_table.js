@@ -2,7 +2,11 @@
  * 创建MCP工具表
  */
 
-exports.up = function (knex) {
+exports.up = async function (knex) {
+  const exists = await knex.schema.hasTable('mcp_tools');
+  if (exists) {
+    return;
+  }
   return knex.schema.createTable('mcp_tools', function (table) {
     table.string('id').primary().defaultTo(knex.raw('(UUID())'));
     table.string('endpoint_id').notNullable().comment('MCP端点ID');
@@ -27,6 +31,10 @@ exports.up = function (knex) {
   });
 };
 
-exports.down = function (knex) {
+exports.down = async function (knex) {
+  const exists = await knex.schema.hasTable('mcp_tools');
+  if (!exists) {
+    return;
+  }
   return knex.schema.dropTable('mcp_tools');
 };

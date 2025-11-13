@@ -2,7 +2,11 @@
  * 创建流程校验历史表
  */
 
-exports.up = function (knex) {
+exports.up = async function (knex) {
+  const exists = await knex.schema.hasTable('pipeline_validations');
+  if (exists) {
+    return;
+  }
   return knex.schema.createTable('pipeline_validations', function (table) {
     table.string('id').primary().defaultTo(knex.raw('(UUID())'));
     table.string('schema_id').notNullable().comment('流程模板ID');
@@ -31,6 +35,10 @@ exports.up = function (knex) {
   });
 };
 
-exports.down = function (knex) {
+exports.down = async function (knex) {
+  const exists = await knex.schema.hasTable('pipeline_validations');
+  if (!exists) {
+    return;
+  }
   return knex.schema.dropTable('pipeline_validations');
 };

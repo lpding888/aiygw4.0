@@ -161,8 +161,10 @@ const batchUpdateValidation = [
 ];
 
 // 基础信息
-router.get('/full/:userId?', userIdValidation, validate, userProfileController.getUserFullProfile);
-router.get('/basic/:userId?', userIdValidation, validate, userProfileController.getUserBasicInfo);
+router.get('/full', userIdValidation, validate, userProfileController.getUserFullProfile);
+router.get('/full/:userId', userIdValidation, validate, userProfileController.getUserFullProfile);
+router.get('/basic', userIdValidation, validate, userProfileController.getUserBasicInfo);
+router.get('/basic/:userId', userIdValidation, validate, userProfileController.getUserBasicInfo);
 router.put(
   '/basic',
   updateBasicInfoValidation,
@@ -174,8 +176,9 @@ router.put(
 router.put('/batch', batchUpdateValidation, validate, userProfileController.batchUpdateProfile);
 
 // 教育经历
+router.get('/education', userIdValidation, validate, userProfileController.getUserEducation);
 router.get(
-  '/education/:userId?',
+  '/education/:userId',
   userIdValidation,
   validate,
   userProfileController.getUserEducation
@@ -196,8 +199,9 @@ router.delete(
 );
 
 // 工作经历
+router.get('/work', userIdValidation, validate, userProfileController.getUserWorkExperience);
 router.get(
-  '/work/:userId?',
+  '/work/:userId',
   userIdValidation,
   validate,
   userProfileController.getUserWorkExperience
@@ -223,7 +227,8 @@ router.delete(
 );
 
 // 技能
-router.get('/skills/:userId?', userIdValidation, validate, userProfileController.getUserSkills);
+router.get('/skills', userIdValidation, validate, userProfileController.getUserSkills);
+router.get('/skills/:userId', userIdValidation, validate, userProfileController.getUserSkills);
 router.post('/skills', addSkillValidation, validate, userProfileController.addSkill);
 router.put(
   '/skills/:skillId',
@@ -235,22 +240,25 @@ router.put(
 router.delete('/skills/:skillId', skillIdValidation, validate, userProfileController.deleteSkill);
 
 // 兴趣、社交
+router.get('/interests', userIdValidation, validate, userProfileController.getUserInterests);
 router.get(
-  '/interests/:userId?',
+  '/interests/:userId',
   userIdValidation,
   validate,
   userProfileController.getUserInterests
 );
-router.get(
-  '/social/:userId?',
-  userIdValidation,
-  validate,
-  userProfileController.getUserSocialLinks
-);
+router.get('/social', userIdValidation, validate, userProfileController.getUserSocialLinks);
+router.get('/social/:userId', userIdValidation, validate, userProfileController.getUserSocialLinks);
 
 // 资料完整度
 router.get(
-  '/completeness/:userId?',
+  '/completeness',
+  userIdValidation,
+  validate,
+  userProfileController.getUserProfileCompleteness
+);
+router.get(
+  '/completeness/:userId',
   userIdValidation,
   validate,
   userProfileController.getUserProfileCompleteness

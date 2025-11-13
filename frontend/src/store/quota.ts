@@ -14,6 +14,30 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+const DEFAULT_MEMBER_QUOTA = Number(process.env.NEXT_PUBLIC_PLAN_MONTHLY_QUOTA ?? '100');
+
+type ServerQuotaPayload = {
+  remaining: number;
+  isMember: boolean;
+  expireAt?: string | null;
+};
+
+const normalizeQuotaPayload = (payload: ServerQuotaPayload): QuotaInfo => {
+  const remaining = Math.max(payload.remaining ?? 0, 0);
+  const total = payload.isMember ? DEFAULT_MEMBER_QUOTA : remaining;
+  return {
+    plan_type: payload.isMember ? 'pro' : 'free',
+    plan_name: payload.isMember ? '月度会员' : '免费体验',
+    total_quota: total,
+    used_quota: Math.max(total - remaining, 0),
+    remaining_quota: remaining,
+    quota_reset_at: payload.expireAt ?? null,
+    plan_expires_at: payload.expireAt ?? null,
+    is_trial: !payload.isMember,
+    can_upgrade: !payload.isMember,
+  };
+};
+
 /**
  * 套餐计划类型
  */
@@ -133,16 +157,21 @@ export const useQuotaStore = create<QuotaState>()(
             throw new Error(`获取配额失败: ${response.status} ${response.statusText}`);
           }
 
-          const data = await response.json();
+          const payload = await response.json();
+          if (!payload?.success || !payload?.data) {
+            throw new Error(payload?.message || '获取配额失败');
+          }
+
+          const normalized = normalizeQuotaPayload(payload.data as ServerQuotaPayload);
 
           set({
-            quota: data.quota,
+            quota: normalized,
             isLoading: false,
             error: null,
             lastUpdated: Date.now(),
           });
 
-          console.log('[配额管理] 配额同步成功:', data.quota);
+          console.log('[配额管理] 配额同步成功:', normalized);
         } catch (error: any) {
           console.error('[配额管理] 获取配额失败:', error);
           set({
@@ -201,24 +230,24 @@ export const useQuotaStore = create<QuotaState>()(
             throw new Error(`消费配额失败: ${response.status} ${response.statusText}`);
           }
 
-          const data = await response.json();
+          const payload = await response.json();
+          if (!payload?.success) {
+            throw new Error(payload?.message || '消费配额失败');
+          }
 
-          // 3. 更新本地配额
-          if (data.quota) {
-            set({
-              quota: data.quota,
-              lastUpdated: Date.now(),
-            });
-          } else if (quota) {
-            // 如果后端没返回新配额，手动更新
+          const remaining = payload?.data?.remaining;
+          if (typeof remaining === 'number' && quota) {
             set({
               quota: {
                 ...quota,
-                used_quota: quota.used_quota + cost,
-                remaining_quota: quota.remaining_quota - cost,
+                remaining_quota: Math.max(remaining, 0),
+                used_quota: Math.max((quota.total_quota ?? DEFAULT_MEMBER_QUOTA) - Math.max(remaining, 0), 0),
               },
               lastUpdated: Date.now(),
             });
+          } else {
+            // 回退到全量同步
+            await get().fetchQuota();
           }
 
           console.log(`[配额管理] 消费配额成功: ${actionType}, 消费: ${cost}`);
@@ -289,7 +318,9 @@ export const useQuota = () => {
     // 计算属性
     hasQuota: store.quota ? store.quota.remaining_quota > 0 : false,
     quotaPercentage: store.quota
-      ? (store.quota.remaining_quota / store.quota.total_quota) * 100
+      ? store.quota.total_quota > 0
+        ? (store.quota.remaining_quota / store.quota.total_quota) * 100
+        : 0
       : 0,
 
     // 方法

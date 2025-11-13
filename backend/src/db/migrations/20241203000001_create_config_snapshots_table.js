@@ -2,7 +2,11 @@
  * 创建配置快照表
  */
 
-exports.up = function (knex) {
+exports.up = async function (knex) {
+  const exists = await knex.schema.hasTable('config_snapshots');
+  if (exists) {
+    return;
+  }
   return knex.schema.createTable('config_snapshots', (table) => {
     table.string('id').primary().defaultTo(knex.raw('(UUID())'));
     table.string('scope').notNullable().comment('作用域');
@@ -25,6 +29,10 @@ exports.up = function (knex) {
   });
 };
 
-exports.down = function (knex) {
+exports.down = async function (knex) {
+  const exists = await knex.schema.hasTable('config_snapshots');
+  if (!exists) {
+    return;
+  }
   return knex.schema.dropTable('config_snapshots');
 };

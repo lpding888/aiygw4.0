@@ -1,7 +1,7 @@
-const configCacheService = require('../cache/config-cache');
+import configCacheService from '../cache/config-cache.js';
 import { db as knex } from '../db/index.js';
-const logger = require('../utils/logger');
-const { hasPermission, getRolePermissions } = require('../utils/rbac');
+import logger from '../utils/logger.js';
+import { hasPermission, getRolePermissions } from '../utils/rbac.js';
 
 interface MenuConfig {
   id: string;

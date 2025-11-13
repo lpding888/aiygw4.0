@@ -387,8 +387,23 @@ class AdminController {
         return;
       }
 
+      const normalizedDefinition = { ...feature_definition };
+      if (!normalizedDefinition.feature_key && normalizedDefinition.feature_id) {
+        normalizedDefinition.feature_key = normalizedDefinition.feature_id;
+      }
+      if (!normalizedDefinition.feature_id && normalizedDefinition.feature_key) {
+        normalizedDefinition.feature_id = normalizedDefinition.feature_key;
+      }
+      if (!normalizedDefinition.feature_id || !normalizedDefinition.feature_key) {
+        res.status(400).json({
+          success: false,
+          error: { code: 4002, message: 'feature_id 或 feature_key 必须提供' }
+        });
+        return;
+      }
+
       // 规范化 allowed_accounts 字段
-      let allowedAccounts = feature_definition.allowed_accounts;
+      let allowedAccounts = normalizedDefinition.allowed_accounts;
       if (allowedAccounts) {
         if (typeof allowedAccounts === 'string') {
           // 多行文本转数组
@@ -423,7 +438,7 @@ class AdminController {
 
         // 插入 feature_definition
         await trx('feature_definitions').insert({
-          ...feature_definition,
+          ...normalizedDefinition,
           allowed_accounts: allowedAccounts,
           form_schema_ref: form_schema.schema_id,
           pipeline_schema_ref: pipeline_schema.pipeline_id,
@@ -432,12 +447,12 @@ class AdminController {
         });
       });
 
-      logger.info(`[AdminController] 功能创建成功 featureId=${feature_definition.feature_id}`);
+      logger.info(`[AdminController] 功能创建成功 featureId=${normalizedDefinition.feature_id}`);
 
       res.json({
         success: true,
         message: '功能创建成功',
-        feature_id: feature_definition.feature_id
+        feature_id: normalizedDefinition.feature_id
       });
     } catch (error) {
       logAndNext(next, error, '[AdminController] 创建功能失败');
@@ -467,8 +482,18 @@ class AdminController {
         return;
       }
 
+      const normalizedDefinition = { ...feature_definition };
+      if (normalizedDefinition) {
+        if (!normalizedDefinition.feature_key && normalizedDefinition.feature_id) {
+          normalizedDefinition.feature_key = normalizedDefinition.feature_id;
+        }
+        if (!normalizedDefinition.feature_id && normalizedDefinition.feature_key) {
+          normalizedDefinition.feature_id = normalizedDefinition.feature_key;
+        }
+      }
+
       // 规范化 allowed_accounts 字段
-      let allowedAccounts = feature_definition?.allowed_accounts;
+      let allowedAccounts = normalizedDefinition?.allowed_accounts;
       if (allowedAccounts) {
         if (typeof allowedAccounts === 'string') {
           const accountArray = allowedAccounts
@@ -505,11 +530,11 @@ class AdminController {
         }
 
         // 更新 feature_definition（如果提供）
-        if (feature_definition) {
+        if (normalizedDefinition) {
           await trx('feature_definitions')
             .where('feature_id', featureId)
             .update({
-              ...feature_definition,
+              ...normalizedDefinition,
               allowed_accounts: allowedAccounts,
               updated_at: new Date()
             });

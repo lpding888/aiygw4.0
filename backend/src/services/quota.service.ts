@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import type { Knex } from 'knex';
 import { db } from '../config/database.js';
 import logger from '../utils/logger.js';
 import redisLock from './redis-lock.service.js'; // P0-004: Redis分布式锁
@@ -49,53 +50,17 @@ class QuotaService {
    * 2. 数据库事务: 单服务器内的ACID保证
    * 3. 数据库行锁(forUpdate): 进程内的并发保护
    */
-  async reserve(userId: string, taskId: string, amount = 1): Promise<void> {
+  async reserve(userId: string, taskId: string, amount = 1, trx?: Knex.Transaction): Promise<void> {
     // P0-004: 使用Redis分布式锁包裹整个事务
     await redisLock.withLock(
       `quota:reserve:${userId}`, // 锁的key:按userId加锁
       async () => {
-        await db.transaction(async (trx) => {
-          logger.info(`开始预留配额: userId=${userId}, taskId=${taskId}, amount=${amount}`);
-
-          const user = (await trx<UserQuotaRecord>('users')
-            .where({ id: userId })
-            .forUpdate() // 数据库行锁
-            .first()) as UserQuotaRecord | undefined;
-
-          if (!user) {
-            throw { statusCode: 404, errorCode: 'USER_NOT_FOUND', message: '用户不存在' };
-          }
-
-          if (!user.isMember) {
-            throw { statusCode: 403, errorCode: 'NOT_MEMBER', message: '请先购买会员' };
-          }
-
-          if (user.quota_remaining < amount) {
-            throw {
-              statusCode: 403,
-              errorCode: 'QUOTA_INSUFFICIENT',
-              message: '配额不足,请续费',
-              details: { remaining: user.quota_remaining, requested: amount }
-            };
-          }
-
-          await trx('users').where({ id: userId }).decrement('quota_remaining', amount);
-
-          await trx<QuotaTransactionRecord>('quota_transactions').insert({
-            id: uuidv4().replace(/-/g, ''),
-            task_id: taskId,
-            user_id: userId,
-            amount,
-            phase: 'reserved',
-            idempotent_done: true,
-            created_at: new Date(),
-            updated_at: new Date()
-          });
-
-          const remaining = user.quota_remaining - amount;
-          logger.info(
-            `配额预留成功: userId=${userId}, taskId=${taskId}, amount=${amount}, remaining=${remaining}`
-          );
+        if (trx) {
+          await this.reserveWithTransaction(trx, userId, taskId, amount);
+          return;
+        }
+        await db.transaction(async (innerTrx) => {
+          await this.reserveWithTransaction(innerTrx, userId, taskId, amount);
         });
       },
       { ttl: 10, retry: 3, retryDelay: 100 } // Redis锁配置:10秒超时,重试3次
@@ -282,6 +247,56 @@ class QuotaService {
 
     logger.info(`清理过期配额事务记录: 删除${deleted}条记录`);
     return deleted;
+  }
+
+  private async reserveWithTransaction(
+    trx: Knex.Transaction,
+    userId: string,
+    taskId: string,
+    amount: number
+  ): Promise<void> {
+    logger.info(`开始预留配额: userId=${userId}, taskId=${taskId}, amount=${amount}`);
+
+    const userRecord = await trx<UserQuotaRecord>('users')
+      .where({ id: userId })
+      .forUpdate()
+      .first();
+    const user = userRecord as UserQuotaRecord | undefined;
+
+    if (!user) {
+      throw { statusCode: 404, errorCode: 'USER_NOT_FOUND', message: '用户不存在' };
+    }
+
+    if (!user.isMember) {
+      throw { statusCode: 403, errorCode: 'NOT_MEMBER', message: '请先购买会员' };
+    }
+
+    if (user.quota_remaining < amount) {
+      throw {
+        statusCode: 403,
+        errorCode: 'QUOTA_INSUFFICIENT',
+        message: '配额不足,请续费',
+        details: { remaining: user.quota_remaining, requested: amount }
+      };
+    }
+
+    await trx('users').where({ id: userId }).decrement('quota_remaining', amount);
+
+    await trx<QuotaTransactionRecord>('quota_transactions').insert({
+      id: uuidv4().replace(/-/g, ''),
+      task_id: taskId,
+      user_id: userId,
+      amount,
+      phase: 'reserved',
+      idempotent_done: true,
+      created_at: new Date(),
+      updated_at: new Date()
+    });
+
+    const remaining = user.quota_remaining - amount;
+    logger.info(
+      `配额预留成功: userId=${userId}, taskId=${taskId}, amount=${amount}, remaining=${remaining}`
+    );
   }
 }
 

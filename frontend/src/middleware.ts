@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import createIntlMiddleware from 'next-intl/middleware';
 
 /**
  * Middleware - 路由守卫 + 国际化 + CSRF防护
@@ -15,15 +14,8 @@ import createIntlMiddleware from 'next-intl/middleware';
 // 不安全的HTTP方法需要CSRF验证
 const UNSAFE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
-// 创建 i18n 中间件
-const intlMiddleware = createIntlMiddleware({
-  locales: ['zh', 'en'],
-  defaultLocale: 'zh',
-  localeDetection: true,
-});
-
 export function middleware(request: NextRequest) {
-  const { pathname, search } = request.nextUrl;
+  const { pathname } = request.nextUrl;
   const method = request.method;
 
   // CSRF验证:对非安全HTTP方法进行CSRF token检查
@@ -41,8 +33,7 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // 先处理国际化路由
-  const response = intlMiddleware(request);
+  const response = NextResponse.next();
 
   // 设置安全Cookie属性
   response.cookies.set('auth-storage', request.cookies.get('auth-storage')?.value || '', {
@@ -52,12 +43,7 @@ export function middleware(request: NextRequest) {
     path: '/',
   });
 
-  // 获取语言前缀（如 /zh 或 /en）
-  const locale = pathname.split('/')[1] ?? '';
-  const isValidLocale = ['zh', 'en'].includes(locale);
-
-  // 去除语言前缀后的真实路径
-  const realPathname = isValidLocale ? pathname.slice(3) : pathname;
+  const realPathname = pathname;
 
   // 保护 /admin/* 路径
   if (realPathname.startsWith('/admin')) {
@@ -66,7 +52,7 @@ export function middleware(request: NextRequest) {
 
     if (!authStorage) {
       // 没有登录，跳转到登录页
-      const loginUrl = new URL(isValidLocale ? `/${locale}/login` : '/login', request.url);
+      const loginUrl = new URL('/login', request.url);
       return NextResponse.redirect(loginUrl);
     }
 
@@ -79,7 +65,7 @@ export function middleware(request: NextRequest) {
       if (!user || user.role !== 'admin') {
         // 不是admin，跳转到工作台
         console.warn(`非admin用户尝试访问: ${realPathname}, role: ${user?.role}`);
-        const workspaceUrl = new URL(isValidLocale ? `/${locale}/workspace` : '/workspace', request.url);
+        const workspaceUrl = new URL('/workspace', request.url);
         return NextResponse.redirect(workspaceUrl);
       }
 
@@ -88,12 +74,11 @@ export function middleware(request: NextRequest) {
     } catch (error) {
       // cookie解析失败，可能被篡改，跳转登录页
       console.error('Cookie解析失败:', error);
-      const loginUrl = new URL(isValidLocale ? `/${locale}/login` : '/login', request.url);
+      const loginUrl = new URL('/login', request.url);
       return NextResponse.redirect(loginUrl);
     }
   }
 
-  // 返回 i18n 处理后的响应
   return response;
 }
 

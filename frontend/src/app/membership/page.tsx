@@ -41,6 +41,7 @@ export default function MembershipPage() {
   const [orderId, setOrderId] = useState<string>('');
   const [pollingTimer, setPollingTimer] = useState<NodeJS.Timeout | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [payParams, setPayParams] = useState<Record<string, any> | null>(null);
 
   useEffect(() => {
     // 检查登录状态
@@ -64,10 +65,11 @@ export default function MembershipPage() {
       const response: any = await api.membership.purchase(paymentChannel);
       
       if (response.success && response.data) {
-        const { orderId: newOrderId, qrcodeUrl: newQrcodeUrl } = response.data;
+        const { orderId: newOrderId, payParams: newPayParams } = response.data;
         
         setOrderId(newOrderId);
-        setQrcodeUrl(newQrcodeUrl);
+        setPayParams(newPayParams || null);
+        setQrcodeUrl(newPayParams?.qrcodeUrl || '');
         setModalVisible(true);
         
         // 开始轮询支付状态
@@ -124,6 +126,7 @@ export default function MembershipPage() {
     setModalVisible(false);
     setQrcodeUrl('');
     setOrderId('');
+    setPayParams(null);
   };
 
   return (
@@ -322,16 +325,18 @@ export default function MembershipPage() {
         <div style={{ textAlign: 'center', padding: '24px' }}>
           {qrcodeUrl ? (
             <>
-              <div style={{ 
-                width: '200px', 
-                height: '200px', 
-                margin: '0 auto 24px',
-                border: '1px solid #d9d9d9',
-                borderRadius: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
+              <div
+                style={{
+                  width: '200px',
+                  height: '200px',
+                  margin: '0 auto 24px',
+                  border: '1px solid #d9d9d9',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
                 <Image
                   src={qrcodeUrl}
                   alt="支付二维码"
@@ -350,7 +355,35 @@ export default function MembershipPage() {
               <Spin tip="等待支付中..." />
             </>
           ) : (
-            <Spin size="large" />
+            <>
+              <Paragraph>
+                当前渠道暂未提供二维码，请在
+                <Text strong>
+                  {paymentChannel === 'wechat' ? '微信' : '支付宝'}客户端
+                </Text>
+                中使用下方参数手动发起支付。
+              </Paragraph>
+              <Paragraph>
+                <Text strong>订单号: {orderId}</Text>
+              </Paragraph>
+              {payParams ? (
+                <pre
+                  style={{
+                    textAlign: 'left',
+                    background: '#f5f5f5',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    maxHeight: '200px',
+                    overflow: 'auto'
+                  }}
+                >
+{JSON.stringify(payParams, null, 2)}
+                </pre>
+              ) : (
+                <Paragraph type="secondary">暂未生成支付参数，请稍后重试。</Paragraph>
+              )}
+              <Spin tip="等待支付中..." />
+            </>
           )}
         </div>
       </Modal>

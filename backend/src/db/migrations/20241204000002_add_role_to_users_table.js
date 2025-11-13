@@ -5,7 +5,11 @@
  * 角色类型：viewer(查看者), editor(编辑者), admin(管理员)
  */
 
-exports.up = function (knex) {
+exports.up = async function (knex) {
+  const hasRole = await knex.schema.hasColumn('users', 'role');
+  if (hasRole) {
+    return;
+  }
   return knex.schema.table('users', function (table) {
     // 添加role字段
     table
@@ -19,7 +23,11 @@ exports.up = function (knex) {
   });
 };
 
-exports.down = function (knex) {
+exports.down = async function (knex) {
+  const hasRole = await knex.schema.hasColumn('users', 'role');
+  if (!hasRole) {
+    return;
+  }
   return knex.schema.table('users', function (table) {
     table.dropColumn('role');
   });

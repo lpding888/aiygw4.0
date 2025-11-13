@@ -3,7 +3,7 @@
  * 艹，这个tm负责配置的快照创建和回滚！
  */
 
-import db from '../db/index.js';
+import { db } from '../config/database.js';
 
 /**
  * 配置数据类型定义

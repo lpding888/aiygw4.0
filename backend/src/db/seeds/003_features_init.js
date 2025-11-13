@@ -109,6 +109,7 @@ exports.seed = async function (knex) {
   await knex('feature_definitions').insert([
     {
       feature_id: 'basic_clean',
+      feature_key: 'basic_clean',
       display_name: '基础抠图',
       category: '基础处理',
       description: '快速去除图片背景，生成透明底或白底商品图',
@@ -124,6 +125,7 @@ exports.seed = async function (knex) {
     },
     {
       feature_id: 'model_pose12',
+      feature_key: 'model_pose12',
       display_name: 'AI模特上身',
       category: 'AI模特',
       description: '智能生成12张AI模特穿搭效果图，多角度展示',

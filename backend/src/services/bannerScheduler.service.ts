@@ -6,7 +6,7 @@
  * 2. 定时下线过期轮播图（status: published -> expired）
  */
 
-import db from '../db/index.js';
+import { db } from '../config/database.js';
 
 /**
  * 发布到期的轮播图

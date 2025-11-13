@@ -1,6 +1,25 @@
 import { Redis, type RedisOptions } from 'ioredis';
 import logger from './logger.js';
 
+const buildRedisUrl = (): string => {
+  const directUrl = process.env.REDIS_URL?.trim();
+  if (directUrl) {
+    return directUrl;
+  }
+
+  const protocol = process.env.REDIS_TLS === 'true' ? 'rediss:' : 'redis:';
+  const host = process.env.REDIS_HOST ?? 'localhost';
+  const port = process.env.REDIS_PORT ?? '6379';
+  const db = process.env.REDIS_DB ?? '0';
+  const url = new URL(`${protocol}//${host}:${port}/${db}`);
+
+  if (process.env.REDIS_PASSWORD?.length) {
+    url.password = process.env.REDIS_PASSWORD;
+  }
+
+  return url.toString();
+};
+
 type AsyncOrSync<T> = T | Promise<T>;
 
 export type MessageHandler = (message: string, channel: string) => AsyncOrSync<void>;
@@ -25,7 +44,7 @@ export class RedisManager {
 
   private channelHandlers = new Map<string, Set<MessageHandler>>();
   private patternHandlers = new Map<string, Set<PatternMessageHandler>>();
-  private readonly redisUrl: string = process.env.REDIS_URL ?? 'redis://localhost:6379';
+  private readonly redisUrl: string = buildRedisUrl();
   private readonly baseOptions: RedisOptions = {
     lazyConnect: true,
     maxRetriesPerRequest: null as unknown as number | null,

@@ -2,7 +2,11 @@
  * 创建流程执行记录表
  */
 
-exports.up = function (knex) {
+exports.up = async function (knex) {
+  const exists = await knex.schema.hasTable('pipeline_executions');
+  if (exists) {
+    return;
+  }
   return knex.schema.createTable('pipeline_executions', function (table) {
     table.string('id').primary().defaultTo(knex.raw('(UUID())'));
     table.string('schema_id').notNullable().comment('流程模板ID');
@@ -22,6 +26,7 @@ exports.up = function (knex) {
     table.text('error_message').comment('错误信息');
     table.json('error_details').comment('错误详情');
     table.integer('created_by').unsigned().comment('创建者ID');
+    table.timestamps(true, true);
 
     // 索引
     table.index(['schema_id']);
@@ -32,6 +37,10 @@ exports.up = function (knex) {
   });
 };
 
-exports.down = function (knex) {
+exports.down = async function (knex) {
+  const exists = await knex.schema.hasTable('pipeline_executions');
+  if (!exists) {
+    return;
+  }
   return knex.schema.dropTable('pipeline_executions');
 };

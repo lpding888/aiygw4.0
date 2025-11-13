@@ -1,17 +1,17 @@
 /**
- * 创建功能目录相关表
- *
- * 功能目录系统用于管理应用中的所有功能特性，包括：
- * - 功能定义和元数据
- * - 功能配置参数
- * - 功能权限控制
- * - 功能版本管理
- * - 功能使用统计
+ * 创建功能目录相关表（带幂等检查）
  */
 
+const createTableIfMissing = async (knex, tableName, builder) => {
+  const exists = await knex.schema.hasTable(tableName);
+  if (exists) {
+    return;
+  }
+  await knex.schema.createTable(tableName, builder);
+};
+
 exports.up = async function (knex) {
-  // 功能定义表
-  await knex.schema.createTable('feature_definitions', (table) => {
+  await createTableIfMissing(knex, 'feature_definitions', (table) => {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('feature_key', 100).notNullable().unique().comment('功能唯一标识');
     table.string('name', 200).notNullable().comment('功能名称');
@@ -47,8 +47,6 @@ exports.up = async function (knex) {
     table.timestamp('released_at').comment('发布时间');
     table.timestamp('deprecated_at').nullable().comment('废弃时间');
     table.timestamps(true, true);
-
-    // 索引
     table.index(['category']);
     table.index(['type']);
     table.index(['is_active']);
@@ -56,8 +54,7 @@ exports.up = async function (knex) {
     table.index(['released_at']);
   });
 
-  // 功能配置表
-  await knex.schema.createTable('feature_configurations', (table) => {
+  await createTableIfMissing(knex, 'feature_configurations', (table) => {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('feature_id', 36).notNullable().comment('功能ID');
     table.string('config_key', 100).notNullable().comment('配置键');
@@ -71,30 +68,23 @@ exports.up = async function (knex) {
     table.boolean('is_sensitive').defaultTo(false).comment('是否敏感信息');
     table.json('validation_rules').comment('验证规则');
     table.string('default_value').comment('默认值');
-    table.json('enum_values').comment('枚举值(用于枚举类型)');
+    table.json('enum_values').comment('枚举值');
     table.integer('sort_order').defaultTo(0).comment('排序');
     table.timestamps(true, true);
-
-    // 外键约束
     table.foreign('feature_id').references('id').inTable('feature_definitions').onDelete('CASCADE');
-
-    // 唯一约束
     table.unique(['feature_id', 'config_key']);
-
-    // 索引
     table.index(['feature_id']);
     table.index(['config_key']);
   });
 
-  // 功能权限表
-  await knex.schema.createTable('feature_permissions', (table) => {
+  await createTableIfMissing(knex, 'feature_permissions', (table) => {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('feature_id', 36).notNullable().comment('功能ID');
     table
       .enum('permission_type', ['role', 'user', 'membership', 'custom'])
       .notNullable()
       .comment('权限类型');
-    table.string('permission_value', 100).notNullable().comment('权限值(角色名、用户ID等)');
+    table.string('permission_value', 100).notNullable().comment('权限值');
     table
       .enum('access_level', ['none', 'read', 'write', 'admin'])
       .defaultTo('read')
@@ -106,11 +96,7 @@ exports.up = async function (knex) {
     table.string('granted_by', 36).comment('授权人');
     table.text('notes').comment('备注');
     table.timestamps(true, true);
-
-    // 外键约束
     table.foreign('feature_id').references('id').inTable('feature_definitions').onDelete('CASCADE');
-
-    // 索引
     table.index(['feature_id']);
     table.index(['permission_type']);
     table.index(['permission_value']);
@@ -118,34 +104,26 @@ exports.up = async function (knex) {
     table.index(['expires_at']);
   });
 
-  // 功能使用统计表
-  await knex.schema.createTable('feature_usage_stats', (table) => {
+  await createTableIfMissing(knex, 'feature_usage_stats', (table) => {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('feature_id', 36).notNullable().comment('功能ID');
     table.string('user_id', 36).comment('用户ID');
     table.date('usage_date').notNullable().comment('使用日期');
     table.integer('usage_count').defaultTo(0).comment('使用次数');
-    table.json('usage_metrics').comment('使用指标(处理文件大小、处理时长等)');
+    table.json('usage_metrics').comment('使用指标');
     table.decimal('total_cost', 10, 4).defaultTo(0).comment('总成本');
-    table.enum('status', ['success', 'failed', 'partial']).defaultTo('success').comment('使用状态');
+    table.enum('status', ['success', 'failed', 'partial']).defaultTo('success').comment('状态');
     table.json('error_details').comment('错误详情');
     table.timestamps(true, true);
-
-    // 外键约束
     table.foreign('feature_id').references('id').inTable('feature_definitions').onDelete('CASCADE');
-
-    // 唯一约束
     table.unique(['feature_id', 'user_id', 'usage_date']);
-
-    // 索引
     table.index(['feature_id']);
     table.index(['user_id']);
     table.index(['usage_date']);
     table.index(['status']);
   });
 
-  // 功能版本表
-  await knex.schema.createTable('feature_versions', (table) => {
+  await createTableIfMissing(knex, 'feature_versions', (table) => {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('feature_id', 36).notNullable().comment('功能ID');
     table.string('version', 20).notNullable().comment('版本号');
@@ -162,14 +140,8 @@ exports.up = async function (knex) {
     table.json('compatibility_info').comment('兼容性信息');
     table.text('migration_guide').comment('迁移指南');
     table.timestamps(true, true);
-
-    // 外键约束
     table.foreign('feature_id').references('id').inTable('feature_definitions').onDelete('CASCADE');
-
-    // 唯一约束
     table.unique(['feature_id', 'version']);
-
-    // 索引
     table.index(['feature_id']);
     table.index(['version']);
     table.index(['is_current']);
@@ -177,8 +149,7 @@ exports.up = async function (knex) {
     table.index(['released_at']);
   });
 
-  // 功能依赖关系表
-  await knex.schema.createTable('feature_dependencies', (table) => {
+  await createTableIfMissing(knex, 'feature_dependencies', (table) => {
     table.string('id', 36).primary().defaultTo(knex.raw('(UUID())'));
     table.string('feature_id', 36).notNullable().comment('功能ID');
     table.string('depends_on_feature_id', 36).notNullable().comment('依赖的功能ID');
@@ -191,22 +162,15 @@ exports.up = async function (knex) {
     table.text('description').comment('依赖描述');
     table.boolean('is_active').defaultTo(true).comment('是否激活');
     table.timestamps(true, true);
-
-    // 外键约束
     table.foreign('feature_id').references('id').inTable('feature_definitions').onDelete('CASCADE');
     table
       .foreign('depends_on_feature_id')
       .references('id')
       .inTable('feature_definitions')
       .onDelete('CASCADE');
-
-    // 唯一约束
     table.unique(['feature_id', 'depends_on_feature_id']);
-
-    // 索引
     table.index(['feature_id']);
     table.index(['depends_on_feature_id']);
-    table.index(['dependency_type']);
   });
 };
 

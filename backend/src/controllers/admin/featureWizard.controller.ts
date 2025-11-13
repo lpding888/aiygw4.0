@@ -56,6 +56,7 @@ async function createFeatureFromWizard(
   try {
     const {
       feature_id,
+      feature_key,
       display_name,
       description,
       category,
@@ -81,8 +82,12 @@ async function createFeatureFromWizard(
       return;
     }
 
+    const normalizedFeatureKey = feature_key ?? feature_id;
+
     const existingFeature = await db('feature_definitions')
-      .where('feature_id', feature_id)
+      .where((builder) =>
+        builder.where('feature_id', feature_id).orWhere('feature_key', normalizedFeatureKey)
+      )
       .whereNull('deleted_at')
       .first();
 
@@ -91,7 +96,7 @@ async function createFeatureFromWizard(
         success: false,
         error: {
           code: 4009,
-          message: `Feature ID已存在: ${feature_id}`
+          message: `Feature ID或Key已存在: ${feature_id}`
         }
       });
       return;
@@ -138,6 +143,7 @@ async function createFeatureFromWizard(
 
       await trx('feature_definitions').insert({
         feature_id,
+        feature_key: normalizedFeatureKey,
         display_name,
         description,
         category: category ?? '图片处理',

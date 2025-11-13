@@ -17,6 +17,11 @@ interface SetValueBody {
   value: unknown;
   type?: string;
   description?: string;
+  category?: string;
+  sensitive?: boolean;
+  sortOrder?: number;
+  metadata?: Record<string, unknown>;
+  isActive?: boolean;
 }
 
 interface SetBatchBody {
@@ -25,6 +30,11 @@ interface SetBatchBody {
     value: ConfigPrimitive;
     type?: ConfigType;
     description?: string;
+    category?: string;
+    sensitive?: boolean;
+    sortOrder?: number;
+    metadata?: Record<string, unknown>;
+    isActive?: boolean;
   }>;
 }
 
@@ -34,12 +44,17 @@ interface ImportBody {
     value: ConfigPrimitive;
     type?: ConfigType;
     description?: string;
+    category?: string;
+    sensitive?: boolean;
+    sortOrder?: number;
+    metadata?: Record<string, unknown>;
+    isActive?: boolean;
   }>;
   overwrite?: boolean;
 }
 
 const normalizeType = (type?: string): ConfigType => {
-  if (type === 'number' || type === 'boolean' || type === 'json') {
+  if (type === 'number' || type === 'boolean' || type === 'json' || type === 'secret') {
     return type;
   }
   return 'string';
@@ -107,13 +122,17 @@ class SystemConfigController {
         category = null,
         page = '1',
         limit = '50',
-        includeInactive = 'false'
+        includeInactive = 'false',
+        includeSecrets = 'false',
+        search = null
       } = req.query as Record<string, string>;
       const result = await systemConfigService.list({
         category,
         page: parseInt(page, 10),
         limit: parseInt(limit, 10),
-        includeInactive: includeInactive === 'true'
+        includeInactive: includeInactive === 'true',
+        includeSecrets: includeSecrets === 'true',
+        search
       });
       res.json({ success: true, data: result });
     } catch (error: unknown) {
@@ -137,7 +156,16 @@ class SystemConfigController {
   async setValue(req: Request, res: Response, next: NextFunction) {
     try {
       const { key } = req.params as { key: string };
-      const { value, type = 'string', description = '' } = req.body as unknown as SetValueBody;
+      const {
+        value,
+        type = 'string',
+        description = '',
+        category,
+        sensitive,
+        sortOrder,
+        metadata,
+        isActive
+      } = req.body as unknown as SetValueBody;
       const userId = req.user?.id as string | undefined;
       if (value === undefined) {
         res.status(400).json({ success: false, error: { code: 4001, message: '配置值不能为空' } });
@@ -145,7 +173,13 @@ class SystemConfigController {
       }
       const configType = normalizeType(type);
       const normalizedValue = normalizeValue(value, configType);
-      await systemConfigService.set(key, normalizedValue, configType, description, userId);
+      await systemConfigService.set(key, normalizedValue, configType, description, userId, {
+        category,
+        sensitive,
+        sortOrder,
+        metadata,
+        isActive
+      });
       res.json({ success: true, message: '配置更新成功', data: { key, value, type, description } });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -183,7 +217,12 @@ class SystemConfigController {
           key: config.key,
           value: normalizeValue(config.value, configType),
           type: configType,
-          description: config.description ?? ''
+          description: config.description ?? '',
+          category: config.category,
+          sensitive: config.sensitive,
+          sortOrder: config.sortOrder,
+          metadata: config.metadata ?? null,
+          isActive: config.isActive
         };
       });
       await systemConfigService.setMultiple(normalizedConfigs, userId ?? null);
@@ -202,7 +241,8 @@ class SystemConfigController {
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
       const { key } = req.params as { key: string };
-      const deleted = await systemConfigService.delete(key);
+      const userId = req.user?.id as string | undefined;
+      const deleted = await systemConfigService.delete(key, userId ?? null);
       if (!deleted) {
         res.status(404).json({ success: false, error: { code: 4004, message: '配置不存在' } });
         return;
@@ -288,7 +328,14 @@ class SystemConfigController {
             normalizeValue(value, configType),
             configType,
             description,
-            userId
+            userId,
+            {
+              category: config.category,
+              sensitive: config.sensitive,
+              sortOrder: config.sortOrder,
+              metadata: config.metadata ?? null,
+              isActive: config.isActive
+            }
           );
           results.success++;
         } catch (err: unknown) {

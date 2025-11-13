@@ -4,6 +4,8 @@ import membershipService, {
   type PaymentChannel
 } from '../services/membership.service.js';
 import logger from '../utils/logger.js';
+import { verifyMembershipWebhookSignature } from '../utils/webhookSignature.js';
+import systemConfigService from '../services/systemConfig.service.js';
 
 const getUserIdOrRespond = (req: Request, res: Response): string | null => {
   const userId = req.user?.id;
@@ -45,6 +47,29 @@ class MembershipController {
 
   async paymentCallback(req: Request, res: Response, next: NextFunction) {
     try {
+      const secretFromConfig = (await systemConfigService.get<string>(
+        'membership_webhook_secret'
+      )) as string | null;
+      const webhookSecret = secretFromConfig?.trim() ?? null;
+      if (!webhookSecret) {
+        logger.error('[MembershipController] 未配置 membership_webhook_secret，拒绝处理');
+        res.status(500).json({
+          success: false,
+          error: { code: 'CONFIG_MISSING', message: '会员回调密钥未配置' }
+        });
+        return;
+      }
+
+      const verification = verifyMembershipWebhookSignature(req, webhookSecret);
+      if (!verification.ok) {
+        logger.warn('[MembershipController] Webhook验签失败', { reason: verification.reason });
+        res.status(401).json({
+          success: false,
+          error: { code: 'INVALID_SIGNATURE', message: '回调验签失败' }
+        });
+        return;
+      }
+
       const callbackData = req.body;
       if (!isValidCallbackData(callbackData)) {
         res

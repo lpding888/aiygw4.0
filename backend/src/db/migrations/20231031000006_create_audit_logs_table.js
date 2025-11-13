@@ -3,7 +3,11 @@
  * 艹，记录所有CMS内容操作！
  */
 
-exports.up = function (knex) {
+exports.up = async function (knex) {
+  const exists = await knex.schema.hasTable('audit_logs');
+  if (exists) {
+    return;
+  }
   return knex.schema.createTable('audit_logs', (table) => {
     table.increments('id').primary();
 
