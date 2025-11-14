@@ -4,7 +4,7 @@
  */
 
 import axios from 'axios';
-import db from '../../db/index.js';
+import { db } from '../../db/index.js';
 import logger from '../../utils/logger.js';
 import {
   NodeExecutor,

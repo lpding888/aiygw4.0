@@ -24,7 +24,11 @@ jest.mock('../../../src/db/index.js', () => {
     now: jest.fn(() => new Date())
   };
 
-  return mockDb;
+  return {
+    __esModule: true,
+    default: mockDb,
+    db: mockDb
+  };
 });
 
 describe('ConfigSnapshot Service - 单元测试', () => {

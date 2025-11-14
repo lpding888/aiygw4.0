@@ -6,7 +6,7 @@
 import { Queue, Worker, Job, QueueEvents } from 'bullmq';
 import { Redis as IORedis } from 'ioredis';
 import { redisConfig } from '../../config/redis.js';
-import db from '../../db/index.js';
+import { db } from '../../db/index.js';
 import logger from '../../utils/logger.js';
 import { parser } from './parser.js';
 import { chunker, type Chunk } from './chunker.js';

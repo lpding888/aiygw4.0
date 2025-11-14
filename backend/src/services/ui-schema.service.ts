@@ -1,7 +1,7 @@
 import configCacheService from '../cache/config-cache.js';
 import { db as knex } from '../db/index.js';
 import logger from '../utils/logger.js';
-import { hasPermission, getRolePermissions } from '../utils/rbac.js';
+import { hasPermission, getRolePermissions, type UserRole, type Action } from '../utils/rbac.js';
 
 interface MenuConfig {
   id: string;
@@ -523,15 +523,18 @@ class UISchemaService {
    * 按权限过滤菜单
    */
   filterMenusByPermission(menus: MenuConfig[], userRole: string): MenuConfig[] {
+    const normalizedRole = this.normalizeRole(userRole);
     return menus
-      .filter((menu) => this.hasMenuPermission(menu, userRole))
+      .filter((menu) => this.hasMenuPermission(menu, normalizedRole))
       .map((menu) => ({
         ...menu,
-        children: menu.children ? this.filterMenusByPermission(menu.children, userRole) : undefined
+        children: menu.children
+          ? this.filterMenusByPermission(menu.children, normalizedRole)
+          : undefined
       }))
       .filter(
         (menu) =>
-          menu.children?.length || !menu.permissions || this.hasMenuPermission(menu, userRole)
+          menu.children?.length || !menu.permissions || this.hasMenuPermission(menu, normalizedRole)
       );
   }
 
@@ -539,9 +542,10 @@ class UISchemaService {
    * 按权限过滤Schema
    */
   private filterSchemaByPermission(schema: UISchema, userRole: string): UISchema {
+    const normalizedRole = this.normalizeRole(userRole);
     return {
       ...schema,
-      menus: this.filterMenusByPermission(schema.menus, userRole)
+      menus: this.filterMenusByPermission(schema.menus, normalizedRole)
     };
   }
 
@@ -549,13 +553,15 @@ class UISchemaService {
    * 检查菜单权限
    */
   private hasMenuPermission(menu: MenuConfig, userRole: string): boolean {
+    const normalizedRole = this.normalizeRole(userRole);
     if (!menu.permissions || menu.permissions.length === 0) {
       return true;
     }
 
     return menu.permissions.some((permission) => {
       const [resource, action] = permission.split(':');
-      return hasPermission(userRole, resource, action);
+      const actionName = action as Action;
+      return hasPermission(normalizedRole, resource, actionName);
     });
   }
 
@@ -563,7 +569,8 @@ class UISchemaService {
    * 获取所有权限
    */
   private getAllPermissions(userRole: string): Record<string, string[]> {
-    return getRolePermissions(userRole);
+    const normalizedRole = this.normalizeRole(userRole);
+    return getRolePermissions(normalizedRole);
   }
 
   /**
@@ -594,6 +601,7 @@ class UISchemaService {
    * 获取默认菜单
    */
   private getDefaultMenus(userRole: string): MenuConfig[] {
+    const normalizedRole = this.normalizeRole(userRole);
     const baseMenus: MenuConfig[] = [
       {
         id: 'dashboard',
@@ -605,7 +613,7 @@ class UISchemaService {
       }
     ];
 
-    if (userRole === 'admin') {
+    if (normalizedRole === 'admin') {
       baseMenus.push({
         id: 'system',
         key: 'system',
@@ -637,14 +645,22 @@ class UISchemaService {
    * 获取默认UI Schema
    */
   private getDefaultUISchema(userRole: string): UISchema {
+    const normalizedRole = this.normalizeRole(userRole);
     return {
-      menus: this.getDefaultMenus(userRole),
+      menus: this.getDefaultMenus(normalizedRole),
       forms: {},
       tables: {},
-      permissions: this.getAllPermissions(userRole),
+      permissions: this.getAllPermissions(normalizedRole),
       version: this.DEFAULT_VERSION,
       timestamp: Date.now()
     };
+  }
+
+  private normalizeRole(role: string): UserRole {
+    if (role === 'admin' || role === 'editor') {
+      return role;
+    }
+    return 'viewer';
   }
 
   /**

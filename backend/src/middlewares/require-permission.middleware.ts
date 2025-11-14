@@ -9,6 +9,7 @@ import {
   type UserRole
 } from '../utils/rbac.js';
 import logger from '../utils/logger.js';
+import { enforcePermission as casbinEnforce } from '../services/security/casbin-enforcer.js';
 
 interface PermissionOptions {
   resource?: Resource;
@@ -70,7 +71,7 @@ const buildAuditLog = (
 });
 
 export function requirePermission(options: PermissionOptions) {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       if (!req.user) {
         res.status(401).json({
@@ -85,12 +86,25 @@ export function requirePermission(options: PermissionOptions) {
       const methodAction = methodToAction(req.method, req.route?.path ?? req.path);
       const actions = options.actions ?? [methodAction];
 
-      const hasAccess =
-        options.resource && options.actions
-          ? actions.some((action) => hasPermission(req.user!.role, resource, action))
-          : checkRoutePermission(req.user!.role, req.method, req.route?.path ?? req.path);
+      let hasAccess = false;
 
-      logPermissionAccess(buildAuditLog(req, resource, methodAction, hasAccess, '权限不足'));
+      if (resource !== 'unknown') {
+        const casbinDecisions = await Promise.all(
+          actions.map((action) => casbinEnforce(req.user!.role, resource, action))
+        );
+        hasAccess = casbinDecisions.some(Boolean);
+      }
+
+      if (!hasAccess) {
+        hasAccess =
+          options.resource && options.actions
+            ? actions.some((action) => hasPermission(req.user!.role, resource, action))
+            : checkRoutePermission(req.user!.role, req.method, req.route?.path ?? req.path);
+      }
+
+      logPermissionAccess(
+        buildAuditLog(req, resource, methodAction, hasAccess, hasAccess ? undefined : '权限不足')
+      );
 
       if (!hasAccess) {
         res.status(403).json({

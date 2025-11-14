@@ -21,6 +21,7 @@
 
 import { LRUCache } from 'lru-cache';
 import { Redis } from 'ioredis';
+import metricsService from '../services/metrics.service.js';
 
 /**
  * 缓存配置
@@ -41,6 +42,8 @@ export interface CacheConfig {
   };
   /** 缓存命名空间（前缀） */
   namespace?: string;
+  /** 指标上报名称（默认等于 namespace） */
+  cacheName?: string;
 }
 
 /**
@@ -66,6 +69,7 @@ export class CacheManager {
   private l2Cache: Redis | null = null;
   private namespace: string;
   private l2DefaultTtl: number;
+  private metricsName: string;
 
   // 统计信息
   private stats: Omit<CacheStats, 'l1Size'> = {
@@ -81,11 +85,13 @@ export class CacheManager {
       l1DefaultTtl = 5 * 60 * 1000, // 5分钟
       l2DefaultTtl = 30 * 60, // 30分钟
       redisConfig,
-      namespace = 'cache'
+      namespace = 'cache',
+      cacheName
     } = config;
 
     this.namespace = namespace;
     this.l2DefaultTtl = l2DefaultTtl;
+    this.metricsName = cacheName ?? namespace;
 
     // 初始化L1缓存（LRU）
     this.l1Cache = new LRUCache<string, L1CacheEntry, never>({
@@ -149,8 +155,9 @@ export class CacheManager {
     const l1Value = this.l1Cache.get(fullKey);
     if (l1Value !== undefined) {
       this.stats.l1Hits++;
+      metricsService.recordCacheHit(this.metricsName);
       console.log(`[CACHE] L1命中: ${key}`);
-      return l1Value.value as T;
+      return (l1Value.value ?? null) as T | null;
     }
     this.stats.l1Misses++;
 
@@ -160,14 +167,15 @@ export class CacheManager {
         const l2ValueStr = await this.l2Cache.get(fullKey);
         if (l2ValueStr) {
           this.stats.l2Hits++;
+          metricsService.recordCacheHit(this.metricsName);
           console.log(`[CACHE] L2命中: ${key}`);
 
           // 解析JSON
-          const l2Value = JSON.parse(l2ValueStr) as T;
+          const parsed = JSON.parse(l2ValueStr);
+          const l2Value = (parsed ?? null) as T | null;
 
           // 回写L1
           this.l1Cache.set(fullKey, { value: l2Value });
-
           return l2Value;
         }
         this.stats.l2Misses++;
@@ -178,6 +186,7 @@ export class CacheManager {
     }
 
     console.log(`[CACHE] 缓存未命中: ${key}`);
+    metricsService.recordCacheMiss(this.metricsName);
     return null;
   }
 

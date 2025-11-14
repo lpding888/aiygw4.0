@@ -258,7 +258,9 @@ class SystemConfigService {
           .first();
 
         const normalizedType = this.normalizeType(type, options);
-        const isSecret = options.sensitive ?? (normalizedType === 'secret' || existing?.is_secret);
+        const computedSecret =
+          options.sensitive ?? (normalizedType === 'secret' || Boolean(existing?.is_secret));
+        const isSecret = Boolean(computedSecret);
         const storage = this.prepareStorage(value, normalizedType, isSecret);
         const descriptionText = options.description ?? description;
 
@@ -611,7 +613,7 @@ class SystemConfigService {
       created_at: new Date().toISOString()
     };
 
-    const [snapshotId] = await db('config_snapshots').insert({
+    const insertResult = (await db('config_snapshots').insert({
       snapshot_name: description || `system-config-${new Date().toISOString()}`,
       description,
       config_type: 'system_config',
@@ -619,10 +621,16 @@ class SystemConfigService {
       config_data: JSON.stringify(data),
       created_by: null,
       created_at: new Date()
-    });
+    })) as Array<number | { id: number }>;
+
+    const rawSnapshotId = insertResult[0];
+    const snapshotId =
+      typeof rawSnapshotId === 'object' && rawSnapshotId !== null
+        ? rawSnapshotId.id
+        : rawSnapshotId;
 
     return {
-      id: typeof snapshotId === 'object' ? snapshotId.id : snapshotId,
+      id: snapshotId ?? 0,
       name: description || 'system-config',
       description,
       createdAt: new Date(data.created_at),

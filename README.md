@@ -116,6 +116,16 @@ feature/*   ←── 功能分支，从develop创建
 3. **通过代码审查和测试验收后合并**
 4. **禁止直接向 `main` 分支推送代码**
 
+### 权限/安全
+- 后端使用 **Casbin** 作为权限引擎，策略存储在 `casbin_rule` 表。模型定义位于 `src/security/casbin-model.conf`
+- 测试环境默认通过 `CASBIN_DISABLED=true` 退回静态 RBAC；开发/生产请确保该变量未设置并运行 `npm run db:migrate`
+- `SecretVault` 统一加载 `MASTER_KEY`、`CREDENTIALS_ENCRYPTION_KEY`，缺少配置只允许在 `NODE_ENV !== production` 下生成临时密钥
+
+### 迁移规范
+- 所有 Knex 迁移脚本统一放在 `backend/src/db/migrations/`
+- 新增迁移前先执行 `npm run migrate:audit` 确保没有重复命名或野目录
+- 提交前至少跑一次 `npm run db:migrate && npm run test:unit`
+
 ### 提交规范
 ```bash
 # 功能开发
@@ -251,6 +261,7 @@ const QUOTA = 100;  // 后续调价需要改代码
 - 交付记录和验收标准
 - 历史开发记录
 - 各角色任务卡
+- [backend/docs/backend-tech-stack-improvements.md](backend/docs/backend-tech-stack-improvements.md) - 后端技术栈治理方案与工具清单
 
 ---
 
@@ -325,6 +336,7 @@ const QUOTA = 100;  // 后续调价需要改代码
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| dev-log | 2025-11-14 | 排查并清理 `backend/migrations` 冗余脚本，统一迁移目录 |
 | v2.0 | 2025-10-28 | 仓库结构规范化，技能和文档分类整理 |
 | v1.0 | 2025-10-28 | 完整MVP设计文档和实施指南 |
 

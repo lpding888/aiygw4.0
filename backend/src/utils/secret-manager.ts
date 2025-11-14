@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import logger from './logger.js';
+import secretVault from '../services/security/secret-vault.js';
 
 const ALGORITHM = 'aes-256-gcm';
 const DEFAULT_VERSION = 'v1';
@@ -12,18 +13,7 @@ class SecretManager {
   private readonly key: Buffer;
 
   constructor() {
-    const secret = process.env.CREDENTIALS_ENCRYPTION_KEY;
-    if (!secret) {
-      throw new Error(
-        'CREDENTIALS_ENCRYPTION_KEY 未设置，敏感配置无法安全存储。请在 .env 中配置 32 字节(64 hex)密钥。'
-      );
-    }
-
-    if (secret.length !== 64) {
-      throw new Error('CREDENTIALS_ENCRYPTION_KEY 必须是32字节(64位hex)字符串');
-    }
-
-    this.key = Buffer.from(secret, 'hex');
+    this.key = secretVault.getCredentialKey();
   }
 
   encrypt(plaintext: string, version: string = DEFAULT_VERSION): string {

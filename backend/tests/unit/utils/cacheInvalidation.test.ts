@@ -20,9 +20,8 @@ jest.mock('ioredis', () => {
         quit: jest.fn().mockResolvedValue('OK'),
         on: jest.fn().mockImplementation((event, handler) => {
           handlers[event] = handler;
-          // 立即触发connect事件
           if (event === 'connect') {
-            setTimeout(() => handler(), 10);
+            handler();
           }
         }),
         _trigger: (event: string, ...args: any[]) => {

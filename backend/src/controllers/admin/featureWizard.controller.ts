@@ -4,6 +4,7 @@ import logger from '../../utils/logger.js';
 
 type FeatureWizardBody = {
   feature_id?: string;
+  feature_key?: string;
   display_name?: string;
   description?: string;
   category?: string;

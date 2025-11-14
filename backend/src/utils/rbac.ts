@@ -71,7 +71,7 @@ const VIEWER_PERMISSIONS: Record<Resource, Action[]> = {
   'system:metrics': ['read']
 };
 
-const PERMISSION_MATRIX: Record<UserRole, Record<Resource, Action[]>> = {
+export const PERMISSION_MATRIX: Record<UserRole, Record<Resource, Action[]>> = {
   viewer: VIEWER_PERMISSIONS,
 
   editor: {

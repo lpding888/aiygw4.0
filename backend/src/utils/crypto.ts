@@ -10,6 +10,8 @@
  */
 
 import crypto from 'crypto';
+import secretVault from '../services/security/secret-vault.js';
+import logger from './logger.js';
 
 /**
  * 加密算法配置
@@ -61,34 +63,9 @@ class KeyManager {
    * 格式：MASTER_KEY=base64编码的32字节密钥
    */
   private loadMasterKey(): void {
-    const masterKeyEnv = process.env.MASTER_KEY;
-
-    if (!masterKeyEnv) {
-      // 艹，开发环境生成临时密钥（生产环境必须配置！）
-      if (process.env.NODE_ENV === 'production') {
-        throw new Error('生产环境必须配置MASTER_KEY环境变量！这tm是安全红线！');
-      }
-
-      console.warn('[CRYPTO] 警告：未配置MASTER_KEY，使用临时密钥（仅用于开发）');
-      const tempKey = crypto.randomBytes(KEY_LENGTH);
-      this.addKey(1, tempKey);
-      return;
-    }
-
-    try {
-      // 解析Base64编码的密钥
-      const keyBuffer = Buffer.from(masterKeyEnv, 'base64');
-
-      if (keyBuffer.length !== KEY_LENGTH) {
-        throw new Error(`MASTER_KEY长度错误：期望${KEY_LENGTH}字节，实际${keyBuffer.length}字节`);
-      }
-
-      this.addKey(1, keyBuffer);
-      console.log('[CRYPTO] 主密钥加载成功 (版本: 1)');
-    } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      throw new Error(`加载MASTER_KEY失败: ${err.message}`);
-    }
+    const keyBuffer = secretVault.getMasterKey();
+    this.addKey(1, keyBuffer);
+    logger.info('[CRYPTO] 主密钥加载成功 (版本: 1)');
   }
 
   /**

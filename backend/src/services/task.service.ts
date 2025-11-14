@@ -38,19 +38,18 @@ class TaskService {
     inputImageUrl: string,
     params: TaskParams = {}
   ): Promise<TaskCreateResult> {
-    let taskId: string | undefined;
+    const validTypes = ['basic_clean', 'model_pose12', 'video_generate'];
+    if (!validTypes.includes(type)) {
+      throw { errorCode: 4001, message: '无效的任务类型' } as TaskError;
+    }
+
+    const quotaCost = this.getQuotaCost(type);
+    const taskId = nanoid();
+
     try {
-      const validTypes = ['basic_clean', 'model_pose12', 'video_generate'];
-      if (!validTypes.includes(type)) {
-        throw { errorCode: 4001, message: '无效的任务类型' } as TaskError;
-      }
-
-      const quotaCost = this.getQuotaCost(type);
-      taskId = nanoid();
-
       const result = await db.transaction(async (trx) => {
         // 预留配额以保持一致的补偿语义
-        await quotaService.reserve(userId, taskId!, quotaCost, trx);
+        await quotaService.reserve(userId, taskId, quotaCost, trx);
         const now = new Date();
         await trx('tasks').insert({
           id: taskId,
@@ -79,9 +78,9 @@ class TaskService {
 
       if (type === 'video_generate') {
         // 异步,不阻塞响应
-        this.processVideoGenerateTask(taskId!, inputImageUrl, params).catch((err: Error) => {
+        this.processVideoGenerateTask(taskId, inputImageUrl, params).catch((err: Error) => {
           logger.error(`[TaskService] 视频任务异步处理失败: ${err.message}`, { taskId });
-          this.handleVideoTaskFailure(taskId!, userId, err.message);
+          this.handleVideoTaskFailure(taskId, userId, err.message);
         });
       }
 
@@ -101,7 +100,6 @@ class TaskService {
     featureId: string,
     inputData: TaskInputData = {}
   ): Promise<TaskCreateResult> {
-    let taskId: string | undefined;
     try {
       // 1) 获取功能定义
       const feature = (await db('feature_definitions')
@@ -134,10 +132,10 @@ class TaskService {
       }
 
       // 4) Saga 预留配额(先拿个taskId)
-      taskId = nanoid();
+      const taskId = nanoid();
       const now = new Date();
       await db.transaction(async (trx) => {
-        await quotaService.reserve(userId, taskId!, feature.quota_cost, trx);
+        await quotaService.reserve(userId, taskId, feature.quota_cost, trx);
 
         // 5) 创建任务记录(兼容旧字段)
         await trx('tasks').insert({
@@ -170,7 +168,7 @@ class TaskService {
       );
 
       // 6) 异步执行 Pipeline(不阻塞响应)
-      pipelineEngine.executePipeline(taskId!, featureId, inputData).catch((err: Error) => {
+      pipelineEngine.executePipeline(taskId, featureId, inputData).catch((err: Error) => {
         logger.error(`[TaskService] Pipeline执行异常 taskId=${taskId} error=${err.message}`, {
           taskId,
           featureId,

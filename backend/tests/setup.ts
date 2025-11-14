@@ -128,6 +128,14 @@ process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-jwt-secret-key';
 process.env.JWT_REFRESH_SECRET = 'test-jwt-refresh-secret-key';
 process.env.REDIS_URL = 'redis://localhost:6379/1';
+process.env.CASBIN_DISABLED = 'true';
+process.env.CREDENTIALS_ENCRYPTION_KEY =
+  process.env.CREDENTIALS_ENCRYPTION_KEY ??
+  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+if (!process.env.MASTER_KEY) {
+  const defaultMasterKey = Buffer.alloc(32, 1).toString('base64');
+  process.env.MASTER_KEY = defaultMasterKey;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockKnex: any = {

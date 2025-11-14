@@ -7,7 +7,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import { body, query, validationResult } from 'express-validator';
 import { authenticate } from '../../middlewares/auth.middleware.js';
 import { addIngestJob, getQueueStats } from '../../rag/ingest/worker.js';
-import db from '../../db/index.js';
+import { db } from '../../db/index.js';
 import logger from '../../utils/logger.js';
 
 const router = express.Router();
@@ -115,8 +115,7 @@ router.get(
 
       const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
 
-      type QueryBuilder = ReturnType<typeof db>;
-      let query: QueryBuilder = db('kb_documents').where('user_id', userId);
+      let query = db('kb_documents').where('user_id', userId);
 
       if (kbId) {
         query = query.where('kb_id', kbId as string);
@@ -181,8 +180,7 @@ router.post(
       logger.info(`[KBRoute] 检索知识库: userId=${userId} query=${searchQuery}`);
 
       // 简化实现：基于文本匹配（实际应使用向量检索）
-      type QueryBuilder = ReturnType<typeof db>;
-      let dbQuery: QueryBuilder = db('kb_chunks')
+      let dbQuery = db('kb_chunks')
         .join('kb_documents', 'kb_chunks.document_id', 'kb_documents.id')
         .where('kb_documents.user_id', userId)
         .where('kb_documents.status', 'completed');
