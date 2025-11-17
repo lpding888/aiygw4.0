@@ -136,6 +136,7 @@ jobs:
 
       - name: Build backend image (for scanning)
         if: needs.detect-changes.outputs.backend == 'true'
+        id: build-backend
         uses: docker/build-push-action@v5
         with:
           context: ./backend
@@ -149,7 +150,7 @@ jobs:
         if: needs.detect-changes.outputs.backend == 'true'
         uses: aquasecurity/trivy-action@0.20.0
         with:
-          image-ref: ghcr.io/${{ github.repository }}/backend:main-${{ github.sha }}
+          image-ref: ${{ fromJSON(steps.meta-backend.outputs.json).tags[0] }}
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
 
@@ -173,6 +174,7 @@ jobs:
 
       - name: Build frontend image (for scanning)
         if: needs.detect-changes.outputs.frontend == 'true'
+        id: build-frontend
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
@@ -186,7 +188,7 @@ jobs:
         if: needs.detect-changes.outputs.frontend == 'true'
         uses: aquasecurity/trivy-action@0.20.0
         with:
-          image-ref: ghcr.io/${{ github.repository }}/frontend:main-${{ github.sha }}
+          image-ref: ${{ fromJSON(steps.meta-frontend.outputs.json).tags[0] }}
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
 
