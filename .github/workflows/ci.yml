@@ -153,6 +153,7 @@ jobs:
           image-ref: ${{ fromJSON(steps.meta-backend.outputs.json).tags[0] }}
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
+          scanners: 'vuln,secret'
 
       - name: Push backend image
         if: needs.detect-changes.outputs.backend == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -191,6 +192,7 @@ jobs:
           image-ref: ${{ fromJSON(steps.meta-frontend.outputs.json).tags[0] }}
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
+          scanners: 'vuln,secret'
 
       - name: Push frontend image
         if: needs.detect-changes.outputs.frontend == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
