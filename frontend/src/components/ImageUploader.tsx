@@ -173,6 +173,10 @@ export default function ImageUploader({
     async (files: File[]) => {
       setErrorMessage(null)
 
+      if (files.length === 0) {
+        return
+      }
+
       const occupiedSlots = uploadedFiles.length + (uploadingRef.current ? 1 : 0)
 
       if (files.length + occupiedSlots > maxCount) {
