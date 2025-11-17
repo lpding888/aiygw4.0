@@ -58,6 +58,7 @@
     "formiojs": "^4.20.0",
     "fs.realpath": "1.0.0",
     "handlebars": "4.7.8",
+    "isomorphic-dompurify": "2.32.0",
     "next": "14.2.5",
     "next-intl": "4.4.0",
     "react": "^18.2.0",

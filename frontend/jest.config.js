@@ -33,7 +33,7 @@ const customJestConfig = {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(antd|@ant-design|rc-.*|@babel/runtime|@rc-component|@ctrl|@testing-library)/)',
+    'node_modules[\\\\/](?!(antd|@ant-design|rc-.*|@babel/runtime|@rc-component|@ctrl|@testing-library)[\\\\/])',
   ],
   testTimeout: 10000,
 }
