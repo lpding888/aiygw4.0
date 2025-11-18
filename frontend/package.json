@@ -50,6 +50,7 @@
     "axios": "^1.6.2",
     "color-convert": "2.0.1",
     "combined-stream": "^1.0.8",
+    "canvas": "3.2.0",
     "cos-js-sdk-v5": "^1.7.0",
     "critters": "0.0.20",
     "dayjs": "^1.11.10",
@@ -119,5 +120,8 @@
   "engines": {
     "node": ">=18.15.0",
     "npm": ">=9.0.0"
+  },
+  "overrides": {
+    "canvas": "3.2.0"
   }
 }

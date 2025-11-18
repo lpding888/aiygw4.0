@@ -5,7 +5,8 @@
 
 # ========== 基础镜像 ==========
 FROM node:20-alpine AS base
-RUN apk add --no-cache libc6-compat
+# 安装 node-canvas 编译所需的底层库
+RUN apk add --no-cache libc6-compat build-base python3 cairo-dev pango-dev libjpeg-turbo-dev giflib-dev pixman-dev freetype-dev
 WORKDIR /app
 
 # ========== 依赖安装阶段 ==========
@@ -38,6 +39,8 @@ RUN npm run build
 
 # ========== 运行阶段 ==========
 FROM node:20-alpine AS runner
+# 运行时也需要 node-canvas 依赖的共享库
+RUN apk add --no-cache libc6-compat cairo pango libjpeg-turbo giflib pixman freetype
 WORKDIR /app
 
 ENV NODE_ENV=production
