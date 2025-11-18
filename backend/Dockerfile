@@ -19,10 +19,13 @@ ENV NODE_ENV=production
 RUN apk add --no-cache netcat-openbsd
 
 RUN addgroup -S api && adduser -S api -G api
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/src/db/migrations ./src/db/migrations
+
+# 只安装生产依赖，不包含 devDependencies（如 tsx/esbuild）
 COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/src/db/migrations ./src/db/migrations
 COPY knexfile.js ./
 COPY docker-entrypoint.sh ./
 
