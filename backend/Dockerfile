@@ -14,10 +14,22 @@ RUN npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+
+# 安装 netcat 用于健康检查
+RUN apk add --no-cache netcat-openbsd
+
 RUN addgroup -S api && adduser -S api -G api
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/src/db/migrations ./src/db/migrations
 COPY package.json package-lock.json ./
-RUN npm ci --omit dev && npm cache clean --force
+COPY knexfile.js ./
+COPY docker-entrypoint.sh ./
+
+# 设置启动脚本权限
+RUN chmod +x docker-entrypoint.sh && \
+    chown api:api docker-entrypoint.sh
+
 USER api
 EXPOSE 3000
-CMD ["node", "dist/server.js"]
+CMD ["./docker-entrypoint.sh"]
