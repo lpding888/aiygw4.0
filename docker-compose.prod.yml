@@ -48,10 +48,7 @@ services:
 
   # ========== 后端服务 ==========
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    image: ai-photo-backend:latest
+    image: ghcr.io/lpding888/aiygw4.0/backend:latest
     container_name: ai-photo-backend
     restart: always
     environment:
@@ -69,21 +66,59 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}  # 艹！必须设置Redis密码
       # ========== JWT密钥 ==========
       JWT_SECRET: ${JWT_SECRET}  # 艹！生产环境必须用强密钥
-      JWT_EXPIRES_IN: 7d
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      # ========== 加密密钥 ==========
+      MASTER_KEY: ${MASTER_KEY}
+      ENCRYPTION_KEY_V1: ${ENCRYPTION_KEY_V1}
+      ENCRYPTION_KEY_V2: ${ENCRYPTION_KEY_V2}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY}
       # ========== 腾讯云COS配置 ==========
       COS_SECRET_ID: ${COS_SECRET_ID}
       COS_SECRET_KEY: ${COS_SECRET_KEY}
       COS_BUCKET: ${COS_BUCKET}
       COS_REGION: ${COS_REGION:-ap-guangzhou}
+      COS_CDN_DOMAIN: ${COS_CDN_DOMAIN}
+      COS_IMAGE_DOMAIN: ${COS_IMAGE_DOMAIN}
       # ========== 微信支付配置 ==========
       WECHAT_APPID: ${WECHAT_APPID}
+      WECHAT_APP_ID: ${WECHAT_APP_ID}
       WECHAT_MCHID: ${WECHAT_MCHID}
+      WECHAT_MCH_ID: ${WECHAT_MCH_ID}
       WECHAT_API_V3_KEY: ${WECHAT_API_V3_KEY}
       WECHAT_SERIAL_NO: ${WECHAT_SERIAL_NO}
+      WECHAT_MERCHANT_SERIAL_NO: ${WECHAT_MERCHANT_SERIAL_NO}
+      WECHAT_PUBLIC_KEY: ${WECHAT_PUBLIC_KEY}
+      WECHAT_CERT_PATH: ${WECHAT_CERT_PATH}
+      WECHAT_KEY_PATH: ${WECHAT_KEY_PATH}
+      WECHAT_PRIVATE_KEY: ${WECHAT_PRIVATE_KEY}
+      WECHAT_NOTIFY_URL: ${WECHAT_NOTIFY_URL}
+      WECHAT_RETURN_URL: ${WECHAT_RETURN_URL}
+      # ========== SMTP配置 ==========
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_SECURE: ${SMTP_SECURE:-true}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-AI衣柜}
+      # ========== 前端URL ==========
+      FRONTEND_URL: ${FRONTEND_URL}
       # ========== AI服务配置 ==========
       RUNNING_HUB_API_KEY: ${RUNNING_HUB_API_KEY}
+      HUNYUAN_API_KEY: ${HUNYUAN_API_KEY}
+      KUAI_API_KEY: ${KUAI_API_KEY}
+      # ========== 支付宝配置 ==========
+      ALIPAY_APP_ID: ${ALIPAY_APP_ID}
+      ALIPAY_PRIVATE_KEY: ${ALIPAY_PRIVATE_KEY}
+      ALIPAY_PUBLIC_KEY: ${ALIPAY_PUBLIC_KEY}
+      # ========== BullMQ配置 ==========
+      REDIS_BULLMQ_DB: ${REDIS_BULLMQ_DB:-2}
+      BULLMQ_PREFIX: ${BULLMQ_PREFIX:-ai_photo}
       # ========== 日志配置 ==========
-      LOG_LEVEL: info
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-100}
     volumes:
       - backend-logs:/app/logs
     depends_on:
