@@ -156,10 +156,11 @@ services:
     networks:
       - ai-photo-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u${DB_USER:-prod_user}", "-p${DB_PASSWORD}"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
   # ========== Redis 7.0 缓存 ==========
   redis:
