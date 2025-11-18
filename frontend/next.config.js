@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const webpack = require('webpack');
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE || process.env.NEXT_PUBLIC_API_URL || '/api').replace(/\/$/, '');
 const isTestEnv = process.env.NODE_ENV === 'test';
@@ -111,6 +112,41 @@ const nextConfig = {
         'resize-observer-polyfill': require.resolve('resize-observer-polyfill'),
       };
     }
+
+    // 将handlebars指向已经编译好的版本，别tm再用require.extensions瞎折腾
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      handlebars: require.resolve('handlebars/dist/cjs/handlebars.js'),
+      'handlebars/lib/index.js': require.resolve('handlebars/dist/cjs/handlebars.js'),
+      '@sentry/nextjs': path.join(__dirname, 'otel-empty.js'),
+      '@opentelemetry/instrumentation-http': path.join(__dirname, 'otel-empty.js'),
+      '@opentelemetry/instrumentation': path.join(__dirname, 'otel-empty.js'),
+      '@prisma/instrumentation': path.join(__dirname, 'otel-empty.js'),
+      'require-in-the-middle': path.join(__dirname, 'otel-empty.js'),
+    };
+
+    // 构建阶段直接忽略这些server-only instrumentation，避免webpack对@opentelemetry动刀时警告个不停
+    config.plugins.push(
+      new webpack.IgnorePlugin({ resourceRegExp: /@prisma\/instrumentation/ }),
+      new webpack.IgnorePlugin({ resourceRegExp: /@opentelemetry\/instrumentation/ }),
+      new webpack.IgnorePlugin({ resourceRegExp: /require-in-the-middle/ }),
+      new webpack.NormalModuleReplacementPlugin(
+        /@opentelemetry\/instrumentation-http/,
+        path.join(__dirname, 'otel-empty.js')
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /@opentelemetry\/instrumentation/,
+        path.join(__dirname, 'otel-empty.js')
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /require-in-the-middle/,
+        path.join(__dirname, 'otel-empty.js')
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /@prisma\/instrumentation/,
+        path.join(__dirname, 'otel-empty.js')
+      )
+    );
 
     // 生产环境优化(服务器和本地通用)
     if (!dev && !isServer) {

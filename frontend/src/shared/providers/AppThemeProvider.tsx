@@ -13,12 +13,13 @@
 
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ConfigProvider, App as AntdApp } from 'antd';
 import { AntdRegistry } from '@ant-design/nextjs-registry';
 import zhCN from 'antd/locale/zh_CN';
 import { useTheme } from '@/shared/store';
 import { getThemeConfig, ThemeManager } from '@/shared/styles/theme';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 /**
  * AppThemeProvider Props
@@ -33,6 +34,7 @@ interface AppThemeProviderProps {
  */
 export function AppThemeProvider({ children }: AppThemeProviderProps) {
   const theme = useTheme();
+  const [queryClient] = useState(() => new QueryClient());
 
   // 艹!初始化主题(页面加载时)
   useEffect(() => {
@@ -52,14 +54,16 @@ export function AppThemeProvider({ children }: AppThemeProviderProps) {
 
   return (
     <AntdRegistry>
-      <ConfigProvider
-        theme={themeConfig}
-        locale={zhCN}
-      >
-        <AntdApp>
-          {children}
-        </AntdApp>
-      </ConfigProvider>
+      <QueryClientProvider client={queryClient}>
+        <ConfigProvider
+          theme={themeConfig}
+          locale={zhCN}
+        >
+          <AntdApp>
+            {children}
+          </AntdApp>
+        </ConfigProvider>
+      </QueryClientProvider>
     </AntdRegistry>
   );
 }

@@ -96,7 +96,7 @@ export const useFeatureStore = create<FeatureState>()(
               loading: false
             });
           } else {
-            throw new Error(response?.message || '获取功能列表失败');
+            throw new Error(response?.data?.message || '获取功能列表失败');
           }
         } catch (error: any) {
           console.error('获取功能列表失败:', error);

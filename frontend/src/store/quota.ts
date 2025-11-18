@@ -57,8 +57,8 @@ export interface QuotaInfo {
   remaining_quota: number; // 剩余配额
 
   // 时间相关
-  quota_reset_at?: string; // 配额重置时间（ISO 8601格式）
-  plan_expires_at?: string; // 套餐过期时间
+  quota_reset_at?: string | null; // 配额重置时间（ISO 8601格式）
+  plan_expires_at?: string | null; // 套餐过期时间
 
   // 额外信息
   is_trial?: boolean; // 是否试用

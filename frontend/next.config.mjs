@@ -1,5 +1,6 @@
-import { withSentryConfig } from '@sentry/nextjs';
 import nextIntl from 'next-intl/plugin';
+import path from 'path';
+import webpack from 'webpack';
 
 const withNextIntl = nextIntl('./src/i18n/request.ts');
 
@@ -20,6 +21,44 @@ const nextConfig = {
   },
   experimental: {
     optimizePackageImports: ['antd'],
+  },
+  webpack: (config, { isServer, dev }) => {
+    // handlebars 用编译后的版本，别再注册 require.extensions
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      handlebars: path.join(process.cwd(), 'node_modules/handlebars/dist/cjs/handlebars.js'),
+      'handlebars/lib/index.js': path.join(process.cwd(), 'node_modules/handlebars/dist/cjs/handlebars.js'),
+      '@sentry/nextjs': path.join(process.cwd(), 'otel-empty.js'),
+      '@opentelemetry/instrumentation-http': path.join(process.cwd(), 'otel-empty.js'),
+      '@opentelemetry/instrumentation': path.join(process.cwd(), 'otel-empty.js'),
+      '@prisma/instrumentation': path.join(process.cwd(), 'otel-empty.js'),
+      'require-in-the-middle': path.join(process.cwd(), 'otel-empty.js'),
+    };
+
+    // 编译阶段直接忽略这些 server-only instrumentation
+    config.plugins.push(
+      new webpack.IgnorePlugin({ resourceRegExp: /@prisma\/instrumentation/ }),
+      new webpack.IgnorePlugin({ resourceRegExp: /@opentelemetry\/instrumentation/ }),
+      new webpack.IgnorePlugin({ resourceRegExp: /require-in-the-middle/ }),
+      new webpack.NormalModuleReplacementPlugin(
+        /@opentelemetry\/instrumentation-http/,
+        path.join(process.cwd(), 'otel-empty.js')
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /@opentelemetry\/instrumentation/,
+        path.join(process.cwd(), 'otel-empty.js')
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /require-in-the-middle/,
+        path.join(process.cwd(), 'otel-empty.js')
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /@prisma\/instrumentation/,
+        path.join(process.cwd(), 'otel-empty.js')
+      )
+    );
+
+    return config;
   },
   async headers() {
     return [
@@ -72,12 +111,5 @@ const nextConfig = {
 // 先应用 next-intl 配置
 const configWithIntl = withNextIntl(nextConfig);
 
-// 再应用 Sentry 配置
-export default withSentryConfig(configWithIntl, {
-  silent: !process.env.CI,
-  telemetry: false,
-  widenClientFileUpload: true,
-  hideSourceMaps: true,
-  disableLogger: true,
-  automaticVercelMonitors: true,
-});
+// 彻底跳过 Sentry 包装，避免引入一坨 OTEL instrumentation
+export default configWithIntl;

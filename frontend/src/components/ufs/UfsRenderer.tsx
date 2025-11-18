@@ -131,10 +131,10 @@ export default function UfsRenderer({
       {showSubmitButton && !readOnly && (
         <Form.Item>
           <Space>
-            <Button type="primary" htmlType="submit" autoInsertSpaceInButton={false}>
+            <Button type="primary" htmlType="submit">
               {submitButtonText}
             </Button>
-            <Button onClick={() => form.reset()} autoInsertSpaceInButton={false}>
+            <Button onClick={() => form.reset()}>
               重置
             </Button>
           </Space>

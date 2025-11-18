@@ -186,6 +186,9 @@ export default function ImageUploader({
       }
 
       const file = files[0]
+      if (!file) {
+        return
+      }
       if (!isAcceptedType(file, acceptList)) {
         const text = '文件格式不支持'
         setErrorMessage(text)

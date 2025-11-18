@@ -65,6 +65,7 @@ export function generateMetadata(options: {
     title: fullTitle,
     description,
     keywords: keywords.join(', '),
+    metadataBase: new URL(SITE_CONFIG.url),
     authors: [{ name: SITE_CONFIG.author.name, url: SITE_CONFIG.author.url }],
     creator: SITE_CONFIG.author.name,
     publisher: SITE_CONFIG.author.name,

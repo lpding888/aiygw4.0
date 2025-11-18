@@ -6,9 +6,9 @@
  */
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-import type { DOMPurifyI } from 'dompurify';
+import type { DOMPurify as DOMPurifyType } from 'dompurify';
 
-type DOMPurifyInstance = DOMPurifyI & typeof import('dompurify');
+type DOMPurifyInstance = DOMPurifyType & typeof import('dompurify');
 
 let DOMPurify: DOMPurifyInstance;
 

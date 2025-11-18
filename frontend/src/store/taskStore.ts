@@ -134,7 +134,7 @@ export const useTaskStore = create<TaskState>()(
 
             return newTask;
           } else {
-            throw new Error(payload?.message || '创建任务失败');
+            throw new Error(response.data?.message || '创建任务失败');
           }
         } catch (error: any) {
           console.error('创建任务失败:', error);
@@ -165,7 +165,7 @@ export const useTaskStore = create<TaskState>()(
               tasks: state.tasks.map(t => t.id === taskId ? task : t)
             }));
           } else {
-            throw new Error(payload?.message || '获取任务详情失败');
+            throw new Error(response.data?.message || '获取任务详情失败');
           }
         } catch (error: any) {
           console.error('获取任务详情失败:', error);
