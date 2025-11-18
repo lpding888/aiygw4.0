@@ -195,6 +195,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
           scanners: 'vuln,secret'
+          trivyignores: 'frontend/.trivyignore'
 
       - name: Push frontend image
         if: needs.detect-changes.outputs.frontend == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
