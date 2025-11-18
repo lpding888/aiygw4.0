@@ -228,6 +228,8 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           envs: DEPLOY_PATH
+          timeout: 15m
+          command_timeout: 15m
           script: |
             set -euo pipefail
 
