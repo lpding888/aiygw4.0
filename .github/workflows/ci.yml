@@ -155,6 +155,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
           scanners: 'vuln,secret'
+          trivyignores: 'backend/.trivyignore'
 
       - name: Push backend image
         if: needs.detect-changes.outputs.backend == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
