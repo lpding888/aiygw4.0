@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { Tabs, Form, Input, Button, message, Modal, Typography, Card, Segmented } from 'antd';
 import { MobileOutlined, SafetyOutlined, LockOutlined, MailOutlined, GiftOutlined } from '@ant-design/icons';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -36,7 +36,7 @@ type SetPasswordForm = {
   password: string;
 };
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const setAuth = useAuthStore((state) => state.setAuth);
@@ -686,5 +686,27 @@ export default function LoginPage() {
         </Form>
       </Modal>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        background: '#F9FAFB'
+      }}>
+        <Card style={{ maxWidth: '420px', padding: 32 }}>
+          <div style={{ textAlign: 'center' }}>
+            <Title level={2}>加载中...</Title>
+          </div>
+        </Card>
+      </div>
+    }>
+      <LoginPageContent />
+    </Suspense>
   );
 }
