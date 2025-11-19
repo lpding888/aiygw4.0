@@ -359,34 +359,32 @@ class AuthService implements AuthProvider {
     const code = generateCode(6);
     const expireAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    // 艹！先写数据库和缓存，确保数据一致性
-    // 只有在这些都成功后才发送邮件，避免邮件发送成功但数据未保存的情况
+    // 1. 先写数据库（必须成功）
+    await db('verification_codes').insert({
+      phone: null,
+      email: normalized,
+      code,
+      ip,
+      channel: 'email',
+      expireAt,
+      used: false,
+      created_at: new Date(),
+      updated_at: new Date()
+    });
+
+    // 2. 数据库成功后立即发送邮件（核心路径）
+    await sendVerificationEmail(normalized, code);
+
+    // 3. 缓存写入失败只记日志，不阻塞流程（非必需组件）
     try {
-      await db('verification_codes').insert({
-        phone: null,
-        email: normalized,
-        code,
-        ip,
-        channel: 'email',
-        expireAt,
-        used: false,
-        created_at: new Date(),
-        updated_at: new Date()
-      });
-
       await cacheService.set(`email:${normalized}`, code, { ttl: 5 * 60, skipMemoryCache: true });
-
-      // 最后发送邮件
-      await sendVerificationEmail(normalized, code);
-
-      logger.info(`[AuthService] 邮箱验证码已发送: email=${normalized}, ip=${ip}`);
-
-      return { expireIn: 300 };
-    } catch (error) {
-      // 如果数据库或缓存操作失败，记录错误但不发送邮件
-      logger.error(`[AuthService] 邮箱验证码保存失败: email=${normalized}, error=${error}`);
-      throw error;
+    } catch (cacheError) {
+      logger.warn(`[AuthService] 缓存写入失败（不影响业务）: email=${normalized}, error=${cacheError}`);
     }
+
+    logger.info(`[AuthService] 邮箱验证码已发送: email=${normalized}, ip=${ip}`);
+
+    return { expireIn: 300 };
   }
 
   /**

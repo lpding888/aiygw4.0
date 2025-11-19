@@ -42,18 +42,8 @@ export default function LoginPage() {
   const setAuth = useAuthStore((state) => state.setAuth);
 
   // ========== 邀请码处理 ==========
-  const [referralCode, setReferralCode] = useState<string>('');
-
-  // 从 URL 参数读取邀请码
-  useEffect(() => {
-    const refParam = searchParams?.get('ref') || searchParams?.get('referralCode');
-    if (refParam) {
-      setReferralCode(refParam);
-      // 自动填充到表单
-      phoneCodeForm.setFieldsValue({ referralCode: refParam });
-      emailRegisterForm.setFieldsValue({ referralCode: refParam });
-    }
-  }, [searchParams]);
+  // 从 URL 参数读取邀请码（只在组件初始化时执行一次）
+  const initialReferralCode = searchParams?.get('ref') || searchParams?.get('referralCode') || '';
 
   // ========== 外层：登录/注册模式 ==========
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -439,7 +429,13 @@ export default function LoginPage() {
         key: 'phone',
         label: '手机号注册',
         children: (
-          <Form layout="vertical" form={phoneCodeForm} onFinish={onPhoneRegister} autoComplete="off">
+          <Form
+            layout="vertical"
+            form={phoneCodeForm}
+            onFinish={onPhoneRegister}
+            autoComplete="off"
+            initialValues={{ referralCode: initialReferralCode }}
+          >
             <Form.Item
               name="phone"
               label="手机号"
@@ -498,7 +494,13 @@ export default function LoginPage() {
         key: 'email',
         label: '邮箱注册',
         children: (
-          <Form layout="vertical" form={emailRegisterForm} onFinish={onEmailRegister} autoComplete="off">
+          <Form
+            layout="vertical"
+            form={emailRegisterForm}
+            onFinish={onEmailRegister}
+            autoComplete="off"
+            initialValues={{ referralCode: initialReferralCode }}
+          >
             <Form.Item
               name="email"
               label="邮箱"
