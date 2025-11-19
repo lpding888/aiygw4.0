@@ -80,7 +80,7 @@ export default function Navigation() {
   };
 
   return (
-    <nav className="bg-white/5 backdrop-blur-md border-b border-white/10">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0f172a]/80 backdrop-blur-md border-b border-white/10 transition-all duration-300">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
@@ -153,12 +153,11 @@ export default function Navigation() {
                     px-4 py-2 rounded-lg
                     flex items-center gap-2
                     transition-all duration-300
-                    ${
-                      (item.exact
-                        ? pathname === item.key
-                        : pathname === item.key || pathname.startsWith(`${item.key}/`))
-                        ? 'bg-cyan-500/20 border border-cyan-400/50 text-cyan-300'
-                        : 'text-white/70 hover:bg-white/10 hover:text-white'
+                    ${(item.exact
+                      ? pathname === item.key
+                      : pathname === item.key || pathname.startsWith(`${item.key}/`))
+                      ? 'bg-cyan-500/20 border border-cyan-400/50 text-cyan-300'
+                      : 'text-white/70 hover:bg-white/10 hover:text-white'
                     }
                   `}
                 >
