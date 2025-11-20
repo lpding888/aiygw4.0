@@ -57,23 +57,6 @@ export interface AuthProvider {
   resetPasswordWithEmail(email: string, code: string, newPassword: string): Promise<boolean>;
 }
 
-/**
- * 生成6位数字验证码
- * 艹，简单有效！
- */
-function generateCode(length: number = 6): string {
-  return Math.floor(Math.random() * Math.pow(10, length))
-    .toString()
-    .padStart(length, '0');
-}
-
-/**
- * 生成ID
- */
-function generateId(length: number = 16): string {
-  return nanoid(length * 2);
-}
-
 interface VerificationCodeRecord {
   id: number;
   phone: string | null;
