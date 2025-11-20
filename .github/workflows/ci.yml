@@ -187,6 +187,12 @@ jobs:
           no-cache: true  # 强制重新构建，不使用缓存
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            NEXT_PUBLIC_API_BASE=https://api.aizhao.icu/api
+            NEXT_PUBLIC_API_URL=https://api.aizhao.icu/api
+            NEXT_PUBLIC_API_BASE_URL=https://api.aizhao.icu/api
+            NEXT_PUBLIC_WS_URL=wss://api.aizhao.icu
+            NEXT_PUBLIC_API_DOMAIN=https://api.aizhao.icu
 
       - name: Scan frontend image
         if: needs.detect-changes.outputs.frontend == 'true'
@@ -223,6 +229,8 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           envs: DEPLOY_PATH
+          timeout: 15m
+          command_timeout: 15m
           script: |
             set -euo pipefail
 
@@ -241,13 +249,13 @@ jobs:
             fi
 
             echo "拉取镜像..."
-            $DC -f docker-compose.prod.yml pull || true
+            sudo $DC -f docker-compose.prod.yml pull || true
 
             echo "启动服务..."
-            $DC -f docker-compose.prod.yml up -d --build
+            sudo $DC -f docker-compose.prod.yml up -d --build
 
             echo "列出服务状态..."
-            $DC -f docker-compose.prod.yml ps
+            sudo $DC -f docker-compose.prod.yml ps
 
             echo "清理无用镜像..."
-            docker image prune -f || true
+            sudo docker image prune -f || true
