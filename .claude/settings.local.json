@@ -31,9 +31,12 @@
       "Bash(docker compose:*)",
       "Bash(npm run build:*)",
       "Bash(test:*)",
-      "Bash(systemctl status:*)"
+      "Bash(systemctl status:*)",
+      "Bash(npm ls:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "outputStyle": "nekomata-engineer"
 }

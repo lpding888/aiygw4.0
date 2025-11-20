@@ -2,671 +2,338 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, Row, Col, Spin, Button, Space, Tag } from 'antd';
+import { Row, Col, Divider } from 'antd';
 import {
-  LoginOutlined,
-  CrownOutlined,
+  ArrowRightOutlined,
   ThunderboltFilled,
-  CheckCircleFilled,
-  RocketOutlined,
+  CameraOutlined,
+  SkinOutlined,
   ScissorOutlined,
-  UserOutlined,
-  VideoCameraOutlined,
-  BgColorsOutlined,
-  EditOutlined,
-  CompressOutlined,
-  ThunderboltOutlined,
-  ClockCircleOutlined,
-  FireOutlined,
-  FileImageOutlined
+  GlobalOutlined,
+  SafetyCertificateFilled,
+  RocketFilled
 } from '@ant-design/icons';
-import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 
 /**
- * HomePage - 首页
- *
- * 艹！突出服装服饰AI处理一站式服务，展示所有核心功能
+ * HomePage - 首页 (Visionary Tech - Chinese Unicorn Edition)
+ * 风格：Apple / OpenAI / Linear
+ * 核心概念：未来时尚基础设施 + 顶级专业团队
  */
 export default function HomePage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
-  const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  // 完整的功能列表（展示所有规划的功能）
-  const allFeatures = [
-    // 基础处理
-    {
-      id: 'basic_clean',
-      name: '智能抠图',
-      icon: <ScissorOutlined />,
-      category: '基础处理',
-      description: '一键去除背景，生成透明底或纯色底商品图',
-      features: ['自动识别主体', '边缘精细处理', '支持批量处理'],
-      quota: '1配额/张',
-      status: 'available',
-      gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-    },
-    {
-      id: 'background_change',
-      name: '背景替换',
-      icon: <BgColorsOutlined />,
-      category: '基础处理',
-      description: '智能更换图片背景，提供多种场景模板',
-      features: ['场景模板库', '自定义背景', '自动适配光影'],
-      quota: '2配额/张',
-      status: 'coming',
-      gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'
-    },
-    {
-      id: 'image_enhancement',
-      name: '图片增强',
-      icon: <EditOutlined />,
-      category: '基础处理',
-      description: '智能优化图片质量，提升清晰度和色彩',
-      features: ['智能降噪', '色彩增强', '锐化处理'],
-      quota: '1配额/张',
-      status: 'coming',
-      gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'
-    },
-    {
-      id: 'image_compress',
-      name: '智能压缩',
-      icon: <CompressOutlined />,
-      category: '基础处理',
-      description: '无损压缩图片，减小文件大小不损画质',
-      features: ['智能压缩算法', '保持画质', '批量处理'],
-      quota: '免费',
-      status: 'coming',
-      gradient: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)'
-    },
-    {
-      id: 'detail_page',
-      name: '一键详情页',
-      icon: <FileImageOutlined />,
-      category: '基础处理',
-      description: '自动生成电商详情页，智能排版布局专业美观',
-      features: ['智能排版', '多模板选择', '一键生成'],
-      quota: '5配额/页',
-      status: 'coming',
-      gradient: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-      hot: true
-    },
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-    // AI模特
-    {
-      id: 'model_pose12',
-      name: 'AI模特上身',
-      icon: <UserOutlined />,
-      category: 'AI模特',
-      description: '智能生成12张AI模特试穿效果，多角度展示',
-      features: ['12种姿势', '男女模特可选', '真实上身效果'],
-      quota: '10配额/次',
-      status: 'available',
-      gradient: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-      hot: true
-    },
-    {
-      id: 'qianzi_engine',
-      name: '千姿引擎',
-      icon: <ThunderboltFilled />,
-      category: 'AI模特',
-      description: '一张图秒变多姿态，千姿百态，电商、模特、服装专用',
-      features: ['一键多姿态', '千姿百态效果', '电商展示优化'],
-      quota: '8配额/次',
-      status: 'coming',
-      gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-      hot: true
-    },
-    {
-      id: 'model_custom',
-      name: '自定义模特',
-      icon: <UserOutlined />,
-      category: 'AI模特',
-      description: '上传模特照片，生成定制化试穿效果',
-      features: ['自定义模特', '保持人物特征', '高度还原'],
-      quota: '15配额/次',
-      status: 'coming',
-      gradient: 'linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%)'
-    },
-    {
-      id: 'batch_model',
-      name: '批量模特生成',
-      icon: <ThunderboltOutlined />,
-      category: 'AI模特',
-      description: '批量处理多款服装，快速生成模特图',
-      features: ['批量上传', '统一风格', '高效处理'],
-      quota: '8配额/张',
-      status: 'coming',
-      gradient: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)'
-    },
-    {
-      id: 'shoe_model',
-      name: '鞋模上脚',
-      icon: <ThunderboltFilled />,
-      category: 'AI模特',
-      description: '一键让鞋子自然"穿"在模特脚上，光影融合完美无瑕',
-      features: ['全自动化流程', '智能涂抹识别', '光影完美融合'],
-      quota: '6配额/次',
-      status: 'coming',
-      gradient: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-      hot: true
-    },
-
-    // 视频生成
-    {
-      id: 'video_generate',
-      name: '服装展示视频',
-      icon: <VideoCameraOutlined />,
-      category: '视频生成',
-      description: '自动生成服装展示短视频，多角度动态展示',
-      features: ['360度展示', '动态效果', '自动配乐'],
-      quota: '20配额/个',
-      status: 'coming',
-      gradient: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)',
-      hot: true
-    },
-    {
-      id: 'model_video',
-      name: '模特走秀视频',
-      icon: <VideoCameraOutlined />,
-      category: '视频生成',
-      description: 'AI生成模特走秀视频，专业T台效果',
-      features: ['T台走秀', '专业灯光', 'HD画质'],
-      quota: '30配额/个',
-      status: 'coming',
-      gradient: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)'
-    }
-  ];
-
-  const handleFeatureClick = (featureId: string, status: string) => {
-    if (status === 'coming') {
-      return; // 敬请期待的功能不可点击
-    }
-
-    if (!user) {
-      router.push('/login');
-    } else {
-      router.push(`/task/create/${featureId}`);
-    }
-  };
-
-  type FeatureItem = (typeof allFeatures)[number];
-  // 按类别分组
-  const groupedFeatures: Record<string, FeatureItem[]> = {};
-  allFeatures.forEach((feature) => {
-    const category = feature.category;
-    const bucket: FeatureItem[] = groupedFeatures[category] ?? [];
-    bucket.push(feature);
-    groupedFeatures[category] = bucket;
-  });
-  const groupedEntries = Object.entries(groupedFeatures);
+  if (!mounted) return null;
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#FFFFFF',
-      paddingBottom: '80px'
-    }}>
-      {/* Hero区域 */}
-      <div style={{
-        background: 'linear-gradient(135deg, #FFFFFF 0%, #FEF3C7 100%)',
-        borderBottom: '1px solid var(--border-primary)',
-        padding: '100px 24px 80px 24px',
-        position: 'relative',
-        overflow: 'hidden'
+    <div style={{ minHeight: '100vh', background: '#FFFFFF' }}>
+
+      {/* 1. 导航栏 (极简) */}
+      <nav style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '64px',
+        background: 'rgba(255,255,255,0.8)',
+        backdropFilter: 'blur(20px)',
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 24px',
+        borderBottom: '1px solid rgba(0,0,0,0.05)'
       }}>
-        {/* 装饰性光晕 */}
-        <div style={{
-          position: 'absolute',
-          top: '-50%',
-          right: '-10%',
-          width: '600px',
-          height: '600px',
-          background: 'radial-gradient(circle, rgba(234, 179, 8, 0.1) 0%, transparent 70%)',
-          borderRadius: '50%',
-          pointerEvents: 'none'
-        }} />
-        <div style={{
-          position: 'absolute',
-          bottom: '-30%',
-          left: '-5%',
-          width: '500px',
-          height: '500px',
-          background: 'radial-gradient(circle, rgba(217, 119, 6, 0.08) 0%, transparent 70%)',
-          borderRadius: '50%',
-          pointerEvents: 'none'
-        }} />
-
-        <div style={{
-          maxWidth: '1200px',
-          margin: '0 auto',
-          textAlign: 'center',
-          position: 'relative',
-          zIndex: 1
-        }}>
-          {/* 品牌标识 */}
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            marginBottom: '28px',
-            padding: '8px 20px',
-            background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)',
-            borderRadius: '24px',
-            border: '2px solid #FCD34D',
-            boxShadow: '0 4px 12px rgba(252, 211, 77, 0.3)'
-          }}>
-            <RocketOutlined style={{ fontSize: '18px', color: '#D97706' }} />
-            <span style={{
-              color: '#92400E',
-              fontSize: '14px',
-              fontWeight: 600,
-              letterSpacing: '0.5px'
-            }}>
-              服装服饰 AI 处理一站式平台
-            </span>
-          </div>
-
-          {/* 主标题 */}
-          <h1 style={{
-            fontSize: '64px',
-            fontWeight: 700,
-            background: 'linear-gradient(135deg, #1F2937 0%, #92400E 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-            marginBottom: '24px',
-            letterSpacing: '-2px',
-            lineHeight: '1.1'
-          }}>
-            专业服装AI处理平台
-          </h1>
-
-          {/* 副标题 */}
-          <p style={{
-            fontSize: '20px',
-            color: '#374151',
-            marginBottom: '32px',
-            lineHeight: '1.8',
-            fontWeight: 500,
-            maxWidth: '800px',
-            margin: '0 auto 32px auto'
-          }}>
-            <strong style={{ color: '#92400E' }}>一站式解决</strong>
-            所有服装图片处理需求
-            <br />
-            从基础修图到AI换装，从静态图片到动态视频
-          </p>
-
-          {/* 核心功能亮点 */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            gap: '32px',
-            marginBottom: '48px',
-            flexWrap: 'wrap'
-          }}>
-            {[
-              { icon: '🎨', text: '智能抠图去背景' },
-              { icon: '👗', text: 'AI模特上身展示' },
-              { icon: '🎬', text: '视频自动生成' },
-              { icon: '⚡', text: '批量快速处理' }
-            ].map((item, idx) => (
-              <div
-                key={idx}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '12px 24px',
-                  background: 'rgba(255, 255, 255, 0.9)',
-                  borderRadius: '16px',
-                  border: '1.5px solid #E5E7EB',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
-                }}
-              >
-                <span style={{ fontSize: '24px' }}>{item.icon}</span>
-                <span style={{
-                  fontSize: '15px',
-                  fontWeight: 500,
-                  color: '#1F2937'
-                }}>
-                  {item.text}
-                </span>
-                <CheckCircleFilled style={{ fontSize: '16px', color: '#10B981' }} />
-              </div>
-            ))}
-          </div>
-
-          {/* CTA按钮 */}
+        <div style={{ fontWeight: 700, fontSize: '20px', letterSpacing: '-0.5px' }}>
+          AI.FASHION <span style={{ fontSize: '12px', fontWeight: 400, color: '#86868B', marginLeft: '8px' }}>PRO</span>
+        </div>
+        <div style={{ display: 'flex', gap: '16px' }}>
           {user ? (
-            <Button
-              type="primary"
-              size="large"
-              icon={<CrownOutlined />}
-              onClick={() => router.push('/workspace')}
-              style={{
-                height: '56px',
-                fontSize: '17px',
-                padding: '0 56px',
-                fontWeight: 600,
-                borderRadius: '28px',
-                boxShadow: '0 8px 24px rgba(146, 64, 14, 0.35)'
-              }}
-            >
-              进入工作台
-            </Button>
+            <button className="btn-vision" onClick={() => router.push('/workspace')}>
+              进入控制台
+            </button>
           ) : (
-            <Space direction="vertical" size={20}>
-              <Button
-                type="primary"
-                size="large"
-                icon={<LoginOutlined />}
+            <>
+              <button
+                className="btn-vision-secondary"
                 onClick={() => router.push('/login')}
-                style={{
-                  height: '56px',
-                  fontSize: '17px',
-                  padding: '0 56px',
-                  fontWeight: 600,
-                  borderRadius: '28px',
-                  boxShadow: '0 8px 24px rgba(146, 64, 14, 0.35)'
-                }}
+                style={{ padding: '8px 20px', fontSize: '14px' }}
               >
-                免费开始使用
-              </Button>
-              <div style={{
-                color: '#6B7280',
-                fontSize: '14px'
-              }}>
-                <span>↓</span> 浏览下方所有功能，注册即可使用
-              </div>
-            </Space>
+                登录
+              </button>
+              <button
+                className="btn-vision"
+                onClick={() => router.push('/login')}
+                style={{ padding: '8px 20px', fontSize: '14px' }}
+              >
+                免费试用
+              </button>
+            </>
           )}
+        </div>
+      </nav>
 
-          {/* 数据展示 */}
+      {/* 2. Hero 区域 (定义标准) */}
+      <section style={{
+        padding: '180px 24px 120px',
+        maxWidth: '1200px',
+        margin: '0 auto',
+        textAlign: 'center'
+      }}>
+        <div className="animate-fade-up">
           <div style={{
-            marginTop: '56px',
-            display: 'flex',
-            justifyContent: 'center',
-            gap: '56px',
-            flexWrap: 'wrap'
+            display: 'inline-block',
+            padding: '6px 16px',
+            background: '#F5F5F7',
+            borderRadius: '99px',
+            color: '#0071E3',
+            fontSize: '14px',
+            fontWeight: 600,
+            marginBottom: '24px'
           }}>
-            {[
-              { value: '10万+', label: '服装商家' },
-              { value: '500万+', label: '图片处理' },
-              { value: '99.9%', label: '客户满意度' }
-            ].map((stat, idx) => (
-              <div key={idx} style={{ textAlign: 'center' }}>
-                <div style={{
-                  fontSize: '32px',
-                  fontWeight: 700,
-                  color: '#92400E',
-                  marginBottom: '8px'
-                }}>
-                  {stat.value}
-                </div>
-                <div style={{
-                  fontSize: '14px',
-                  color: '#6B7280',
-                  fontWeight: 500
-                }}>
-                  {stat.label}
-                </div>
-              </div>
-            ))}
+            全新 4.0 版本发布
+          </div>
+          <h1 className="hero-title" style={{ marginBottom: '24px' }}>
+            重塑电商视觉流，<br />
+            定义未来时尚标准。
+          </h1>
+          <p className="hero-subtitle" style={{ maxWidth: '640px', margin: '0 auto 48px' }}>
+            您的 AI 首席设计团队已就位。从拍摄到修图，全流程智能化。<br />
+            基于百亿级时尚图库训练，懂面料，更懂光影。
+          </p>
+
+          <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+            <button
+              className="btn-vision"
+              onClick={() => router.push(user ? '/workspace' : '/login')}
+              style={{ padding: '20px 48px', fontSize: '18px' }}
+            >
+              立即体验 <ArrowRightOutlined />
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* 功能展示区域 */}
-      <div style={{
-        maxWidth: '1400px',
-        margin: '0 auto',
-        padding: '80px 24px'
-      }}>
-        {/* 区域标题 */}
-        <div style={{
-          textAlign: 'center',
-          marginBottom: '64px'
+        {/* 视觉演示 (Visual Demo) - 全球算力网络 */}
+        <div className="animate-fade-up delay-200" style={{
+          marginTop: '100px',
+          borderRadius: '32px',
+          overflow: 'hidden',
+          boxShadow: '0 40px 80px rgba(0,0,0,0.12)',
+          position: 'relative',
+          background: '#000',
+          aspectRatio: '21/9',
+          color: '#FFF'
         }}>
-          <h2 style={{
-            fontSize: '36px',
-            fontWeight: 700,
-            color: '#1F2937',
-            marginBottom: '16px'
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'url(/images/global_network.png) center/cover',
+            opacity: 0.8
+          }} />
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(to top, #000 0%, transparent 100%)'
+          }} />
+          <div style={{
+            position: 'absolute',
+            bottom: '40px',
+            left: '40px',
+            textAlign: 'left'
           }}>
-            全方位服装处理解决方案
-          </h2>
-          <p style={{
-            fontSize: '16px',
-            color: '#6B7280',
-            maxWidth: '600px',
-            margin: '0 auto'
-          }}>
-            涵盖基础修图、AI模特、视频生成等12大核心功能
-          </p>
+            <div style={{ fontSize: '14px', color: '#86868B', marginBottom: '8px', letterSpacing: '1px' }}>INFRASTRUCTURE</div>
+            <div style={{ fontSize: '32px', fontWeight: 700, marginBottom: '8px' }}>全球算力网络</div>
+            <div style={{ fontSize: '16px', color: 'rgba(255,255,255,0.8)' }}>12 个数据中心 · 千卡集群 · 毫秒级响应</div>
+          </div>
         </div>
+      </section>
 
-        {/* 功能卡片 */}
-        {groupedEntries.map(([category, features], catIdx) => (
-          <div
-            key={category}
-            style={{
-              marginBottom: catIdx === groupedEntries.length - 1 ? 0 : '72px'
-            }}
-          >
-            {/* 分类标题 */}
-            <div style={{
-              marginBottom: '40px',
-              textAlign: 'center'
-            }}>
-              <h3 style={{
-                fontSize: '28px',
-                fontWeight: 700,
-                color: '#1F2937',
-                marginBottom: '12px'
-              }}>
-                {category}
-              </h3>
+      {/* 3. Bento Grid 功能区 (专业团队) */}
+      <section style={{
+        padding: '120px 24px',
+        background: '#F5F5F7'
+      }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+          <div style={{ marginBottom: '80px', textAlign: 'center' }}>
+            <h2 style={{ fontSize: '48px', fontWeight: 700, letterSpacing: '-1px', marginBottom: '16px' }}>
+              不仅仅是工具，<br />更是您的顶级创意团队。
+            </h2>
+            <p style={{ fontSize: '20px', color: '#86868B' }}>
+              全天候待命，无需沟通成本，输出即是行业标准。
+            </p>
+          </div>
+
+          {/* Grid 布局 */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(12, 1fr)',
+            gridTemplateRows: 'repeat(2, minmax(320px, auto))',
+            gap: '24px'
+          }}>
+
+            {/* 卡片 1: AI 首席摄影师 (大) */}
+            <div className="bento-card bento-card-dark" style={{ gridColumn: 'span 8', gridRow: 'span 2' }}>
+              {/* 背景图 */}
               <div style={{
-                width: '60px',
-                height: '4px',
-                background: 'linear-gradient(90deg, #92400E, #D97706)',
-                borderRadius: '2px',
-                margin: '0 auto'
+                position: 'absolute',
+                inset: 0,
+                background: 'url(/images/photographer.png) center/cover',
+                opacity: 0.7,
+                transition: 'transform 0.7s ease'
+              }} className="card-bg" />
+              <div style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'linear-gradient(to right, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.2) 100%)',
+                zIndex: 1
+              }} />
+
+              <div style={{ position: 'relative', zIndex: 2, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                    <CameraOutlined style={{ fontSize: '24px', color: '#FFF' }} />
+                    <span style={{ fontSize: '14px', fontWeight: 600, color: 'rgba(255,255,255,0.8)', letterSpacing: '1px' }}>CORE MODULE</span>
+                  </div>
+                  <h3 style={{ fontSize: '40px', fontWeight: 700, marginBottom: '16px' }}>AI 首席摄影师</h3>
+                  <p style={{ fontSize: '18px', color: 'rgba(255,255,255,0.9)', maxWidth: '480px', lineHeight: '1.6' }}>
+                    无需租赁影棚，无需预约模特。上传平铺图，即刻生成媲美《VOGUE》大片的商业摄影作品。支持全球 50+ 种地域面孔，完美适配跨境电商。
+                  </p>
+                </div>
+                <div style={{ marginTop: '40px' }}>
+                  <button className="btn-vision" style={{ background: '#FFF', color: '#000' }}>
+                    开始创作 <ArrowRightOutlined />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* 卡片 2: AI 搭配总监 (中) */}
+            <div className="bento-card" style={{ gridColumn: 'span 4', gridRow: 'span 1' }}>
+              <div style={{ position: 'relative', zIndex: 2 }}>
+                <SkinOutlined style={{ fontSize: '32px', color: '#0071E3', marginBottom: '24px' }} />
+                <h3 style={{ fontSize: '24px', fontWeight: 600, marginBottom: '12px' }}>AI 搭配总监</h3>
+                <p style={{ color: '#86868B', lineHeight: '1.6', fontSize: '14px' }}>
+                  洞察全球流行趋势，一键生成爆款搭配。让单品不再孤单，提升连带率。
+                </p>
+              </div>
+              {/* 底部配图 */}
+              <div style={{
+                position: 'absolute',
+                bottom: 0,
+                right: 0,
+                left: 0,
+                height: '120px',
+                background: 'url(/images/stylist.png) center/cover',
+                maskImage: 'linear-gradient(to top, black 0%, transparent 100%)',
+                WebkitMaskImage: 'linear-gradient(to top, black 0%, transparent 100%)',
+                opacity: 0.8
               }} />
             </div>
 
-            {/* 功能卡片网格 */}
-            <Row gutter={[24, 24]}>
-              {features.map((feature) => (
-                <Col key={feature.id} xs={24} sm={12} lg={8} xl={6}>
-                  <Card
-                    hoverable={feature.status === 'available'}
-                    onClick={() => handleFeatureClick(feature.id, feature.status)}
-                    style={{
-                      height: '100%',
-                      borderRadius: '16px',
-                      border: '2px solid #F3F4F6',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                      cursor: feature.status === 'available' ? 'pointer' : 'default',
-                      position: 'relative',
-                      overflow: 'hidden',
-                      transition: 'all 0.3s ease'
-                    }}
-                    bodyStyle={{ padding: '24px' }}
-                  >
-                    {/* 渐变背景装饰 */}
-                    <div style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: '6px',
-                      background: feature.gradient
-                    }} />
-
-                    {/* 状态标签 */}
-                    <div style={{
-                      position: 'absolute',
-                      top: '16px',
-                      right: '16px',
-                      display: 'flex',
-                      gap: '8px'
-                    }}>
-                      {feature.hot && (
-                        <Tag color="red" icon={<FireOutlined />}>
-                          热门
-                        </Tag>
-                      )}
-                      {feature.status === 'coming' && (
-                        <Tag color="default" icon={<ClockCircleOutlined />}>
-                          即将上线
-                        </Tag>
-                      )}
-                    </div>
-
-                    {/* 图标 */}
-                    <div style={{
-                      width: '56px',
-                      height: '56px',
-                      borderRadius: '14px',
-                      background: feature.gradient,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginBottom: '20px',
-                      fontSize: '28px',
-                      color: '#FFF'
-                    }}>
-                      {feature.icon}
-                    </div>
-
-                    {/* 标题 */}
-                    <h4 style={{
-                      fontSize: '18px',
-                      fontWeight: 600,
-                      color: '#1F2937',
-                      marginBottom: '12px'
-                    }}>
-                      {feature.name}
-                    </h4>
-
-                    {/* 描述 */}
-                    <p style={{
-                      fontSize: '14px',
-                      color: '#6B7280',
-                      lineHeight: '1.6',
-                      marginBottom: '16px',
-                      minHeight: '42px'
-                    }}>
-                      {feature.description}
-                    </p>
-
-                    {/* 功能特点 */}
-                    <div style={{
-                      marginBottom: '16px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '8px'
-                    }}>
-                      {feature.features.map((feat, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            fontSize: '13px',
-                            color: '#9CA3AF',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px'
-                          }}
-                        >
-                          <CheckCircleFilled style={{ fontSize: '12px', color: '#10B981' }} />
-                          {feat}
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* 配额信息 */}
-                    <div style={{
-                      paddingTop: '16px',
-                      borderTop: '1px solid #F3F4F6',
-                      fontSize: '13px',
-                      color: '#92400E',
-                      fontWeight: 500
-                    }}>
-                      💰 {feature.quota}
-                    </div>
-                  </Card>
-                </Col>
-              ))}
-            </Row>
-          </div>
-        ))}
-      </div>
-
-      {/* 底部CTA */}
-      {!user && (
-        <div style={{
-          maxWidth: '1000px',
-          margin: '0 auto',
-          padding: '0 24px'
-        }}>
-          <Card
-            style={{
-              textAlign: 'center',
-              borderRadius: '20px',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
-              border: '2px solid #F3F4F6',
-              padding: '48px 32px',
-              background: 'linear-gradient(135deg, #FFFFFF 0%, #FEFCE8 100%)'
-            }}
-          >
-            <ThunderboltFilled style={{
-              fontSize: '48px',
-              color: '#F59E0B',
-              marginBottom: '24px'
-            }} />
-
-            <div style={{ marginBottom: '32px' }}>
-              <h3 style={{
-                fontSize: '28px',
-                fontWeight: 700,
-                color: '#1F2937',
-                marginBottom: '16px'
-              }}>
-                立即体验服装AI一站式处理
-              </h3>
-              <p style={{
-                fontSize: '16px',
-                color: '#6B7280',
-                marginBottom: 0,
-                lineHeight: '1.7'
-              }}>
-                注册即可免费使用基础功能，快速提升店铺转化率
-              </p>
+            {/* 卡片 3: AI 视觉工程师 (中) */}
+            <div className="bento-card" style={{ gridColumn: 'span 4', gridRow: 'span 1' }}>
+              <div style={{ position: 'relative', zIndex: 2 }}>
+                <ScissorOutlined style={{ fontSize: '32px', color: '#FF9500', marginBottom: '24px' }} />
+                <h3 style={{ fontSize: '24px', fontWeight: 600, marginBottom: '12px' }}>AI 视觉工程师</h3>
+                <p style={{ color: '#86868B', lineHeight: '1.6', fontSize: '14px' }}>
+                  像素级精修，自动处理复杂边缘与透明材质。还原面料真实质感，拒绝“塑料感”。
+                </p>
+              </div>
+              {/* 底部配图 */}
+              <div style={{
+                position: 'absolute',
+                bottom: 0,
+                right: 0,
+                left: 0,
+                height: '120px',
+                background: 'url(/images/engineer.png) center/cover',
+                maskImage: 'linear-gradient(to top, black 0%, transparent 100%)',
+                WebkitMaskImage: 'linear-gradient(to top, black 0%, transparent 100%)',
+                opacity: 0.8
+              }} />
             </div>
 
-            <Button
-              type="primary"
-              size="large"
-              icon={<LoginOutlined />}
-              onClick={() => router.push('/login')}
-              style={{
-                height: '56px',
-                fontSize: '17px',
-                padding: '0 56px',
-                fontWeight: 600,
-                borderRadius: '28px',
-                boxShadow: '0 8px 24px rgba(146, 64, 14, 0.35)'
-              }}
-            >
-              免费注册开始使用
-            </Button>
-          </Card>
+          </div>
+
+          {/* 第二行 Grid (数据与安全) */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '24px',
+            marginTop: '24px'
+          }}>
+            <div className="bento-card">
+              <GlobalOutlined style={{ fontSize: '32px', marginBottom: '24px', color: '#1D1D1F' }} />
+              <h3 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '8px' }}>全球网络</h3>
+              <p style={{ color: '#86868B', fontSize: '14px' }}>CDN 节点覆盖全球，创意即刻送达。</p>
+            </div>
+            <div className="bento-card">
+              <SafetyCertificateFilled style={{ fontSize: '32px', marginBottom: '24px', color: '#34C759' }} />
+              <h3 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '8px' }}>企业级安全</h3>
+              <p style={{ color: '#86868B', fontSize: '14px' }}>银行级数据加密，保障设计资产安全。</p>
+            </div>
+            <div className="bento-card">
+              <RocketFilled style={{ fontSize: '32px', marginBottom: '24px', color: '#5856D6' }} />
+              <h3 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '8px' }}>10倍效率</h3>
+              <p style={{ color: '#86868B', fontSize: '14px' }}>从 3 天缩短至 3 分钟，上新快人一步。</p>
+            </div>
+          </div>
+
         </div>
-      )}
+      </section>
+
+      {/* 4. 行业影响力 (Social Proof) */}
+      <section style={{ padding: '100px 24px', textAlign: 'center', background: '#FFF' }}>
+        <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+          <p style={{ fontSize: '14px', fontWeight: 600, color: '#86868B', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '40px' }}>
+            TRUSTED BY 500+ INDUSTRY LEADERS
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '60px', opacity: 0.4, filter: 'grayscale(100%)' }}>
+            {/* 模拟 Logo */}
+            <div style={{ fontSize: '28px', fontWeight: 800, fontFamily: 'Arial' }}>NIKE</div>
+            <div style={{ fontSize: '28px', fontWeight: 800, fontFamily: 'Times New Roman' }}>ZARA</div>
+            <div style={{ fontSize: '28px', fontWeight: 800, fontFamily: 'Helvetica' }}>SHEIN</div>
+            <div style={{ fontSize: '28px', fontWeight: 800, fontFamily: 'Impact' }}>UNIQLO</div>
+          </div>
+
+          <div style={{ marginTop: '80px', padding: '40px', background: '#F5F5F7', borderRadius: '24px' }}>
+            <p style={{ fontSize: '24px', fontWeight: 500, fontStyle: 'italic', color: '#1D1D1F', marginBottom: '24px' }}>
+              "AI.FASHION 彻底改变了我们的上新流程。它不是一个工具，而是我们最核心的生产力部门。"
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+              <div style={{ width: '40px', height: '40px', background: '#DDD', borderRadius: '50%' }} />
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontWeight: 600 }}>Sarah Chen</div>
+                <div style={{ fontSize: '12px', color: '#86868B' }}>某跨境电商独角兽 运营总监</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 5. 底部 CTA */}
+      <section style={{ padding: '120px 24px', background: '#000', color: '#FFF', textAlign: 'center' }}>
+        <h2 style={{ fontSize: '48px', fontWeight: 700, marginBottom: '24px' }}>
+          准备好引领行业变革了吗？
+        </h2>
+        <p style={{ fontSize: '20px', color: '#86868B', marginBottom: '48px' }}>
+          加入数千家先锋企业的行列，开启智能时尚时代。
+        </p>
+        <button
+          className="btn-vision"
+          style={{ background: '#FFF', color: '#000', padding: '20px 60px', fontSize: '20px' }}
+          onClick={() => router.push('/login')}
+        >
+          立即开始
+        </button>
+      </section>
+
     </div>
   );
 }

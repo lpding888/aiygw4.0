@@ -229,87 +229,55 @@ export class AuthController {
   }
 
   /**
-   * 用户登录
-   * POST /api/auth/login
+   * 用户登录 (密码)
+   * POST /api/auth/login/password
    */
   async loginPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { phone, password } = req.body;
+      const { phone, email, account, password } = req.body;
+      const loginAccount = account || phone || email;
 
       // 艹，基础校验
-      if (!phone || !password) {
+      if (!loginAccount || !password) {
         res.status(400).json({
           success: false,
           error: {
             code: 'VALIDATION_ERROR',
-            message: '手机号和密码不能为空'
+            message: '账号和密码不能为空'
           }
         });
         return;
       }
 
-      // 查找用户
-      const user = await userRepo.findUserByPhone(phone);
-      if (!user) {
-        res.status(401).json({
-          success: false,
-          error: {
-            code: 'INVALID_CREDENTIALS',
-            message: '手机号或密码错误'
-          }
-        });
-        return;
-      }
-
-      // 艹，验证密码！
-      if (!user.password) {
-        res.status(401).json({
-          success: false,
-          error: {
-            code: 'PASSWORD_NOT_SET',
-            message: '该账号未设置密码，请联系管理员'
-          }
-        });
-        return;
-      }
-
-      const passwordMatch = await bcrypt.compare(password, user.password);
-      if (!passwordMatch) {
-        res.status(401).json({
-          success: false,
-          error: {
-            code: 'INVALID_CREDENTIALS',
-            message: '手机号或密码错误'
-          }
-        });
-        return;
-      }
-
-      // 生成Token
-      const { accessToken, refreshToken } = tokenService.generateTokenPair({
-        id: user.id,
-        phone: user.phone ?? undefined,
-        role: user.role
-      });
+      const result = await authService.loginWithPassword(loginAccount, password);
 
       // 艹，设置Cookie！
-      res.cookie('access_token', accessToken, COOKIE_OPTIONS);
-      res.cookie('refresh_token', refreshToken, COOKIE_OPTIONS);
-      res.cookie('roles', user.role, { ...COOKIE_OPTIONS, httpOnly: false }); // roles可以被JS读取
-
-      // 返回用户信息（不含密码）
-      const safeUser = userRepo.toSafeUser(user);
+      res.cookie('access_token', result.accessToken, COOKIE_OPTIONS);
+      res.cookie('refresh_token', result.refreshToken, COOKIE_OPTIONS);
+      res.cookie('roles', result.user.role, { ...COOKIE_OPTIONS, httpOnly: false });
 
       res.json({
         success: true,
         data: {
-          user: safeUser,
-          access_token: accessToken,
-          refresh_token: refreshToken
+          user: result.user,
+          access_token: result.accessToken,
+          refresh_token: result.refreshToken
         }
       });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
+      // 统一错误提示，避免泄露账号是否存在
+      if (err.message.includes('账号或密码错误') || err.message.includes('用户不存在')) {
+        res.status(401).json({
+          success: false,
+          error: {
+            code: 'INVALID_CREDENTIALS',
+            message: '账号或密码错误'
+          }
+        });
+        return;
+      }
+
       console.error('[AuthController] 登录失败:', err.message);
       next(error);
     }

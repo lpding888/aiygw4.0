@@ -87,7 +87,7 @@ interface VerificationCodeRecord {
  * 认证服务类
  */
 class AuthService implements AuthProvider {
-  constructor(private readonly tokenSigner: TokenSigner = tokenService) {}
+  constructor(private readonly tokenSigner: TokenSigner = tokenService) { }
   /**
    * 发送验证码
    * 艹，防刷限制一定要做！
@@ -272,13 +272,20 @@ class AuthService implements AuthProvider {
 
   /**
    * 密码登录
-   * 艹，备用登录方式！
+   * 艹，备用登录方式！支持手机号或邮箱
    */
-  async loginWithPassword(phone: string, password: string): Promise<AuthResult> {
+  async loginWithPassword(account: string, password: string): Promise<AuthResult> {
     // 1. 查找用户
-    const user = await userRepo.findUserByPhone(phone);
+    let user: userRepo.User | null = null;
+
+    if (this.isValidEmail(account)) {
+      user = await userRepo.findUserByEmail(account);
+    } else {
+      user = await userRepo.findUserByPhone(account);
+    }
+
     if (!user) {
-      throw new Error('手机号或密码错误');
+      throw new Error('账号或密码错误');
     }
 
     // 2. 验证密码
@@ -288,13 +295,13 @@ class AuthService implements AuthProvider {
 
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) {
-      throw new Error('手机号或密码错误');
+      throw new Error('账号或密码错误');
     }
 
     // 3. 生成Token对
     const tokens = this.tokenSigner.generateTokenPair(this.buildTokenUser(user));
 
-    logger.info(`[AuthService] 密码登录成功: userId=${user.id}, phone=${phone}`);
+    logger.info(`[AuthService] 密码登录成功: userId=${user.id}, account=${account}`);
 
     return {
       ...tokens,
