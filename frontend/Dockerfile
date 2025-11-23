@@ -35,7 +35,17 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Next.js构建Standalone产物
-RUN npm run build
+# 调试：显示文件结构和 Next.js 版本
+RUN echo "===== 检查项目结构 =====" && \
+    ls -la && \
+    echo "===== 检查 Next.js 配置 =====" && \
+    ls -la next.config.* && \
+    echo "===== Next.js 版本 =====" && \
+    npx next --version && \
+    echo "===== 开始构建 =====" && \
+    npm run build && \
+    echo "===== 构建完成，检查输出目录 =====" && \
+    ls -la .next/
 
 # ========== 运行阶段 ==========
 FROM node:20-alpine AS runner
