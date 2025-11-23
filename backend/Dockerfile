@@ -7,7 +7,18 @@ FROM node:20-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+
+# 调试：显示文件结构和 TypeScript 版本
+RUN echo "===== 检查项目结构 =====" && \
+    ls -la && \
+    echo "===== 检查 TypeScript 配置 =====" && \
+    ls -la tsconfig*.json && \
+    echo "===== TypeScript 版本 =====" && \
+    npx tsc --version && \
+    echo "===== 开始构建 =====" && \
+    npm run build && \
+    echo "===== 构建完成，检查输出目录 =====" && \
+    ls -la dist/
 
 FROM node:20-alpine AS runner
 WORKDIR /app
