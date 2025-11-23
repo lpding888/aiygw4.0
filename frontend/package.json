@@ -55,6 +55,7 @@
     "combined-stream": "^1.0.8",
     "cos-js-sdk-v5": "^1.7.0",
     "critters": "0.0.20",
+    "date-fns": "3.6.0",
     "dayjs": "^1.11.10",
     "delayed-stream": "^1.0.0",
     "fabric": "6.7.1",
