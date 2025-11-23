@@ -139,7 +139,7 @@ export default function PipelineEditorStep({
 
         message.success('Pipeline已保存');
       } else {
-        throw new Error(response.message || '保存失败');
+        throw new Error(response.data.message || '保存失败');
       }
     } catch (error: any) {
       message.error(`保存Pipeline失败: ${error.message || '未知错误'}`);
@@ -195,7 +195,7 @@ export default function PipelineEditorStep({
               ),
             });
           } else {
-            throw new Error(response.message || '执行失败');
+            throw new Error(response.data.message || '执行失败');
           }
         } catch (error: any) {
           message.error(`执行Pipeline失败: ${error.message || '未知错误'}`);
