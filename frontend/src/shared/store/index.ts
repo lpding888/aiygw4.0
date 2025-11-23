@@ -37,7 +37,7 @@ export const useAppStore = create<AppStore>()(
       }),
       {
         name: 'ai-wardrobe-storage', // 艹，localStorage的key
-        storage: createJSONStorage(() => localStorage),
+        storage: createJSONStorage(() => (typeof window !== 'undefined' ? localStorage : { getItem: () => null, setItem: () => { }, removeItem: () => { } })),
 
         // 艹，部分持久化配置
         partialize: (state) => ({

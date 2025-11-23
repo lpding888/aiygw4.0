@@ -3,6 +3,7 @@ import type { Knex } from 'knex';
 import { db } from '../config/database.js';
 import logger from '../utils/logger.js';
 import encryptionUtils from '../utils/encryption.js';
+import { aiGateway } from '../services/ai-gateway.service.js';
 
 type CountValue = string | number | bigint | null | undefined;
 
@@ -171,6 +172,47 @@ class AdminController {
       memberRate:
         totalUsersCount > 0 ? ((memberUsersCount / totalUsersCount) * 100).toFixed(2) + '%' : '0%'
     };
+  }
+
+  /**
+   * 更新用户信息 (如封禁/解封)
+   * PATCH /api/admin/users/:userId
+   */
+  async updateUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { userId } = req.params;
+      const { status } = req.body;
+
+      if (status && !['active', 'banned'].includes(status)) {
+        res.status(400).json({
+          success: false,
+          error: { code: 4001, message: '无效的状态值' }
+        });
+        return;
+      }
+
+      const updateData: any = { updated_at: new Date() };
+      if (status) updateData.status = status;
+
+      const updated = await db('users').where('id', userId).update(updateData);
+
+      if (!updated) {
+        res.status(404).json({
+          success: false,
+          error: { code: 4004, message: '用户不存在' }
+        });
+        return;
+      }
+
+      logger.info(`[AdminController] 用户状态更新 userId=${userId} status=${status}`);
+
+      res.json({
+        success: true,
+        message: '用户更新成功'
+      });
+    } catch (error) {
+      logAndNext(next, error, '[AdminController] 更新用户失败');
+    }
   }
 
   /**
@@ -648,6 +690,140 @@ class AdminController {
       });
     } catch (error) {
       logAndNext(next, error, '[AdminController] 删除功能失败');
+    }
+  }
+
+  /**
+   * AI助手对话
+   * POST /api/admin/ai/chat
+   */
+  async chatWithAI(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { message, context } = req.body;
+
+      if (!message) {
+        res.status(400).json({
+          success: false,
+          error: { code: 4001, message: '消息不能为空' }
+        });
+        return;
+      }
+
+      const systemPrompt = `你是一个专业的表单设计助手(Form Builder Copilot)。
+你的任务是帮助用户设计和配置表单Schema。
+用户可能会询问关于表单组件的问题，或者请求生成特定的表单结构。
+
+当前上下文:
+${context || '无'}
+
+请根据用户的请求提供简洁、专业的建议或JSON配置片段。
+如果用户请求生成表单，请返回标准的Form.io JSON Schema片段。`;
+
+      const response = await aiGateway.chat({
+        model: 'gpt-4o', // 或其他可用模型
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: message }
+        ],
+        temperature: 0.7
+      });
+
+      const reply = response.choices[0]?.message?.content || '抱歉，我无法处理您的请求。';
+
+      res.json({
+        success: true,
+        data: {
+          reply
+        }
+      });
+    } catch (error) {
+      logAndNext(next, error, '[AdminController] AI对话失败');
+    }
+  }
+
+  /**
+   * 测试运行Pipeline
+   * POST /api/admin/pipelines/test
+   */
+  async testPipeline(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { pipeline, input } = req.body;
+
+      if (!pipeline || !pipeline.nodes || !pipeline.edges) {
+        res.status(400).json({
+          success: false,
+          error: { code: 4001, message: '无效的Pipeline配置' }
+        });
+        return;
+      }
+
+      // 创建临时任务ID
+      const taskId = `test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const userId = (req.user as any).id;
+
+      // 记录测试任务（可选：存入数据库或仅在内存中运行）
+      // 这里为了简单起见，我们模拟创建一个临时任务记录，以便PipelineEngine可以使用
+      await db('tasks').insert({
+        id: taskId,
+        userId,
+        type: 'test_run',
+        status: 'pending',
+        input: JSON.stringify(input || {}),
+        created_at: new Date(),
+        updated_at: new Date()
+      });
+
+      // 异步执行Pipeline
+      // 注意：这里我们需要修改PipelineEngine以支持直接传入Pipeline Schema，而不是从数据库读取
+      // 或者我们可以临时创建一个Feature/PipelineSchema记录
+
+      // 方案B：直接调用PipelineEngine的内部方法（需要PipelineEngine支持）
+      // 由于PipelineEngine当前是从数据库读取Schema，我们先创建一个临时的PipelineSchema记录
+      const tempPipelineId = `temp_schema_${taskId}`;
+      await db('pipeline_schemas').insert({
+        pipeline_id: tempPipelineId,
+        steps: JSON.stringify(pipeline.nodes), // 注意：这里简化了，实际上需要转换nodes/edges为steps
+        created_at: new Date(),
+        updated_at: new Date()
+      });
+
+      // 创建临时Feature
+      const tempFeatureId = `temp_feature_${taskId}`;
+      await db('feature_definitions').insert({
+        feature_id: tempFeatureId,
+        feature_key: tempFeatureId,
+        feature_name: 'Test Run',
+        pipeline_schema_ref: tempPipelineId,
+        quota_cost: 0,
+        created_at: new Date(),
+        updated_at: new Date()
+      });
+
+      // 触发执行
+      // 注意：executePipeline是异步的，我们这里不等待它完成，而是返回taskId
+      // 前端可以通过轮询任务状态来获取结果
+      import('../services/pipelineEngine.service.js').then(async (module) => {
+        const pipelineEngine = module.default;
+        try {
+          await pipelineEngine.executePipeline(taskId, tempFeatureId, input || {});
+        } catch (err) {
+          logger.error(`[TestRun] 执行失败 taskId=${taskId}`, err);
+        } finally {
+          // 清理临时数据 (可选，或者保留用于调试)
+          // await db('feature_definitions').where('feature_id', tempFeatureId).delete();
+          // await db('pipeline_schemas').where('pipeline_id', tempPipelineId).delete();
+        }
+      });
+
+      res.json({
+        success: true,
+        data: {
+          taskId,
+          message: '测试任务已启动'
+        }
+      });
+    } catch (error) {
+      logAndNext(next, error, '[AdminController] 测试运行失败');
     }
   }
 

@@ -6,12 +6,15 @@
  */
 
 import { useState, useMemo, useEffect } from 'react';
-import { Card, Button, Space, message, Tabs, Tag, Alert, Input, Modal, Select } from 'antd';
-import { FormOutlined, EyeOutlined, CodeOutlined, SaveOutlined, SwapOutlined, HistoryOutlined } from '@ant-design/icons';
+import { Card, Button, Space, message, Tabs, Tag, Alert, Input, Modal, Select, Drawer, Spin } from 'antd';
+import { FormOutlined, EyeOutlined, CodeOutlined, SaveOutlined, SwapOutlined, HistoryOutlined, RobotOutlined } from '@ant-design/icons';
 import dynamic from 'next/dynamic';
 import { convertFormioToUFS } from '@/lib/formio/adapter';
+import { FORMIO_OPTIONS } from '@/lib/formio/i18n';
 import { validateUFSSchema } from '@/lib/validators';
 import { formSchemas, FormSchemaVersion } from '@/lib/services/formSchemas';
+import { api } from '@/lib/api';
+import type { AIMessage, AISchemaUpdate, FormioSchema } from '@/types';
 
 // 艹，使用next/dynamic关闭SSR，这个tm很关键！
 const FormBuilder = dynamic(() => import('@/components/formio/FormBuilder'), {
@@ -201,8 +204,114 @@ export default function FormBuilderPage() {
     message.success('JSON已导出');
   };
 
+  // AI助手相关 - 类型定义见 @/types/index.ts
+  const AI_INITIAL_MESSAGE: AIMessage = {
+    role: 'assistant',
+    content: '你好！我是您的表单设计助手。请告诉我您想创建什么样的表单字段？例如："我需要一个上传图片的按钮" 或 "帮我加一个选择性别的下拉框"。'
+  };
+  const [aiDrawerVisible, setAiDrawerVisible] = useState(false);
+  const [aiMessages, setAiMessages] = useState<AIMessage[]>([AI_INITIAL_MESSAGE]);
+  const [aiInput, setAiInput] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+
+  // AI Drawer 关闭处理 - 保留对话历史，提供清空选项
+  const handleAiDrawerClose = () => {
+    setAiDrawerVisible(false);
+    // 保留对话历史，不自动清空
+  };
+
+  // 清空 AI 对话历史
+  const handleClearAiHistory = () => {
+    Modal.confirm({
+      title: '清空对话历史',
+      content: '确定要清空与 AI 助手的所有对话记录吗？',
+      okText: '清空',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: () => {
+        setAiMessages([AI_INITIAL_MESSAGE]);
+        message.success('对话历史已清空');
+      },
+    });
+  };
+
+  const handleAiSend = async () => {
+    if (!aiInput.trim()) return;
+
+    const userMsg: AIMessage = { role: 'user', content: aiInput };
+    setAiMessages(prev => [...prev, userMsg]);
+    setAiInput('');
+    setAiLoading(true);
+
+    try {
+      // 调用后端AI接口 - 返回 AxiosResponse<APIResponse<AIChatResponse>>
+      const response = await api.admin.chatWithAI({
+        message: userMsg.content,
+        context: JSON.stringify(formSchema) // 把当前Schema传给AI
+      });
+
+      const result = response.data;
+      if (!result.success || !result.data?.reply) {
+        throw new Error(result.error?.message || 'AI助手未返回有效结果');
+      }
+
+      const { reply, schemaUpdate } = result.data;
+      const aiMsg: AIMessage = { role: 'assistant', content: reply };
+      setAiMessages((prev) => [...prev, aiMsg]);
+
+      // 如果AI生成了Schema更新建议 - 使用结构化的 AISchemaUpdate
+      if (schemaUpdate && schemaUpdate.components?.length > 0) {
+        const { action, components, targetIndex, targetKey } = schemaUpdate as AISchemaUpdate;
+        const actionText = action === 'append' ? '添加' : action === 'replace' ? '替换' : '删除';
+
+        Modal.confirm({
+          title: `AI 建议${actionText}组件`,
+          content: `将${actionText} ${components.length} 个字段到表单中，是否应用？`,
+          okText: '应用',
+          cancelText: '取消',
+          onOk: () => {
+            setFormSchema((prev: FormioSchema) => {
+              const currentComponents = [...(prev.components || [])];
+
+              if (action === 'append') {
+                return { ...prev, components: [...currentComponents, ...components] };
+              } else if (action === 'replace') {
+                // 根据 targetIndex 或 targetKey 定位
+                const idx = targetIndex ?? currentComponents.findIndex((c) => c.key === targetKey);
+                if (idx >= 0 && idx < currentComponents.length) {
+                  currentComponents.splice(idx, 1, ...components);
+                }
+                return { ...prev, components: currentComponents };
+              } else if (action === 'delete') {
+                const idx = targetIndex ?? currentComponents.findIndex((c) => c.key === targetKey);
+                if (idx >= 0 && idx < currentComponents.length) {
+                  currentComponents.splice(idx, 1);
+                }
+                return { ...prev, components: currentComponents };
+              }
+
+              return prev;
+            });
+            message.success(`表单已${actionText}成功`);
+          }
+        });
+      }
+    } catch (error: any) {
+      console.error('[AI Chat Error]', error);
+      let errorMsg = '抱歉，AI 助手暂时无法响应';
+      if (error.code === 4290) errorMsg += ' (请求过于频繁，请稍后再试)';
+      else if (error.code >= 5000) errorMsg += ' (服务异常，请联系管理员)';
+      else if (error.message) errorMsg += `: ${error.message}`;
+
+      setAiMessages(prev => [...prev, { role: 'assistant', content: errorMsg }]);
+      message.error('AI 响应失败');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   return (
-    <div style={{ padding: '24px' }}>
+    <div style={{ padding: '24px', position: 'relative' }}>
       <Card
         title={
           <Space>
@@ -213,6 +322,14 @@ export default function FormBuilderPage() {
         }
         extra={
           <Space>
+            <Button
+              type="primary"
+              style={{ background: 'linear-gradient(45deg, #108ee9, #87d068)', border: 'none' }}
+              icon={<RobotOutlined />}
+              onClick={() => setAiDrawerVisible(true)}
+            >
+              AI 助手
+            </Button>
             <Input
               placeholder="Schema ID (如: user-profile)"
               value={schemaId}
@@ -270,7 +387,11 @@ export default function FormBuilderPage() {
                       💡 提示：从左侧拖拽字段到右侧画布，点击字段可配置属性
                     </p>
                   </div>
-                  <FormBuilder schema={formSchema} onChange={handleSchemaChange} />
+                  <FormBuilder
+                    schema={formSchema}
+                    onChange={handleSchemaChange}
+                    options={FORMIO_OPTIONS}
+                  />
                 </div>
               ),
             },
@@ -513,7 +634,7 @@ export default function FormBuilderPage() {
                     {ver.is_current && <Tag color="green">当前</Tag>}
                     <Tag color={
                       ver.publish_status === 'published' ? 'blue' :
-                      ver.publish_status === 'draft' ? 'orange' : 'default'
+                        ver.publish_status === 'draft' ? 'orange' : 'default'
                     }>
                       {ver.publish_status}
                     </Tag>
@@ -544,6 +665,128 @@ export default function FormBuilderPage() {
           </div>
         )}
       </Modal>
+
+      {/* AI助手侧边栏 */}
+      <Drawer
+        title={
+          <Space>
+            <RobotOutlined style={{ color: '#1890ff' }} />
+            <span>AI 设计助手</span>
+          </Space>
+        }
+        extra={
+          <Button
+            type="text"
+            size="small"
+            danger
+            onClick={handleClearAiHistory}
+            disabled={aiMessages.length <= 1}
+          >
+            清空记录
+          </Button>
+        }
+        placement="right"
+        onClose={handleAiDrawerClose}
+        open={aiDrawerVisible}
+        width={400}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div style={{ flex: 1, overflow: 'auto', paddingBottom: '16px' }}>
+            {aiMessages.map((msg, idx) => (
+              <div
+                key={idx}
+                style={{
+                  marginBottom: '16px',
+                  textAlign: msg.role === 'user' ? 'right' : 'left',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'inline-block',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: msg.role === 'user' ? '#1890ff' : '#f0f2f5',
+                    color: msg.role === 'user' ? '#fff' : '#333',
+                    maxWidth: '80%',
+                    textAlign: 'left',
+                  }}
+                >
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+            {aiLoading && (
+              <div style={{ textAlign: 'left', marginBottom: '16px' }}>
+                <div
+                  style={{
+                    display: 'inline-block',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: '#f0f2f5',
+                  }}
+                >
+                  <span className="typing-indicator">
+                    <span style={{
+                      display: 'inline-block',
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: '#1890ff',
+                      margin: '0 2px',
+                      animation: 'typing 1.4s infinite',
+                      animationDelay: '0s',
+                    }} />
+                    <span style={{
+                      display: 'inline-block',
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: '#1890ff',
+                      margin: '0 2px',
+                      animation: 'typing 1.4s infinite',
+                      animationDelay: '0.2s',
+                    }} />
+                    <span style={{
+                      display: 'inline-block',
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: '#1890ff',
+                      margin: '0 2px',
+                      animation: 'typing 1.4s infinite',
+                      animationDelay: '0.4s',
+                    }} />
+                  </span>
+                  <span style={{ marginLeft: 8, color: '#86868B', fontSize: 13 }}>AI 正在思考...</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: '16px' }}>
+            <Input.TextArea
+              value={aiInput}
+              onChange={(e) => setAiInput(e.target.value)}
+              placeholder="输入您的需求..."
+              autoSize={{ minRows: 2, maxRows: 4 }}
+              onPressEnter={(e) => {
+                if (!e.shiftKey) {
+                  e.preventDefault();
+                  handleAiSend();
+                }
+              }}
+            />
+            <Button
+              type="primary"
+              block
+              style={{ marginTop: '8px' }}
+              onClick={handleAiSend}
+              loading={aiLoading}
+            >
+              发送
+            </Button>
+          </div>
+        </div>
+      </Drawer>
     </div>
   );
 }

@@ -47,16 +47,48 @@ export function appErrorHandler(
     requestId: req.id,
     path: req.originalUrl,
     method: req.method,
-    userId: req.user?.id ?? req.user?.uid
+    userId: req.user?.id ?? req.user?.uid,
+    userAgent: req.headers['user-agent'],
+    ip: req.ip || req.socket.remoteAddress
   });
 
+  // 记录增强的错误日志
   if (appError.options.shouldLog) {
-    logger.error('[ErrorHandler] 捕获到异常', appError.toLogFormat());
+    const logLevel = appError.metadata.severity === 'critical' ? 'error' :
+                     appError.metadata.severity === 'high' ? 'warn' : 'error';
+
+    logger[logLevel]('[ErrorHandler] 捕获到异常', {
+      ...appError.toLogFormat(),
+      category: appError.metadata.category,
+      userAgent: req.headers['user-agent'],
+      ip: req.ip || req.socket.remoteAddress,
+      body: req.method !== 'GET' ? req.body : undefined
+    });
+  }
+
+  // Critical错误需要特殊处理（如发送通知）
+  if (appError.metadata.severity === 'critical' && appError.options.shouldNotify) {
+    // TODO: 集成通知服务（邮件、Slack、钉钉等）
+    logger.error('[ErrorHandler] 🚨 CRITICAL错误需要立即处理！', {
+      code: appError.code,
+      message: appError.message,
+      requestId: appError.requestId,
+      userId: appError.userId,
+      path: req.originalUrl
+    });
   }
 
   const language = resolveLanguage(req.headers['accept-language']);
   const responseBody = appError.toJSON(language);
   const status = appError.statusCode;
+
+  // 添加响应头，帮助前端处理错误
+  res.setHeader('X-Error-Code', String(appError.code));
+  res.setHeader('X-Error-Category', appError.metadata.category);
+  res.setHeader('X-Error-Severity', appError.metadata.severity);
+  if (appError.requestId) {
+    res.setHeader('X-Request-Id', appError.requestId);
+  }
 
   res.status(status).json(responseBody);
 }

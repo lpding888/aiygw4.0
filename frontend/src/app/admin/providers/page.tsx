@@ -5,14 +5,16 @@
  * 艹！使用GPT5工业级框架重构，代码量从544行减少到240行！
  */
 
-import { useState } from 'react';
-import { Button, Space, Tag, Tooltip, Modal, message, Drawer, Form, Input, Select } from 'antd';
+import { useState, useEffect } from 'react';
+import { Button, Space, Tag, Tooltip, Modal, message, Drawer, Form, Input, Select, Card, Row, Col, Spin, Alert } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   ApiOutlined,
+  KeyOutlined,
 } from '@ant-design/icons';
+import api from '@/lib/api';
 import type { ColumnType } from 'antd/es/table';
 
 // 新框架组件和Hooks
@@ -107,6 +109,41 @@ export default function ProvidersPage() {
   const [drawerMode, setDrawerMode] = useState<'create' | 'edit'>('create');
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [form] = Form.useForm();
+
+  // API Key Modal状态（艹！快速更新API Key专用）
+  const [apiKeyModalVisible, setApiKeyModalVisible] = useState(false);
+  const [apiKeyProvider, setApiKeyProvider] = useState<Provider | null>(null);
+  const [apiKeyForm] = Form.useForm();
+
+  // Provider健康状态（艹！实时监控Provider健康度）
+  const [healthData, setHealthData] = useState<any>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+
+  /**
+   * 加载Provider健康状态
+   */
+  const loadProviderHealth = async () => {
+    try {
+      setHealthLoading(true);
+      const response = await api.provider.getProviderHealth();
+
+      if (response.success && response.data) {
+        setHealthData(response.data);
+      }
+    } catch (error: any) {
+      console.error('[ProviderHealth] 加载失败:', error);
+    } finally {
+      setHealthLoading(false);
+    }
+  };
+
+  // 组件挂载时加载健康状态
+  useEffect(() => {
+    loadProviderHealth();
+    // 每30秒刷新一次健康状态
+    const interval = setInterval(loadProviderHealth, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // ========== 新框架：FilterBar配置 ==========
   const filterConfig: FilterConfig[] = [
@@ -218,10 +255,19 @@ export default function ProvidersPage() {
     {
       title: '操作',
       key: 'actions',
-      width: 200,
+      width: 280,
       fixed: 'right',
       render: (_: any, record: Provider) => (
         <Space size="small">
+          <Tooltip title="快速更新API Key">
+            <Button
+              size="small"
+              icon={<KeyOutlined />}
+              onClick={() => handleOpenApiKeyModal(record)}
+            >
+              API Key
+            </Button>
+          </Tooltip>
           <Button
             size="small"
             icon={<ApiOutlined />}
@@ -339,6 +385,50 @@ export default function ProvidersPage() {
   };
 
   /**
+   * 打开API Key更新Modal
+   * 艹！快速更新API Key，不需要填写其他字段！
+   */
+  const handleOpenApiKeyModal = (provider: Provider) => {
+    setApiKeyProvider(provider);
+    apiKeyForm.resetFields();
+    setApiKeyModalVisible(true);
+  };
+
+  /**
+   * 更新Provider的API Key
+   */
+  const handleUpdateApiKey = async () => {
+    try {
+      const values = await apiKeyForm.validateFields();
+      const { credentials } = values;
+
+      if (!apiKeyProvider) {
+        message.error('Provider信息丢失');
+        return;
+      }
+
+      const hide = message.loading('正在更新API Key...', 0);
+
+      try {
+        await api.provider.updateProviderCredentials(apiKeyProvider.provider_ref, credentials);
+
+        hide();
+        message.success('API Key更新成功');
+        setApiKeyModalVisible(false);
+        apiKeyForm.resetFields();
+        tableData.refresh();
+      } catch (error: any) {
+        hide();
+        message.error(`更新失败: ${error.message}`);
+      }
+    } catch (error: any) {
+      if (error.errorFields) {
+        message.error('请填写API Key');
+      }
+    }
+  };
+
+  /**
    * 提交表单（创建或更新）
    */
   const handleSubmit = async () => {
@@ -418,6 +508,80 @@ export default function ProvidersPage() {
   // ========== 渲染UI（新框架组件） ==========
   return (
     <div style={{ padding: '24px' }}>
+      {/* Provider健康监控Card（艹！实时监控） */}
+      <Card
+        title={
+          <Space>
+            <span>Provider健康监控</span>
+            <Button size="small" onClick={loadProviderHealth} loading={healthLoading}>
+              刷新
+            </Button>
+          </Space>
+        }
+        style={{ marginBottom: 16 }}
+        loading={healthLoading && !healthData}
+      >
+        {healthData ? (
+          <Row gutter={16}>
+            <Col span={6}>
+              <Card.Grid style={{ width: '100%', textAlign: 'center' }}>
+                <div style={{ fontSize: 24, fontWeight: 'bold', color: '#52c41a' }}>
+                  {healthData.status === 'healthy' ? '✅' : healthData.status === 'degraded' ? '⚠️' : '❌'}
+                </div>
+                <div style={{ marginTop: 8, color: '#666' }}>总体状态</div>
+                <div style={{ marginTop: 4, fontWeight: 600 }}>
+                  {healthData.status === 'healthy' ? '健康' : healthData.status === 'degraded' ? '降级' : '不健康'}
+                </div>
+              </Card.Grid>
+            </Col>
+            <Col span={6}>
+              <Card.Grid style={{ width: '100%', textAlign: 'center' }}>
+                <div style={{ fontSize: 24, fontWeight: 'bold', color: '#1890ff' }}>
+                  {healthData.totalProviders || 0}
+                </div>
+                <div style={{ marginTop: 8, color: '#666' }}>总Provider数</div>
+              </Card.Grid>
+            </Col>
+            <Col span={6}>
+              <Card.Grid style={{ width: '100%', textAlign: 'center' }}>
+                <div style={{ fontSize: 24, fontWeight: 'bold', color: '#52c41a' }}>
+                  {healthData.activeProviders || 0}
+                </div>
+                <div style={{ marginTop: 8, color: '#666' }}>活跃Provider</div>
+              </Card.Grid>
+            </Col>
+            <Col span={6}>
+              <Card.Grid style={{ width: '100%', textAlign: 'center' }}>
+                <div style={{ fontSize: 24, fontWeight: 'bold', color: '#666' }}>
+                  {healthData.registeredProviders ? healthData.registeredProviders.length : 0}
+                </div>
+                <div style={{ marginTop: 8, color: '#666' }}>已注册Provider</div>
+              </Card.Grid>
+            </Col>
+          </Row>
+        ) : (
+          <Alert
+            message="暂无健康监控数据"
+            description="正在从服务器获取Provider健康状态..."
+            type="info"
+          />
+        )}
+
+        {/* 已注册Provider列表 */}
+        {healthData?.registeredProviders && healthData.registeredProviders.length > 0 && (
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f0f0f0' }}>
+            <div style={{ marginBottom: 8, fontWeight: 600 }}>已注册Provider列表:</div>
+            <Space wrap>
+              {healthData.registeredProviders.map((provider: string) => (
+                <Tag key={provider} color="blue">
+                  {provider}
+                </Tag>
+              ))}
+            </Space>
+          </div>
+        )}
+      </Card>
+
       {/* 新框架：FilterBar */}
       <FilterBar
         filters={filterConfig}
@@ -642,6 +806,62 @@ export default function ProvidersPage() {
           )}
         </Form>
       </Drawer>
+
+      {/* API Key更新Modal（艹！快速更新，只要一个输入框） */}
+      <Modal
+        title={`更新API Key - ${apiKeyProvider?.provider_name || ''}`}
+        open={apiKeyModalVisible}
+        onOk={handleUpdateApiKey}
+        onCancel={() => {
+          setApiKeyModalVisible(false);
+          apiKeyForm.resetFields();
+        }}
+        okText="更新"
+        cancelText="取消"
+        width={500}
+      >
+        <div
+          style={{
+            padding: '12px',
+            background: '#e6f7ff',
+            border: '1px solid #91d5ff',
+            borderRadius: '4px',
+            marginBottom: '16px',
+          }}
+        >
+          <p style={{ margin: 0, color: '#0050b3', fontSize: '13px' }}>
+            💡 提示：只需输入新的API Key即可，其他配置不会改变
+          </p>
+        </div>
+
+        <Form form={apiKeyForm} layout="vertical">
+          <Form.Item
+            name="credentials"
+            label="新API Key"
+            rules={[{ required: true, message: '请输入新的API Key' }]}
+          >
+            <Input.Password
+              placeholder="请输入新的API Key"
+              visibilityToggle
+              autoComplete="off"
+            />
+          </Form.Item>
+        </Form>
+
+        <div
+          style={{
+            padding: '12px',
+            background: '#fff7e6',
+            border: '1px solid #ffd591',
+            borderRadius: '4px',
+            marginTop: '16px',
+          }}
+        >
+          <p style={{ margin: 0, color: '#d46b08', fontSize: '12px' }}>
+            🔒 API Key将使用AES-256-GCM加密后存储，安全可靠
+          </p>
+        </div>
+      </Modal>
     </div>
   );
 }

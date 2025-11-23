@@ -18,6 +18,9 @@ const router = Router();
 // 列出所有Provider端点
 router.get('/', providersController.listProviders.bind(providersController));
 
+// 获取所有Provider的健康状态（艹！必须放在/:provider_ref之前，避免路由冲突）
+router.get('/health', providersController.getProviderHealth.bind(providersController));
+
 // 创建Provider端点
 router.post('/', providersController.createProvider.bind(providersController));
 
@@ -34,6 +37,12 @@ router.delete('/:provider_ref', providersController.deleteProvider.bind(provider
 router.post(
   '/:provider_ref/test-connection',
   providersController.testConnection.bind(providersController)
+);
+
+// 更新Provider凭证（API Key）
+router.put(
+  '/:provider_ref/credentials',
+  providersController.updateProviderCredentials.bind(providersController)
 );
 
 export default router;

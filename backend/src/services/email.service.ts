@@ -16,9 +16,15 @@ function ensureConfig(): void {
 }
 
 export async function sendVerificationEmail(to: string, code: string): Promise<void> {
+  // 在开发环境，如果配置了SMTP，也尝试发送邮件
   if (process.env.NODE_ENV !== 'production') {
-    logger.info(`[Email] 发送验证码到 ${to}: ${code}`);
-    return;
+    logger.info(`[Email] 开发环境 - 准备发送验证码到 ${to}: ${code}`);
+    // 如果没有配置SMTP，则只记录日志并返回
+    if (!smtpHost || !smtpUser || !smtpPassword) {
+      logger.info(`[Email] 未配置SMTP，仅打印验证码: ${code}`);
+      return;
+    }
+    logger.info(`[Email] 已配置SMTP，尝试发送邮件...`);
   }
 
   ensureConfig();

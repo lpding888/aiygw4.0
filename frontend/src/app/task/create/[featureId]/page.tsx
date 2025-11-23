@@ -27,7 +27,7 @@ export default function CreateTaskByFeaturePage() {
   const fetchFormSchema = async () => {
     try {
       setLoading(true);
-      const response: any = await api.features.getFormSchema(featureId);
+      const response: any = await api.admin.getFeatureSchema(featureId);
 
       if (response.success) {
         setFormSchema(response);

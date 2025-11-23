@@ -3,6 +3,7 @@ import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
 import { EventEmitter } from 'events';
 import pipelineSchemaService from './pipelineSchema.service.js';
+import providerRegistryService from './provider-registry.service.js';
 import type {
   ExecutionStatus,
   NodeStatus,
@@ -389,17 +390,118 @@ class PipelineExecutionService extends EventEmitter {
   }
 
   async executeRealTransform(
-    _node: ExecutionStep,
+    node: ExecutionStep,
     previousResults: Record<string, NodeExecutionResult>,
     transformConfig?: Record<string, unknown>
   ): Promise<TransformResult> {
-    await new Promise((r) => setTimeout(r, 1000 + Math.random() * 2000));
-    return {
-      node_id: _node.node_id,
-      processed_data: previousResults,
-      transformation_applied: (transformConfig?.type as string) || 'default',
-      processed_at: new Date().toISOString()
-    };
+    try {
+      // 获取Provider配置
+      const providerType = (transformConfig?.provider_type as string) || 'aiModel';
+      const providerRef = transformConfig?.provider_ref as string;
+      const parameters = (transformConfig?.parameters as Record<string, unknown>) || {};
+
+      if (!providerRegistryService.isProviderRegistered(providerType)) {
+        throw new Error(`Provider未注册: ${providerType}`);
+      }
+
+      logger.info(`[PipelineExecution] 执行Transform节点: ${node.node_id}, Provider: ${providerType}`);
+
+      // 解析参数中的变量模板 (支持 {{variable}} 语法)
+      const resolvedParams = this.resolveVariables(parameters, previousResults);
+
+      // 调用Provider执行
+      const providerResult = await providerRegistryService.execute(
+        providerType,
+        'execute',
+        [resolvedParams, node.node_id],
+        {}
+      );
+
+      // 标准化输出
+      const normalizedOutput = this.normalizeProviderOutput(providerResult);
+
+      return {
+        node_id: node.node_id,
+        processed_data: normalizedOutput,
+        transformation_applied: providerType,
+        processed_at: new Date().toISOString(),
+        provider_ref: providerRef
+      };
+    } catch (error) {
+      logger.error(`[PipelineExecution] Transform节点执行失败: ${node.node_id}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 解析变量模板 (支持 {{variable}} 语法)
+   */
+  private resolveVariables(
+    params: Record<string, unknown>,
+    previousResults: Record<string, NodeExecutionResult>
+  ): Record<string, unknown> {
+    const resolved: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(params)) {
+      resolved[key] = this.resolveValue(value, previousResults);
+    }
+
+    return resolved;
+  }
+
+  /**
+   * 解析单个值中的变量模板
+   */
+  private resolveValue(value: unknown, previousResults: Record<string, NodeExecutionResult>): unknown {
+    if (typeof value === 'string') {
+      // 解析 {{nodeId.outputKey}} 或 {{nodeId}} 格式
+      return value.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
+        const parts = path.trim().split('.');
+        const nodeId = parts[0];
+        const outputKey = parts[1];
+
+        const nodeResult = previousResults[nodeId];
+        if (!nodeResult || !nodeResult.output) {
+          return match; // 未找到，保留原样
+        }
+
+        let resolved: unknown;
+        if (outputKey) {
+          resolved = (nodeResult.output as Record<string, unknown>)[outputKey];
+        } else {
+          resolved = nodeResult.output;
+        }
+
+        if (resolved === null || resolved === undefined) {
+          return '';
+        }
+        return typeof resolved === 'string' ? resolved : JSON.stringify(resolved);
+      });
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((item) => this.resolveValue(item, previousResults));
+    }
+
+    if (typeof value === 'object' && value !== null) {
+      const resolved: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value)) {
+        resolved[k] = this.resolveValue(v, previousResults);
+      }
+      return resolved;
+    }
+
+    return value;
+  }
+
+  /**
+   * 标准化Provider输出
+   */
+  private normalizeProviderOutput(result: unknown): Record<string, unknown> {
+    if (result && typeof result === 'object' && !Array.isArray(result)) {
+      return result as Record<string, unknown>;
+    }
+    return { result };
   }
 
   evaluateCondition(

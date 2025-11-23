@@ -1,16 +1,17 @@
 /**
  * Step 1: 基本信息步骤
- * 艹！收集Feature的核心元数据！
+ * Visionary Theme: Clean Form
  */
 
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, Form, Input, Select, InputNumber, Button, Space, Alert, Tag } from 'antd';
+import { Form, Input, Select, InputNumber, Button, Space, Alert, Typography, Row, Col } from 'antd';
 import { RightOutlined } from '@ant-design/icons';
 
 const { TextArea } = Input;
 const { Option } = Select;
+const { Title, Text } = Typography;
 
 interface BasicInfoStepProps {
   data: any;
@@ -124,179 +125,185 @@ export default function BasicInfoStep({
   };
 
   return (
-    <Card
-      title="Step 1: 基本信息"
-      extra={<Tag color="blue">必填项</Tag>}
-    >
-      <Alert
-        message="操作提示"
-        description="填写Feature的核心元数据，这些信息将用于功能卡片展示和访问控制。"
-        type="info"
-        showIcon
-        style={{ marginBottom: '24px' }}
-        closable
-      />
+    <div className="animate-fade-up" style={{ maxWidth: 800, margin: '0 auto' }}>
+      <div style={{ textAlign: 'center', marginBottom: 40 }}>
+        <Title level={2} style={{ marginBottom: 8 }}>填写基本信息</Title>
+        <Text type="secondary">定义Feature的核心元数据，这些信息将用于功能卡片展示和访问控制。</Text>
+      </div>
 
-      <Form
-        form={form}
-        layout="vertical"
-        autoComplete="off"
-      >
-        {/* Feature ID */}
-        <Form.Item
-          label="Feature ID"
-          name="feature_id"
-          rules={[
-            { required: true, message: '请输入Feature ID' },
-            {
-              pattern: /^[a-z0-9-]+$/,
-              message: '只能包含小写字母、数字和连字符',
-            },
-          ]}
-          tooltip="唯一标识符，使用小写字母和连字符，如: image-upscale"
+      <div className="bento-card" style={{ padding: 40 }}>
+        <Form
+          form={form}
+          layout="vertical"
+          autoComplete="off"
+          size="large"
         >
-          <Input
-            placeholder="例如: image-upscale"
-            onBlur={handleFeatureIdBlur}
-          />
-        </Form.Item>
-
-        {/* Display Name */}
-        <Form.Item
-          label="显示名称"
-          name="display_name"
-          rules={[
-            { required: true, message: '请输入显示名称' },
-            { max: 50, message: '最多50个字符' },
-          ]}
-        >
-          <Input placeholder="例如: 图片放大" />
-        </Form.Item>
-
-        {/* Description */}
-        <Form.Item
-          label="功能描述"
-          name="description"
-          rules={[
-            { required: true, message: '请输入功能描述' },
-            { max: 200, message: '最多200个字符' },
-          ]}
-        >
-          <TextArea
-            rows={3}
-            placeholder="简要描述此功能的作用和使用场景..."
-            showCount
-            maxLength={200}
-          />
-        </Form.Item>
-
-        {/* Category + Icon */}
-        <Space style={{ width: '100%' }} size="large">
-          <Form.Item
-            label="功能分类"
-            name="category"
-            rules={[{ required: true, message: '请选择功能分类' }]}
-            style={{ flex: 1, minWidth: '200px' }}
-          >
-            <Select placeholder="选择分类">
-              {CATEGORY_OPTIONS.map((opt) => (
-                <Option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </Option>
-              ))}
-            </Select>
-          </Form.Item>
+          <Row gutter={24}>
+            <Col span={12}>
+              <Form.Item
+                label="Feature ID"
+                name="feature_id"
+                rules={[
+                  { required: true, message: '请输入Feature ID' },
+                  {
+                    pattern: /^[a-z0-9-]+$/,
+                    message: '只能包含小写字母、数字和连字符',
+                  },
+                ]}
+                tooltip="唯一标识符，使用小写字母和连字符，如: image-upscale"
+              >
+                <Input
+                  placeholder="例如: image-upscale"
+                  onBlur={handleFeatureIdBlur}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="显示名称"
+                name="display_name"
+                rules={[
+                  { required: true, message: '请输入显示名称' },
+                  { max: 50, message: '最多50个字符' },
+                ]}
+              >
+                <Input placeholder="例如: 图片放大" />
+              </Form.Item>
+            </Col>
+          </Row>
 
           <Form.Item
-            label="图标"
-            name="icon"
-            rules={[{ required: true, message: '请选择图标' }]}
-            style={{ flex: 1, minWidth: '200px' }}
-          >
-            <Select placeholder="选择图标">
-              {ICON_OPTIONS.map((opt) => (
-                <Option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </Option>
-              ))}
-            </Select>
-          </Form.Item>
-        </Space>
-
-        {/* Plan Required */}
-        <Form.Item
-          label="所需会员计划"
-          name="plan_required"
-          rules={[{ required: true, message: '请选择所需会员计划' }]}
-          tooltip="用户需要达到此会员等级才能使用该功能"
-        >
-          <Select placeholder="选择会员计划">
-            {PLAN_OPTIONS.map((opt) => (
-              <Option key={opt.value} value={opt.value}>
-                {opt.label}
-              </Option>
-            ))}
-          </Select>
-        </Form.Item>
-
-        {/* Access Scope */}
-        <Form.Item
-          label="访问控制"
-          name="access_scope"
-          rules={[{ required: true, message: '请选择访问控制方式' }]}
-          tooltip="Plan: 基于会员计划自动授权 | Feature: 需要单独购买 | Admin: 仅管理员"
-        >
-          <Select placeholder="选择访问控制">
-            {ACCESS_SCOPE_OPTIONS.map((opt) => (
-              <Option key={opt.value} value={opt.value}>
-                {opt.label}
-              </Option>
-            ))}
-          </Select>
-        </Form.Item>
-
-        {/* Quota Cost + Rate Limit */}
-        <Space style={{ width: '100%' }} size="large">
-          <Form.Item
-            label="配额消耗"
-            name="quota_cost"
+            label="功能描述"
+            name="description"
             rules={[
-              { required: true, message: '请输入配额消耗' },
-              { type: 'number', min: 0, message: '必须大于等于0' },
+              { required: true, message: '请输入功能描述' },
+              { max: 200, message: '最多200个字符' },
             ]}
-            tooltip="每次调用消耗的配额点数"
-            style={{ flex: 1, minWidth: '200px' }}
           >
-            <InputNumber
-              min={0}
-              step={1}
-              style={{ width: '100%' }}
-              placeholder="例如: 1"
+            <TextArea
+              rows={3}
+              placeholder="简要描述此功能的作用和使用场景..."
+              showCount
+              maxLength={200}
+              style={{ resize: 'none' }}
             />
           </Form.Item>
 
-          <Form.Item
-            label="速率限制策略"
-            name="rate_limit_policy"
-            tooltip="可选，格式: 10/minute 或 100/hour"
-            style={{ flex: 1, minWidth: '200px' }}
-          >
-            <Input placeholder="例如: 10/minute" />
-          </Form.Item>
-        </Space>
-      </Form>
+          <Row gutter={24}>
+            <Col span={12}>
+              <Form.Item
+                label="功能分类"
+                name="category"
+                rules={[{ required: true, message: '请选择功能分类' }]}
+              >
+                <Select placeholder="选择分类">
+                  {CATEGORY_OPTIONS.map((opt) => (
+                    <Option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="图标"
+                name="icon"
+                rules={[{ required: true, message: '请选择图标' }]}
+              >
+                <Select placeholder="选择图标">
+                  {ICON_OPTIONS.map((opt) => (
+                    <Option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
 
-      {/* 底部操作栏 */}
-      <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
-        <Button
-          type="primary"
-          icon={<RightOutlined />}
-          onClick={handleNext}
-          loading={loading}
-        >
-          下一步：表单设计
-        </Button>
+          <div style={{ height: 1, background: 'rgba(0,0,0,0.05)', margin: '24px 0' }} />
+
+          <Row gutter={24}>
+            <Col span={12}>
+              <Form.Item
+                label="所需会员计划"
+                name="plan_required"
+                rules={[{ required: true, message: '请选择所需会员计划' }]}
+                tooltip="用户需要达到此会员等级才能使用该功能"
+              >
+                <Select placeholder="选择会员计划">
+                  {PLAN_OPTIONS.map((opt) => (
+                    <Option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="访问控制"
+                name="access_scope"
+                rules={[{ required: true, message: '请选择访问控制方式' }]}
+                tooltip="Plan: 基于会员计划自动授权 | Feature: 需要单独购买 | Admin: 仅管理员"
+              >
+                <Select placeholder="选择访问控制">
+                  {ACCESS_SCOPE_OPTIONS.map((opt) => (
+                    <Option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={24}>
+            <Col span={12}>
+              <Form.Item
+                label="配额消耗"
+                name="quota_cost"
+                rules={[
+                  { required: true, message: '请输入配额消耗' },
+                  { type: 'number', min: 0, message: '必须大于等于0' },
+                ]}
+                tooltip="每次调用消耗的配额点数"
+              >
+                <InputNumber
+                  min={0}
+                  step={1}
+                  style={{ width: '100%' }}
+                  placeholder="例如: 1"
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="速率限制策略"
+                name="rate_limit_policy"
+                tooltip="可选，格式: 10/minute 或 100/hour"
+              >
+                <Input placeholder="例如: 10/minute" />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+
+        {/* 底部操作栏 */}
+        <div style={{ marginTop: '40px', display: 'flex', justifyContent: 'flex-end' }}>
+          <Button
+            type="primary"
+            size="large"
+            icon={<RightOutlined />}
+            onClick={handleNext}
+            loading={loading}
+            className="btn-vision"
+          >
+            下一步：表单设计
+          </Button>
+        </div>
       </div>
-    </Card>
+    </div>
   );
 }

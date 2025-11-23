@@ -1,7 +1,11 @@
 export interface User {
   id: string;
   phone: string;
-  role: 'user' | 'admin'; // 艹，怎么能忘记role字段！
+  username?: string;
+  nickname?: string;
+  avatar?: string;
+  email?: string;
+  role: 'user' | 'admin';
   isMember: boolean;
   quota_remaining: number;
   quota_expireAt: string | null;
@@ -285,4 +289,106 @@ export interface DistributionSettings {
   minWithdrawal: number;
   freezeDays: number;
   autoApprove: boolean;
+}
+
+// ============ AI 聊天相关类型定义 ============
+
+/**
+ * AI 聊天消息
+ */
+export interface AIMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp?: string;
+}
+
+/**
+ * AI 聊天请求参数
+ */
+export interface AIChatRequest {
+  message: string;
+  context?: string;
+}
+
+/**
+ * AI 返回的 Schema 更新操作类型
+ */
+export type AISchemaAction = 'append' | 'replace' | 'delete';
+
+/**
+ * Formio 组件校验规则
+ */
+export interface FormioValidation {
+  required?: boolean;
+  minLength?: number;
+  maxLength?: number;
+  min?: number;
+  max?: number;
+  pattern?: string;
+  custom?: string;
+  customMessage?: string;
+}
+
+/**
+ * Formio 组件基础类型
+ * 与 formSchemas.ts 的 fields 结构对应
+ */
+export interface FormioComponent {
+  type: string;  // 'textfield' | 'select' | 'file' | 'panel' | 'number' | 'checkbox' | ...
+  key: string;
+  label: string;
+  input?: boolean;
+  placeholder?: string;
+  description?: string;
+  tooltip?: string;
+  hidden?: boolean;
+  disabled?: boolean;
+  tableView?: boolean;
+  validate?: FormioValidation;
+  conditional?: {
+    show?: boolean;
+    when?: string;
+    eq?: string;
+  };
+  data?: {
+    values?: Array<{ label: string; value: string }>;
+    url?: string;
+    resource?: string;
+  };
+  multiple?: boolean;
+  defaultValue?: any;
+  components?: FormioComponent[];  // 嵌套组件（Panel、Columns 等）
+  columns?: Array<{ components: FormioComponent[]; width: number; offset?: number }>;
+  [key: string]: any;  // 允许扩展属性
+}
+
+/**
+ * Formio Schema 结构
+ */
+export interface FormioSchema {
+  components: FormioComponent[];
+  display?: 'form' | 'wizard' | 'pdf';
+}
+
+/**
+ * AI 返回的 Schema 更新建议
+ */
+export interface AISchemaUpdate {
+  /** 操作类型：追加、替换、删除 */
+  action: AISchemaAction;
+  /** 目标组件位置（用于 replace/delete） */
+  targetIndex?: number;
+  /** 目标组件 key（用于精确定位） */
+  targetKey?: string;
+  /** 新的 Formio 组件定义 */
+  components: FormioComponent[];
+}
+
+/**
+ * AI 聊天响应数据
+ */
+export interface AIChatResponse {
+  reply: string;
+  schemaUpdate?: AISchemaUpdate;
+  suggestions?: string[];
 }

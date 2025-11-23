@@ -12,6 +12,7 @@ import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 
 import { requestIdMiddleware } from './middlewares/request-id.middleware.js';
 import { appErrorHandler, notFoundHandler } from './middlewares/error-handler.js';
+import { enhancedErrorMiddleware } from './middlewares/enhanced-error-handler.middleware.js';
 import { loggerStream } from './utils/logger.js';
 import { startAnnouncementScheduler } from './services/announcementScheduler.service.js';
 import { startBannerScheduler } from './services/bannerScheduler.service.js';
@@ -21,6 +22,7 @@ import logger from './utils/logger.js';
 import metricsMiddleware from './middlewares/metrics.middleware.js';
 import metricsService from './services/metrics.service.js';
 import queueService from './services/queue.service.js';
+import providerRegistryService from './services/provider-registry.service.js';
 
 type RouterModule = { default?: express.Router } | express.Router;
 
@@ -262,9 +264,22 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Express
     }
   }
 
+  // 初始化Provider Registry (从数据库加载LLM Providers)
+  try {
+    await providerRegistryService.initialize();
+  } catch (error) {
+    logger.error('[App] Provider Registry初始化失败', { error });
+  }
+
   await registerRoutes(app);
 
+  // 404处理（必须在所有路由之后）
   app.use(notFoundHandler);
+
+  // 增强错误统计中间件（在错误处理之前，用于统计）
+  app.use(enhancedErrorMiddleware);
+
+  // 全局错误处理中间件（必须放在最后）
   app.use(appErrorHandler);
 
   return app;

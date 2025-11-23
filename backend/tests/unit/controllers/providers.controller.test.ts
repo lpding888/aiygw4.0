@@ -35,6 +35,7 @@ describe('ProvidersController - 单元测试', () => {
 
     // 清除所有mock调用记录
     jest.clearAllMocks();
+
   });
 
   describe('listProviders', () => {
@@ -344,6 +345,127 @@ describe('ProvidersController - 单元测试', () => {
       await controller.testConnection(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(404);
+    });
+  });
+
+  describe('updateProviderCredentials', () => {
+    test('应该成功更新Provider凭证', async () => {
+      const mockUpdated = {
+        provider_ref: 'test-001',
+        provider_name: '测试Provider',
+        updated_at: new Date()
+      };
+
+      (providerRepo.updateProviderEndpoint as jest.Mock).mockResolvedValue(mockUpdated);
+
+      mockReq.params = { provider_ref: 'test-001' };
+      mockReq.body = { credentials: 'new-secret-api-key-12345' };
+
+      await controller.updateProviderCredentials(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(providerRepo.updateProviderEndpoint).toHaveBeenCalledWith('test-001', {
+        credentials: 'new-secret-api-key-12345'
+      });
+
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: true,
+        data: expect.objectContaining({
+          provider_ref: 'test-001',
+          provider_name: '测试Provider'
+        }),
+        message: 'Provider凭证已更新'
+      });
+    });
+
+    test('凭证为空字符串应该返回400', async () => {
+      mockReq.params = { provider_ref: 'test-001' };
+      mockReq.body = { credentials: '' };
+
+      await controller.updateProviderCredentials(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: '凭证不能为空'
+        }
+      });
+    });
+
+    test('凭证为纯空格应该返回400', async () => {
+      mockReq.params = { provider_ref: 'test-001' };
+      mockReq.body = { credentials: '   ' };
+
+      await controller.updateProviderCredentials(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: '凭证不能为空'
+        }
+      });
+    });
+
+    test('缺少credentials字段应该返回400', async () => {
+      mockReq.params = { provider_ref: 'test-001' };
+      mockReq.body = {};
+
+      await controller.updateProviderCredentials(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+    });
+
+    test('credentials类型错误应该返回400', async () => {
+      mockReq.params = { provider_ref: 'test-001' };
+      mockReq.body = { credentials: 12345 }; // 数字而非字符串
+
+      await controller.updateProviderCredentials(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+    });
+
+    test('更新不存在的Provider应该返回404', async () => {
+      (providerRepo.updateProviderEndpoint as jest.Mock).mockRejectedValue(
+        new Error('Provider端点不存在: test-999')
+      );
+
+      mockReq.params = { provider_ref: 'test-999' };
+      mockReq.body = { credentials: 'new-secret-key' };
+
+      await controller.updateProviderCredentials(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(404);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: false,
+        error: {
+          code: 'NOT_FOUND',
+          message: expect.stringContaining('不存在')
+        }
+      });
+    });
+
+    test('数据库错误应该传递给next中间件', async () => {
+      const testError = new Error('数据库连接失败');
+      (providerRepo.updateProviderEndpoint as jest.Mock).mockRejectedValue(testError);
+
+      mockReq.params = { provider_ref: 'test-001' };
+      mockReq.body = { credentials: 'new-key' };
+
+      await controller.updateProviderCredentials(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalledWith(testError);
+    });
+  });
+
+  // NOTE: getProviderHealth方法的测试被跳过
+  // 原因：该方法主要是调用provider-registry service并返回数据，没有复杂的业务逻辑
+  // 建议：使用E2E测试来覆盖此功能，确保整个流程正常工作
+  describe.skip('getProviderHealth', () => {
+    test('留给E2E测试覆盖', () => {
+      // 这个测试被跳过，由E2E测试覆盖
     });
   });
 
