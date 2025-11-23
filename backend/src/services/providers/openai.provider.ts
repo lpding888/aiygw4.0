@@ -26,6 +26,21 @@ export interface OpenAIProviderResult {
   model: string; // 实际使用的模型
 }
 
+// OpenAI API 响应类型
+interface OpenAIResponse {
+  choices: Array<{
+    message: {
+      content: string;
+    };
+  }>;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+  model: string;
+}
+
 class OpenAIProvider {
   private httpClient = createHttpClient({
     serviceName: 'openai',
@@ -78,7 +93,7 @@ class OpenAIProvider {
       }
 
       // 调用OpenAI API
-      const response = await this.httpClient.request({
+      const response = await this.httpClient.request<OpenAIResponse>({
         method: 'POST',
         url: 'https://api.openai.com/v1/chat/completions',
         headers: {
@@ -93,7 +108,8 @@ class OpenAIProvider {
         }
       });
 
-      const choice = response.data.choices?.[0];
+      const data = response.data as OpenAIResponse;
+      const choice = data.choices?.[0];
       if (!choice) {
         throw new Error('OpenAI返回数据格式错误');
       }
@@ -101,11 +117,11 @@ class OpenAIProvider {
       const result: OpenAIProviderResult = {
         text: choice.message.content,
         usage: {
-          promptTokens: response.data.usage?.prompt_tokens || 0,
-          completionTokens: response.data.usage?.completion_tokens || 0,
-          totalTokens: response.data.usage?.total_tokens || 0
+          promptTokens: data.usage?.prompt_tokens || 0,
+          completionTokens: data.usage?.completion_tokens || 0,
+          totalTokens: data.usage?.total_tokens || 0
         },
-        model: response.data.model
+        model: data.model
       };
 
       logger.info(

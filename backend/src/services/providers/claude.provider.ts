@@ -28,6 +28,20 @@ export interface ClaudeProviderResult {
   stopReason: string; // end_turn, max_tokens, stop_sequence
 }
 
+// Claude API 响应类型
+interface ClaudeResponse {
+  content: Array<{
+    type: string;
+    text?: string;
+  }>;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+  };
+  model: string;
+  stop_reason: string;
+}
+
 class ClaudeProvider {
   private httpClient = createHttpClient({
     serviceName: 'claude',
@@ -103,7 +117,7 @@ class ClaudeProvider {
         requestData.system = systemPrompt;
       }
 
-      const response = await this.httpClient.request({
+      const response = await this.httpClient.request<ClaudeResponse>({
         method: 'POST',
         url: 'https://api.anthropic.com/v1/messages',
         headers: {
@@ -114,20 +128,21 @@ class ClaudeProvider {
         data: requestData
       });
 
-      const textContent = response.data.content?.find((c: any) => c.type === 'text');
-      if (!textContent) {
+      const data = response.data as ClaudeResponse;
+      const textContent = data.content?.find((c) => c.type === 'text');
+      if (!textContent || !textContent.text) {
         throw new Error('Claude返回数据格式错误');
       }
 
       const result: ClaudeProviderResult = {
         text: textContent.text,
         usage: {
-          inputTokens: response.data.usage?.input_tokens || 0,
-          outputTokens: response.data.usage?.output_tokens || 0,
-          totalTokens: (response.data.usage?.input_tokens || 0) + (response.data.usage?.output_tokens || 0)
+          inputTokens: data.usage?.input_tokens || 0,
+          outputTokens: data.usage?.output_tokens || 0,
+          totalTokens: (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0)
         },
-        model: response.data.model,
-        stopReason: response.data.stop_reason
+        model: data.model,
+        stopReason: data.stop_reason
       };
 
       logger.info(

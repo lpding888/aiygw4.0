@@ -27,6 +27,26 @@ export interface QwenProviderResult {
   finishReason: string; // stop, length
 }
 
+// 通义千问 API 响应类型
+interface QwenResponse {
+  code?: string;
+  message?: string;
+  output: {
+    choices: Array<{
+      message: {
+        content: string;
+      };
+      finish_reason: string;
+    }>;
+    model?: string;
+  };
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  };
+}
+
 class QwenProvider {
   private httpClient = createHttpClient({
     serviceName: 'qwen',
@@ -88,7 +108,7 @@ class QwenProvider {
       }
 
       // 调用通义千问API
-      const response = await this.httpClient.request({
+      const response = await this.httpClient.request<QwenResponse>({
         method: 'POST',
         url: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
         headers: {
@@ -108,12 +128,14 @@ class QwenProvider {
         }
       });
 
+      const data = response.data as QwenResponse;
+
       // 检查返回状态
-      if (response.data.code) {
-        throw new Error(`通义千问API错误: ${response.data.code} - ${response.data.message}`);
+      if (data.code) {
+        throw new Error(`通义千问API错误: ${data.code} - ${data.message}`);
       }
 
-      const choice = response.data.output?.choices?.[0];
+      const choice = data.output?.choices?.[0];
       if (!choice) {
         throw new Error('通义千问返回数据格式错误');
       }
@@ -121,11 +143,11 @@ class QwenProvider {
       const result: QwenProviderResult = {
         text: choice.message.content,
         usage: {
-          inputTokens: response.data.usage?.input_tokens || 0,
-          outputTokens: response.data.usage?.output_tokens || 0,
-          totalTokens: response.data.usage?.total_tokens || 0
+          inputTokens: data.usage?.input_tokens || 0,
+          outputTokens: data.usage?.output_tokens || 0,
+          totalTokens: data.usage?.total_tokens || 0
         },
-        model: response.data.output?.model || model,
+        model: data.output?.model || model,
         finishReason: choice.finish_reason
       };
 
