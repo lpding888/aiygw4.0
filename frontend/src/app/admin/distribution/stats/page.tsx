@@ -64,8 +64,8 @@ export default function DistributionStatsPage() {
       setLoading(true);
       const response: any = await api.adminDistribution.getStats();
 
-      if (response.success && response.data) {
-        setStats(response.data);
+      if (response.data.success && response.data.data) {
+        setStats(response.data.data);
       }
     } catch (error: any) {
       message.error(error.message || '加载失败');

@@ -112,8 +112,8 @@ const ExecutionsPage: React.FC = () => {
         offset: (pagination.current - 1) * pagination.pageSize,
       });
 
-      if (response.success && response.data) {
-        setExecutions(response.data.items || []);
+      if (response.data.success && response.data.data) {
+        setExecutions(response.data.data.items || []);
         setPagination((prev) => ({
           ...prev,
           total: response.data.total || 0,
@@ -135,8 +135,8 @@ const ExecutionsPage: React.FC = () => {
       setStatsLoading(true);
       const response = await api.pipeline.getExecutionStats();
 
-      if (response.success && response.data) {
-        setStats(response.data);
+      if (response.data.success && response.data.data) {
+        setStats(response.data.data);
       }
     } catch (error) {
       console.error('[ExecutionsPage] 加载统计数据失败:', error);
@@ -153,8 +153,8 @@ const ExecutionsPage: React.FC = () => {
     try {
       const response = await api.pipeline.getExecution(record.id);
 
-      if (response.success && response.data) {
-        setSelectedExecution(response.data);
+      if (response.data.success && response.data.data) {
+        setSelectedExecution(response.data.data);
         setDetailDrawerVisible(true);
       }
     } catch (error) {

@@ -59,15 +59,15 @@ export default function WorkspacePage() {
       setLoading(true);
       const response: any = await api.membership.status();
 
-      if (response.success && response.data) {
-        setMembershipStatus(response.data);
+      if (response.data.success && response.data.data) {
+        setMembershipStatus(response.data.data);
         // 同步更新用户信息
         if (user) {
           updateUser({
             ...user,
-            isMember: response.data.isMember,
-            quota_remaining: response.data.quotaRemaining || response.data.quota_remaining,
-            quota_expireAt: response.data.quotaExpireAt || response.data.quota_expireAt,
+            isMember: response.data.data.isMember,
+            quota_remaining: response.data.data.quotaRemaining || response.data.data.quota_remaining,
+            quota_expireAt: response.data.data.quotaExpireAt || response.data.data.quota_expireAt,
           });
         }
       }

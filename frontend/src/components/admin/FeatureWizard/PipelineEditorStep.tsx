@@ -127,10 +127,10 @@ export default function PipelineEditorStep({
         response = await api.pipeline.createSchema(pipelineData);
       }
 
-      if (response.success && response.data) {
+      if (response.data.success && response.data.data) {
         // 更新Feature数据
         onUpdate({
-          pipeline_schema_id: response.data.schema_id,
+          pipeline_schema_id: response.data.data.schema_id,
           pipeline_schema_data: {
             nodes,
             edges,
@@ -180,16 +180,16 @@ export default function PipelineEditorStep({
             }
           });
 
-          if (response.success && response.data) {
-            message.success(`Pipeline执行已启动，执行ID: ${response.data.execution_id}`);
+          if (response.data.success && response.data.data) {
+            message.success(`Pipeline执行已启动，执行ID: ${response.data.data.execution_id}`);
 
             // 可选：打开新窗口查看执行详情
             Modal.info({
               title: '执行已启动',
               content: (
                 <div>
-                  <p>执行ID: {response.data.execution_id}</p>
-                  <p>状态: {response.data.status}</p>
+                  <p>执行ID: {response.data.data.execution_id}</p>
+                  <p>状态: {response.data.data.status}</p>
                   <p>您可以在Pipeline执行记录中查看详细进度。</p>
                 </div>
               ),

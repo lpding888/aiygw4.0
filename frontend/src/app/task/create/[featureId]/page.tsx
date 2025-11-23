@@ -29,8 +29,8 @@ export default function CreateTaskByFeaturePage() {
       setLoading(true);
       const response: any = await api.admin.getFeatureSchema(featureId);
 
-      if (response.success) {
-        setFormSchema(response);
+      if (response.data.success && response.data.data) {
+        setFormSchema(response.data.data);
       }
     } catch (error: any) {
       message.error('获取表单失败');
@@ -59,10 +59,10 @@ export default function CreateTaskByFeaturePage() {
         inputData: formData
       });
 
-      if (response.success && response.data) {
+      if (response.data.success && response.data.data) {
         message.success('任务创建成功');
         // 跳转到任务详情页
-        router.push(`/task/${response.data.taskId}`);
+        router.push(`/task/${response.data.data.taskId}`);
       }
     } catch (error: any) {
       // 处理各种错误

@@ -35,8 +35,8 @@ export default function WithdrawNewPage() {
       setLoading(true);
       const response: any = await api.distribution.getDashboard();
 
-      if (response.success && response.data) {
-        setDashboard(response.data);
+      if (response.data.success && response.data.data) {
+        setDashboard(response.data.data);
       }
     } catch (error: any) {
       message.error(error.message || '加载失败');

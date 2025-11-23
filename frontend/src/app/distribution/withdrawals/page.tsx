@@ -33,8 +33,8 @@ export default function WithdrawalsPage() {
       setLoading(true);
       const response: any = await api.distribution.getWithdrawals({ limit: 100 });
 
-      if (response.success && response.data) {
-        setData(response.data);
+      if (response.data.success && response.data.data) {
+        setData(response.data.data);
       }
     } catch (error: any) {
       message.error(error.message || '加载失败');

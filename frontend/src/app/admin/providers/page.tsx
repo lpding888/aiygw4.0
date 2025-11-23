@@ -127,8 +127,8 @@ export default function ProvidersPage() {
       setHealthLoading(true);
       const response = await api.provider.getProviderHealth();
 
-      if (response.success && response.data) {
-        setHealthData(response.data);
+      if (response.data.success && response.data.data) {
+        setHealthData(response.data.data);
       }
     } catch (error: any) {
       console.error('[ProviderHealth] 加载失败:', error);

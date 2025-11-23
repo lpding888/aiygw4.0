@@ -53,14 +53,14 @@ export default function AdminDistributorsPage() {
         offset: params.offset,
       });
 
-      if (response.success && response.data) {
+      if (response.data.success && response.data.data) {
         return {
-          items: response.data.distributors || [],
-          total: response.data.total || 0,
+          items: response.data.data.distributors || [],
+          total: response.data.data.total || 0,
         };
       }
 
-      throw new Error(response.error?.message || '加载失败');
+      throw new Error(response.data.error?.message || '加载失败');
     },
     autoLoad: true,
     initialFilters: DEFAULT_FILTERS,

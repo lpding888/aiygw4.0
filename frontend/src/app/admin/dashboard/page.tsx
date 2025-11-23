@@ -58,17 +58,17 @@ export default function DashboardPage() {
             setLoading(true);
             // 尝试调用后端API，如果失败则使用Mock数据
             const response: any = await api.admin.getOverview();
-            if (response.success && response.data) {
+            if (response.data.success && response.data.data) {
                 // 映射后端数据结构到前端状态
                 setStats({
-                    totalUsers: response.data.userStats?.totalUsers || 0,
-                    activeUsers: response.data.userStats?.activeMembers || 0,
-                    totalRevenue: response.data.orderStats?.revenue || 0,
+                    totalUsers: response.data.data.userStats?.totalUsers || 0,
+                    activeUsers: response.data.data.userStats?.activeMembers || 0,
+                    totalRevenue: response.data.data.orderStats?.revenue || 0,
                     todayRevenue: 0, // 后端暂未返回今日收入，先置0
-                    totalTasks: response.data.taskStats?.totalTasks || 0,
-                    successRate: parseFloat(response.data.taskStats?.successRate || '0'),
+                    totalTasks: response.data.data.taskStats?.totalTasks || 0,
+                    successRate: parseFloat(response.data.data.taskStats?.successRate || '0'),
                 });
-                // setActivities(response.data.activities || MOCK_ACTIVITIES); // 后端暂未返回活动列表
+                // setActivities(response.data.data.activities || MOCK_ACTIVITIES); // 后端暂未返回活动列表
             }
         } catch (error) {
             console.warn('Dashboard API调用失败，使用Mock数据', error);

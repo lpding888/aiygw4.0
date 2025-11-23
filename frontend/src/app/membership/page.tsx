@@ -63,9 +63,9 @@ export default function MembershipPage() {
       setLoading(true);
       
       const response: any = await api.membership.purchase(paymentChannel);
-      
-      if (response.success && response.data) {
-        const { orderId: newOrderId, payParams: newPayParams } = response.data;
+
+      if (response.data.success && response.data.data) {
+        const { orderId: newOrderId, payParams: newPayParams } = response.data.data;
         
         setOrderId(newOrderId);
         setPayParams(newPayParams || null);
@@ -92,8 +92,8 @@ export default function MembershipPage() {
     const timer = setInterval(async () => {
       try {
         const response: any = await api.membership.status();
-        
-        if (response.success && response.data?.isMember) {
+
+        if (response.data.success && response.data.data?.isMember) {
           // 支付成功
           clearInterval(timer);
           setModalVisible(false);

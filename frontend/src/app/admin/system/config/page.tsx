@@ -22,9 +22,9 @@ export default function SystemConfigPage() {
             // 获取配置列表，转换为表单值
             try {
                 const response: any = await api.admin.getSystemConfig();
-                if (response.success && response.data) {
+                if (response.data.success && response.data.data) {
                     // 后端返回配置数组，转换为 key-value 对象
-                    const configs = Array.isArray(response.data) ? response.data : response.data.configs || [];
+                    const configs = Array.isArray(response.data.data) ? response.data.data : response.data.data.configs || [];
                     const formValues: Record<string, any> = {};
                     configs.forEach((item: { key: string; value: any }) => {
                         formValues[item.key] = item.value;

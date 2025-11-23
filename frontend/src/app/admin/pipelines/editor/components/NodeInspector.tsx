@@ -96,9 +96,9 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
       try {
         setLoadingProviders(true);
         const response = await api.provider.getRegisteredProviders();
-        if (response.success && response.data) {
-          // response.data 是一个字符串数组，包含所有已注册的provider名称
-          setProviders(response.data);
+        if (response.data.success && response.data.data) {
+          // response.data.data 是一个字符串数组，包含所有已注册的provider名称
+          setProviders(response.data.data);
         }
       } catch (error) {
         console.error('[NodeInspector] 加载Provider列表失败:', error);

@@ -71,11 +71,11 @@ export default function TaskDetailPage() {
 
       const response: any = await api.task.get(taskId);
 
-      if (response.success && response.data) {
-        setTask(response.data);
+      if (response.data.success && response.data.data) {
+        setTask(response.data.data);
 
         // 如果任务还在处理中，开始轮询
-        if (response.data.status === 'processing' || response.data.status === 'pending') {
+        if (response.data.data.status === 'processing' || response.data.data.status === 'pending') {
           if (!polling) {
             setPolling(true);
             pollingStartTime.current = Date.now();

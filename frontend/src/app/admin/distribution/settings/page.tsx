@@ -44,9 +44,9 @@ export default function DistributionSettingsPage() {
       setLoading(true);
       const response: any = await api.adminDistribution.getSettings();
 
-      if (response.success && response.data) {
-        setSettings(response.data);
-        form.setFieldsValue(response.data);
+      if (response.data.success && response.data.data) {
+        setSettings(response.data.data);
+        form.setFieldsValue(response.data.data);
       }
     } catch (error: any) {
       message.error(error.message || '加载失败');
