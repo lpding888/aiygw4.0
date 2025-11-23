@@ -1,4 +1,6 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios';
+import type { AIChatRequest, AIChatResponse } from '@/types';
+import { emitGlobalError } from '@/providers/ErrorProvider';
 
 export interface APIResponse<T = any> {
   success: boolean;
@@ -44,7 +46,7 @@ function safeCapture(error: any, extra?: Record<string, any>) {
         Sentry.captureException(error, { extra });
       }
     })
-    .catch(() => {});
+    .catch(() => { });
 }
 
 class APIClient {
@@ -136,6 +138,10 @@ class APIClient {
           url: originalRequest?.url,
           code: normalizedError.code,
         });
+
+        // 触发全局错误通知（艹！自动显示错误提示）
+        emitGlobalError(normalizedError);
+
         return Promise.reject(normalizedError);
       },
     );
@@ -201,16 +207,27 @@ class APIClient {
   private normalizeError(error: AxiosError<APIResponse>) {
     let errorMessage = '网络错误,请重试';
     let errorCode = 9999;
+    let errorCategory: string | undefined;
+    let errorSeverity: string | undefined;
+    let requestId: string | undefined;
 
     if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
       errorMessage = '请求超时,请检查网络连接后重试';
       errorCode = 9998;
+      errorSeverity = 'medium';
     } else if (!error.response) {
       errorMessage = '无法连接到服务器,请检查网络连接';
       errorCode = 9997;
+      errorSeverity = 'high';
     } else {
       const status = error.response.status;
       const errorData = error.response.data;
+      const headers = error.response.headers;
+
+      // 从后端增强的响应头中提取信息
+      errorCategory = headers['x-error-category'] as string | undefined;
+      errorSeverity = headers['x-error-severity'] as string | undefined;
+      requestId = headers['x-request-id'] as string | undefined;
 
       switch (status) {
         case 400:
@@ -256,6 +273,9 @@ class APIClient {
     return {
       code: errorCode,
       message: errorMessage,
+      category: errorCategory,
+      severity: errorSeverity,
+      requestId,
     };
   }
 
@@ -283,11 +303,11 @@ class APIClient {
         referrer_id: referrerId ?? null
       }),
 
-    loginWithPassword: (phone: string, password: string) =>
-      this.client.post<APIResponse>('/auth/login/password', { phone, password }),
+    loginWithPassword: (account: string, password: string) =>
+      this.client.post<APIResponse>('/auth/login/password', { account, password }),
 
-    passwordLogin: (phone: string, password: string) =>
-      this.client.post<APIResponse>('/auth/login/password', { phone, password }),
+    passwordLogin: (account: string, password: string) =>
+      this.client.post<APIResponse>('/auth/login/password', { account, password }),
 
     loginWithEmailCode: (email: string, code: string, referrerId?: string | null) =>
       this.client.post<APIResponse>('/auth/email/login', {
@@ -368,14 +388,21 @@ class APIClient {
     getUsers: (params: any) =>
       this.client.get<APIResponse>('/admin/users', { params }),
 
+    updateUser: (userId: string, data: { status: string }) =>
+      this.client.patch<APIResponse>(`/admin/users/${userId}`, data),
+
+    // 仪表盘概览
+    getOverview: () =>
+      this.client.get<APIResponse>('/admin/overview'),
+
     getTasks: (params: any) =>
       this.client.get<APIResponse>('/admin/tasks', { params }),
 
     getFailedTasks: (params: any) =>
       this.client.get<APIResponse>('/admin/failed-tasks', { params }),
 
-    getFeatures: () =>
-      this.client.get<APIResponse>('/admin/features'),
+    getFeatures: (params?: { search?: string; enabled?: boolean; category?: string; limit?: number; offset?: number }) =>
+      this.client.get<APIResponse>('/admin/features', { params }),
 
     createFeature: (data: any) =>
       this.client.post<APIResponse>('/admin/features', data),
@@ -413,15 +440,52 @@ class APIClient {
 
     updateFeatureSchema: (featureId: string, data: any) =>
       this.client.put<APIResponse>(`/admin/features/${featureId}/schema`, data),
-  };
 
-  // 功能相关
-  features = {
-    getAll: (params?: { enabled?: boolean }) =>
-      this.client.get<APIResponse>('/features', { params }),
+    // 系统配置 - 路径已修正为后端实际路由 /api/admin/configs
+    getSystemConfig: () =>
+      this.client.get<APIResponse>('/admin/configs'),
 
-    getFormSchema: (featureId: string) =>
-      this.client.get<APIResponse>(`/features/${featureId}/form-schema`),
+    getSystemConfigByKey: (key: string) =>
+      this.client.get<APIResponse>(`/admin/configs/${key}`),
+
+    updateSystemConfig: (key: string, data: { value: any; description?: string }) =>
+      this.client.put<APIResponse>(`/admin/configs/${key}`, data),
+
+    createSystemConfig: (data: { key: string; value: any; description?: string }) =>
+      this.client.post<APIResponse>('/admin/configs', data),
+
+    deleteSystemConfig: (key: string) =>
+      this.client.delete<APIResponse>(`/admin/configs/${key}`),
+
+    getConfigHistory: (key: string) =>
+      this.client.get<APIResponse>(`/admin/configs/${key}/history`),
+
+    // 配置快照管理
+    getConfigSnapshots: () =>
+      this.client.get<APIResponse>('/admin/configs/snapshots'),
+
+    createConfigSnapshot: (data?: { description?: string }) =>
+      this.client.post<APIResponse>('/admin/configs/snapshots', data),
+
+    rollbackConfigSnapshot: (snapshotId: string) =>
+      this.client.post<APIResponse>(`/admin/configs/snapshots/${snapshotId}/rollback`),
+
+    getConfigStats: () =>
+      this.client.get<APIResponse>('/admin/configs/stats'),
+
+    // 审计日志
+    getAuditLogs: (params?: {
+      userId?: string;
+      action?: string;
+      startDate?: string;
+      endDate?: string;
+      limit?: number;
+      offset?: number;
+    }) => this.client.get<APIResponse>('/admin/audit-logs', { params }),
+
+    // AI助手
+    chatWithAI: (data: AIChatRequest) =>
+      this.client.post<APIResponse<AIChatResponse>>('/admin/ai/chat', data),
   };
 
   // 素材库相关
@@ -431,6 +495,118 @@ class APIClient {
 
     delete: (assetId: string, params?: { delete_cos_file?: boolean }) =>
       this.client.delete<APIResponse>(`/assets/${assetId}`, { params }),
+  };
+
+  // ============ Pipeline相关API ============
+  pipeline = {
+    // Pipeline Schema管理
+    getSchemas: (params?: { category?: string; limit?: number; offset?: number }) =>
+      this.client.get<APIResponse>('/admin/pipeline-schemas', { params }),
+
+    getSchemaById: (id: string) =>
+      this.client.get<APIResponse>(`/admin/pipeline-schemas/${id}`),
+
+    createSchema: (data: {
+      schema_name: string;
+      description?: string;
+      category?: string;
+      nodes: any[];
+      edges: any[];
+      metadata?: Record<string, any>;
+    }) => this.client.post<APIResponse>('/admin/pipeline-schemas', data),
+
+    updateSchema: (id: string, data: {
+      schema_name?: string;
+      description?: string;
+      category?: string;
+      nodes?: any[];
+      edges?: any[];
+      metadata?: Record<string, any>;
+    }) => this.client.put<APIResponse>(`/admin/pipeline-schemas/${id}`, data),
+
+    deleteSchema: (id: string) =>
+      this.client.delete<APIResponse>(`/admin/pipeline-schemas/${id}`),
+
+    cloneSchema: (id: string, data?: { schema_name?: string }) =>
+      this.client.post<APIResponse>(`/admin/pipeline-schemas/${id}/clone`, data),
+
+    validateSchema: (id: string) =>
+      this.client.post<APIResponse>(`/admin/pipeline-schemas/${id}/validate`),
+
+    getCategories: () =>
+      this.client.get<APIResponse>('/admin/pipeline-schemas/categories'),
+
+    getStats: () =>
+      this.client.get<APIResponse>('/admin/pipeline-schemas/stats'),
+
+    // Pipeline Execution管理
+    getExecutions: (params?: {
+      schema_id?: string;
+      status?: string;
+      limit?: number;
+      offset?: number;
+    }) => this.client.get<APIResponse>('/admin/pipeline-executions', { params }),
+
+    getExecution: (id: string) =>
+      this.client.get<APIResponse>(`/admin/pipeline-executions/${id}`),
+
+    createAndStartExecution: (data: {
+      schema_id: string;
+      input_data?: Record<string, any>;
+      metadata?: Record<string, any>;
+    }) => this.client.post<APIResponse>('/admin/pipeline-executions/start', data),
+
+    startExecution: (id: string) =>
+      this.client.post<APIResponse>(`/admin/pipeline-executions/${id}/start`),
+
+    cancelExecution: (id: string) =>
+      this.client.post<APIResponse>(`/admin/pipeline-executions/${id}/cancel`),
+
+    getExecutionEvents: (id: string) =>
+      this.client.get<APIResponse>(`/admin/pipeline-executions/${id}/events`),
+
+    getExecutionStats: () =>
+      this.client.get<APIResponse>('/admin/pipeline-executions/stats'),
+
+    healthCheck: () =>
+      this.client.get<APIResponse>('/admin/pipeline-executions/health'),
+  };
+
+  // ============ Provider相关API ============
+  provider = {
+    // 获取已注册的Provider列表
+    getRegisteredProviders: () =>
+      this.client.get<APIResponse>('/circuit-breaker/providers/registered'),
+
+    // 获取所有Provider状态
+    getProviderStates: () =>
+      this.client.get<APIResponse>('/circuit-breaker/providers'),
+
+    // 获取Circuit Breaker健康检查
+    getHealth: () =>
+      this.client.get<APIResponse>('/circuit-breaker/health'),
+
+    // ============ Provider管理API（艹！新增）============
+
+    // 列出所有Provider端点
+    listProviders: (params?: { limit?: number; offset?: number; auth_type?: string }) =>
+      this.client.get<APIResponse>('/providers', { params }),
+
+    // 获取Provider健康状态（包含所有已注册Provider）
+    getProviderHealth: () =>
+      this.client.get<APIResponse>('/providers/health'),
+
+    // 获取单个Provider端点详情
+    getProvider: (providerRef: string) =>
+      this.client.get<APIResponse>(`/providers/${providerRef}`),
+
+    // 更新Provider凭证（API Key）
+    updateProviderCredentials: (providerRef: string, credentials: string) =>
+      this.client.put<APIResponse>(`/providers/${providerRef}/credentials`, { credentials }),
+
+    // 测试Provider连接
+    testConnection: (providerRef: string) =>
+      this.client.post<APIResponse>(`/providers/${providerRef}/test-connection`),
   };
 
   // ============ 分销代理系统API ============

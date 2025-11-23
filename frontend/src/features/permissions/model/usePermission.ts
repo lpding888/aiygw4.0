@@ -16,7 +16,7 @@
 
 'use client';
 
-import { useUser } from '@/shared/store';
+import { useAuthStore } from '@/store/authStore';
 import {
   hasPermission as checkPermission,
   hasAnyPermission as checkAnyPermission,
@@ -28,10 +28,10 @@ import {
  * 艹，封装权限检查逻辑！
  */
 export function usePermission() {
-  const user = useUser();
+  const user = useAuthStore((state) => state.user);
 
-  // 艹，获取用户角色列表
-  const userRoles = user?.roles || [];
+  // 艹，获取用户角色列表 (User类型只有role字段，这里转成数组)
+  const userRoles = user?.role ? [user.role] : [];
 
   /**
    * 检查是否有单个资源权限
@@ -58,21 +58,21 @@ export function usePermission() {
    * 检查是否有指定角色
    */
   const hasRole = (role: string): boolean => {
-    return userRoles.includes(role);
+    return userRoles.includes(role as any);
   };
 
   /**
    * 检查是否有任意一个角色
    */
   const hasAnyRole = (roles: string[]): boolean => {
-    return roles.some((role) => userRoles.includes(role));
+    return roles.some((role) => userRoles.includes(role as any));
   };
 
   /**
    * 检查是否拥有所有角色
    */
   const hasAllRoles = (roles: string[]): boolean => {
-    return roles.every((role) => userRoles.includes(role));
+    return roles.every((role) => userRoles.includes(role as any));
   };
 
   return {

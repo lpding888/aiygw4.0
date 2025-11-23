@@ -37,8 +37,8 @@ const config: Config = {
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   collectCoverageFrom: ['src/**/*.{ts,tsx,js}', '!src/server.ts'],
   coverageDirectory: 'coverage',
-  // 艹！必须让 Jest transform uuid 和 nanoid 这些纯ESM包！
-  transformIgnorePatterns: ['node_modules/(?!(uuid|nanoid)/)']
+  // 艹！必须让 Jest transform 所有纯ESM包（uuid、nanoid、p-limit、yocto-queue、node-fetch、data-uri-to-buffer、fetch-blob、formdata-polyfill）！
+  transformIgnorePatterns: ['node_modules/(?!(uuid|nanoid|p-limit|yocto-queue|node-fetch|data-uri-to-buffer|fetch-blob|formdata-polyfill)/)']
 };
 
 export default config;

@@ -6,6 +6,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as providerRepo from '../repositories/providerEndpoints.repo.js';
 import type { ProviderEndpointInput } from '../repositories/providerEndpoints.repo.js';
+import providerRegistryService from '../services/provider-registry.service.js';
 
 /**
  * 审计日志条目类型
@@ -294,6 +295,94 @@ export class ProvidersController {
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       console.error(`[ProvidersController] 测试连接失败: ${err.message}`);
+      next(err);
+    }
+  }
+
+  /**
+   * 更新Provider凭证（API Key）
+   * PUT /admin/providers/:provider_ref/credentials
+   * 艹！专门用于更新API Key，不影响其他配置！
+   */
+  async updateProviderCredentials(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { provider_ref } = req.params;
+      const { credentials } = req.body as { credentials?: string };
+
+      // 验证输入
+      if (!credentials || typeof credentials !== 'string' || credentials.trim() === '') {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: '凭证不能为空'
+          }
+        });
+        return;
+      }
+
+      // 更新凭证（Repository会自动加密）
+      const updated = await providerRepo.updateProviderEndpoint(provider_ref, {
+        credentials: credentials.trim()
+      });
+
+      // 记录审计日志（艹！不记录实际凭证，只记录操作）
+      await this.recordAuditLog({
+        action: 'UPDATE_CREDENTIALS',
+        provider_ref: updated.provider_ref,
+        user_id: getUserIdOrNull(req),
+        details: { updated_at: new Date().toISOString() }
+      });
+
+      res.json({
+        success: true,
+        data: {
+          provider_ref: updated.provider_ref,
+          provider_name: updated.provider_name,
+          updated_at: updated.updated_at
+        },
+        message: 'Provider凭证已更新'
+      });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      if (err.message.includes('不存在')) {
+        res.status(404).json({
+          success: false,
+          error: {
+            code: 'NOT_FOUND',
+            message: err.message
+          }
+        });
+        return;
+      }
+      console.error(`[ProvidersController] 更新凭证失败: ${err.message}`);
+      next(err);
+    }
+  }
+
+  /**
+   * 获取所有Provider的健康状态
+   * GET /admin/providers/health
+   * 艹！从provider-registry服务获取实时健康数据！
+   */
+  async getProviderHealth(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      // 获取健康检查结果
+      const healthCheck = await providerRegistryService.healthCheck();
+
+      // 获取所有已注册的Provider列表
+      const registeredProviders = providerRegistryService.getRegisteredProviders();
+
+      res.json({
+        success: true,
+        data: {
+          ...healthCheck,
+          registeredProviders
+        }
+      });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error(`[ProvidersController] 获取健康状态失败: ${err.message}`);
       next(err);
     }
   }

@@ -38,14 +38,21 @@ export default function FormBuilder({ schema, onChange, options }: FormBuilderPr
     const initFormioBuilder = async () => {
       try {
         // 动态导入formiojs（关键！避免SSR）
-        const Formio = (await import('formiojs')).default as any;
-        const FormioUtils = (await import('formiojs/utils')).default as any;
+        const formioModule = await import('formiojs');
+        // 兼容不同的导出方式
+        const Formio = (formioModule.Formio || formioModule.default) as any;
+
+        if (!Formio) {
+          throw new Error('无法加载Formio核心模块');
+        }
 
         // 加载formio样式
         await import('formiojs/dist/formio.full.min.css');
 
         // 配置中文
-        Formio.setBaseUrl('https://formio.form.io');
+        if (Formio.setBaseUrl) {
+          Formio.setBaseUrl('https://formio.form.io');
+        }
 
         // FormBuilder选项（艹，屏蔽premium组件）
         const builderOptions = {

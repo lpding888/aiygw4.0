@@ -1,14 +1,14 @@
 /**
  * DataTable 通用表格组件
- * 艹，这个组件集成了分页、选择、批量操作，开箱即用！
+ * Visionary Theme: Bento Card Style
  */
 
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Table, Space, Button, Card, Alert, Empty } from 'antd';
+import { Table, Space, Button, Alert, Empty } from 'antd';
 import type { TableProps as AntTableProps } from 'antd';
-import type { DataTableProps, DataTableColumn, BatchAction } from './types';
+import type { DataTableProps } from './types';
 
 /**
  * DataTable 组件
@@ -21,7 +21,7 @@ export function DataTable<T extends Record<string, any> = any>({
   rowSelection: enableRowSelection = false,
   onRowSelectionChange,
   batchActions = [],
-  bordered = true,
+  bordered = false, // 默认关闭边框，使用 Visionary 风格
   size = 'middle',
   showHeader = true,
   emptyText = '暂无数据',
@@ -70,10 +70,10 @@ export function DataTable<T extends Record<string, any> = any>({
    */
   const rowSelectionConfig = enableRowSelection
     ? {
-        selectedRowKeys,
-        onChange: handleRowSelectionChange,
-        preserveSelectedRowKeys: true,
-      }
+      selectedRowKeys,
+      onChange: handleRowSelectionChange,
+      preserveSelectedRowKeys: true,
+    }
     : undefined;
 
   /**
@@ -81,17 +81,21 @@ export function DataTable<T extends Record<string, any> = any>({
    */
   const paginationConfig = pagination
     ? {
-        current: pagination.page,
-        pageSize: pagination.pageSize,
-        total: pagination.total,
-        showSizeChanger: true,
-        showQuickJumper: true,
-        showTotal: (total: number) => `共 ${total} 条`,
-        onChange: (page: number, pageSize: number) => {
-          pagination.onChange(page, pageSize);
-          clearSelection(); // 艹，换页时清空选择
-        },
+      current: pagination.page,
+      pageSize: pagination.pageSize,
+      total: pagination.total,
+      showSizeChanger: true,
+      showQuickJumper: true,
+      showTotal: (total: number) => `共 ${total} 条`,
+      onChange: (page: number, pageSize: number) => {
+        pagination.onChange(page, pageSize);
+        clearSelection(); // 换页时清空选择
+      },
+      // Visionary Pagination Style
+      itemRender: (page: number, type: 'page' | 'prev' | 'next' | 'jump-prev' | 'jump-next', originalElement: React.ReactNode) => {
+        return originalElement;
       }
+    }
     : false;
 
   /**
@@ -107,52 +111,60 @@ export function DataTable<T extends Record<string, any> = any>({
     }
 
     return (
-      <Alert
-        message={
-          <Space>
-            <span>
-              已选择 <strong>{selectedRowKeys.length}</strong> 项
-            </span>
-            <Button type="link" size="small" onClick={clearSelection}>
-              清空
-            </Button>
-            {batchActions.map((action) => {
-              const isDisabled =
-                action.disabled === true ||
-                (typeof action.disabled === 'function' &&
-                  action.disabled(selectedRows));
+      <div className="animate-fade-up" style={{ marginBottom: 16 }}>
+        <Alert
+          message={
+            <Space>
+              <span style={{ fontWeight: 500 }}>
+                已选择 <strong style={{ color: '#1D1D1F' }}>{selectedRowKeys.length}</strong> 项
+              </span>
+              <Button type="link" size="small" onClick={clearSelection}>
+                清空
+              </Button>
+              <div style={{ width: 1, height: 16, background: 'rgba(0,0,0,0.1)', margin: '0 8px' }} />
+              {batchActions.map((action) => {
+                const isDisabled =
+                  action.disabled === true ||
+                  (typeof action.disabled === 'function' &&
+                    action.disabled(selectedRows));
 
-              return (
-                <Button
-                  key={action.key}
-                  type={action.danger ? 'primary' : 'default'}
-                  danger={action.danger}
-                  size="small"
-                  icon={action.icon}
-                  disabled={isDisabled}
-                  onClick={() => {
-                    action.onClick(selectedRows, selectedRowKeys);
-                  }}
-                >
-                  {action.label}
-                </Button>
-              );
-            })}
-          </Space>
-        }
-        type="info"
-        showIcon
-        style={{ marginBottom: 16 }}
-      />
+                return (
+                  <Button
+                    key={action.key}
+                    type={action.danger ? 'primary' : 'default'}
+                    danger={action.danger}
+                    size="small"
+                    icon={action.icon}
+                    disabled={isDisabled}
+                    onClick={() => {
+                      action.onClick(selectedRows, selectedRowKeys);
+                    }}
+                    style={{ borderRadius: 6 }}
+                  >
+                    {action.label}
+                  </Button>
+                );
+              })}
+            </Space>
+          }
+          type="info"
+          showIcon
+          style={{
+            borderRadius: 12,
+            border: 'none',
+            background: 'rgba(24, 144, 255, 0.08)',
+          }}
+        />
+      </div>
     );
   };
 
   /**
    * 渲染表格标题栏
    */
-  const renderTitle: NonNullable<AntTableProps<T>['title']> = () => {
+  const renderTitle = () => {
     if (!title && !toolbar) {
-      return undefined;
+      return null;
     }
 
     return (
@@ -161,9 +173,11 @@ export function DataTable<T extends Record<string, any> = any>({
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          marginBottom: 24,
+          padding: '0 8px'
         }}
       >
-        <div style={{ fontSize: 16, fontWeight: 600 }}>{title}</div>
+        {title && <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.01em' }}>{title}</div>}
         <div>{toolbar}</div>
       </div>
     );
@@ -176,13 +190,16 @@ export function DataTable<T extends Record<string, any> = any>({
     emptyText: emptyRender || (
       <Empty
         image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description={emptyText}
+        description={<span style={{ color: '#86868B' }}>{emptyText}</span>}
       />
     ),
   };
 
   return (
-    <div>
+    <div className="bento-card" style={{ padding: 24 }}>
+      {/* 标题栏 */}
+      {renderTitle()}
+
       {/* 批量操作栏 */}
       {renderBatchActions()}
 
@@ -198,9 +215,10 @@ export function DataTable<T extends Record<string, any> = any>({
         size={size}
         showHeader={showHeader}
         locale={locale}
-        title={renderTitle}
         scroll={{ x: 'max-content' }}
         {...restProps}
+        // 覆盖默认样式
+        style={{ background: 'transparent' }}
       />
     </div>
   );

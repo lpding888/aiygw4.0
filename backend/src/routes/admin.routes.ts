@@ -17,6 +17,7 @@ router.get('/overview', authenticate, requireAdmin, adminController.getOverview)
 
 // 用户管理
 router.get('/users', authenticate, requireAdmin, adminController.getUsers);
+router.patch('/users/:userId', authenticate, requireAdmin, adminController.updateUser);
 
 // 任务管理
 router.get('/tasks', authenticate, requireAdmin, adminController.getTasks);
@@ -114,6 +115,14 @@ router.post(
   pipelinesValidateController.getTopologicalOrder
 );
 
+// Pipeline 测试运行
+router.post(
+  '/pipelines/test',
+  authenticate,
+  requireAdmin,
+  adminController.testPipeline
+);
+
 // 表单Schema管理
 router.get('/form-schemas', authenticate, requireAdmin, formSchemasController.listFormSchemas);
 router.get(
@@ -158,5 +167,8 @@ router.delete(
 router.post('/prompts/preview', authenticate, requireAdmin, promptsController.previewPrompt);
 router.post('/prompts/validate', authenticate, requireAdmin, promptsController.validatePrompt);
 router.get('/prompts/helpers', authenticate, requireAdmin, promptsController.getHelpers);
+
+// AI助手
+router.post('/ai/chat', authenticate, requireAdmin, adminController.chatWithAI);
 
 export default router;

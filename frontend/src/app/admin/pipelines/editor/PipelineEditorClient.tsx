@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { Card, Button, Space, message, Drawer, Input, Modal, Form, Select, Tag, Row, Col } from 'antd';
+import { Card, Button, Space, message, Drawer, Input, Modal, Form, Select, Tag, Row, Col, Tooltip, Dropdown, Menu } from 'antd';
 import {
   BranchesOutlined,
   SaveOutlined,
@@ -16,10 +16,9 @@ import {
   FileAddOutlined,
   CloudUploadOutlined,
   CheckCircleOutlined,
-  TeamOutlined,
-  UserOutlined,
+  PlayCircleOutlined,
   SyncOutlined,
-  HistoryOutlined
+  DownOutlined,
 } from '@ant-design/icons';
 import {
   ReactFlow,
@@ -40,8 +39,6 @@ import '@xyflow/react/dist/style.css';
 import { nodeTypes } from '@/components/flow/NodeTypes';
 import NodeConfigDrawer from '@/components/flow/NodeConfigDrawer';
 import ValidationPanel, { ValidationResult } from '@/components/flow/ValidationPanel';
-import { usePipelineCollaboration } from '@/hooks/usePipelineCollaboration';
-import CollaborationPresence from '@/components/collaboration/CollaborationPresence';
 import { adminPipelines } from '@/lib/services/adminPipelines';
 import { PipelineSchema, PipelineDTO, PipelineEdge, PipelineNode } from '@/lib/types/pipeline';
 import { validatePipelineSchema } from '@/lib/validators';
@@ -119,17 +116,13 @@ function PipelineEditor() {
   const [validating, setValidating] = useState(false);
   const [validationDrawerVisible, setValidationDrawerVisible] = useState(false);
 
+  // 测试运行状态
+  const [testModalVisible, setTestModalVisible] = useState(false);
+  const [testInput, setTestInput] = useState('{}');
+  const [testing, setTesting] = useState(false);
+
   const [form] = Form.useForm();
   const reactFlowInstance = useReactFlow();
-
-  // 协同编辑状态
-  const collaboration = usePipelineCollaboration({
-    pipelineId: currentPipeline?.pipeline_id || 'default',
-    userId: `user_${Math.random().toString(36).substr(2, 9)}`,
-    userName: '当前用户',
-    serverUrl: 'ws://localhost:1234', // 这里应该是实际的WebSocket服务器地址
-    autoConnect: !!currentPipeline?.pipeline_id
-  });
 
   /**
    * 连线回调
@@ -137,20 +130,9 @@ function PipelineEditor() {
   const onConnect = useCallback(
     (params: Connection) => {
       const edgeId = `edge-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-      // 使用协作编辑添加边
-      collaboration.addEdge(edgeId, {
-        source: params.source,
-        target: params.target,
-        sourceHandle: params.sourceHandle,
-        targetHandle: params.targetHandle,
-        data: {} // 可选的边数据
-      });
-
-      // 本地状态更新（立即响应）
       setEdges((eds) => addEdge({ ...params, id: edgeId }, eds));
     },
-    [collaboration, setEdges]
+    [setEdges]
   );
 
   /**
@@ -161,14 +143,7 @@ function PipelineEditor() {
     console.log('[点击节点]', node);
     setSelectedNode(node);
     setConfigDrawerOpen(true);
-
-    // 更新协作光标
-    collaboration.updateCursor({
-      nodeId: node.id,
-      x: node.position.x,
-      y: node.position.y
-    });
-  }, [collaboration]);
+  }, []);
 
   /**
    * 保存节点配置
@@ -176,10 +151,6 @@ function PipelineEditor() {
    */
   const handleSaveNodeConfig = useCallback(
     (nodeId: string, newData: any) => {
-      // 使用协作编辑更新节点
-      collaboration.updateNode(nodeId, newData);
-
-      // 本地状态更新（立即响应）
       setNodes((nds) =>
         nds.map((node) => {
           if (node.id === nodeId) {
@@ -195,7 +166,7 @@ function PipelineEditor() {
         })
       );
     },
-    [collaboration, setNodes]
+    [setNodes]
   );
 
   /**
@@ -235,11 +206,6 @@ function PipelineEditor() {
       position: { x: Math.random() * 400, y: Math.random() * 300 },
       data: { label: '新Provider', providerRef: '' },
     };
-
-    // 使用协作编辑添加节点
-    collaboration.addNode(id, newNode.data);
-
-    // 本地状态更新（立即响应）
     setNodes((nds) => [...nds, newNode]);
   };
 
@@ -254,8 +220,6 @@ function PipelineEditor() {
       position: { x: Math.random() * 400, y: Math.random() * 300 },
       data: { label: '新条件', condition: '' },
     };
-
-    collaboration.addNode(id, newNode.data);
     setNodes((nds) => [...nds, newNode]);
   };
 
@@ -270,8 +234,6 @@ function PipelineEditor() {
       position: { x: Math.random() * 400, y: Math.random() * 300 },
       data: { label: '新后处理', processor: '' },
     };
-
-    collaboration.addNode(id, newNode.data);
     setNodes((nds) => [...nds, newNode]);
   };
 
@@ -286,14 +248,11 @@ function PipelineEditor() {
       position: { x: Math.random() * 400, y: Math.random() * 300 },
       data: { label: '结束' },
     };
-
-    collaboration.addNode(id, newNode.data);
     setNodes((nds) => [...nds, newNode]);
   };
 
   /**
-   * 添加FORK节点 (CMS-206)
-   * 艹！分叉执行流到多个并行分支！
+   * 添加Fork节点
    */
   const addForkNode = () => {
     const id = `fork-${Date.now()}`;
@@ -301,16 +260,13 @@ function PipelineEditor() {
       id,
       type: 'fork',
       position: { x: Math.random() * 400, y: Math.random() * 300 },
-      data: { label: 'FORK', branches: 2 },
+      data: { label: 'Fork' },
     };
-
-    collaboration.addNode(id, newNode.data);
     setNodes((nds) => [...nds, newNode]);
   };
 
   /**
-   * 添加JOIN节点 (CMS-206)
-   * 艹！汇合多个并行分支！
+   * 添加Join节点
    */
   const addJoinNode = () => {
     const id = `join-${Date.now()}`;
@@ -318,24 +274,187 @@ function PipelineEditor() {
       id,
       type: 'join',
       position: { x: Math.random() * 400, y: Math.random() * 300 },
-      data: { label: 'JOIN', strategy: 'ALL' },
+      data: { label: 'Join' },
     };
-
-    collaboration.addNode(id, newNode.data);
     setNodes((nds) => [...nds, newNode]);
   };
 
   /**
+   * 导出JSON
+   */
+  const handleExportJSON = () => {
+    const pipelineData = {
+      nodes: serializeNodes(nodes),
+      edges,
+    };
+    const jsonString = JSON.stringify(pipelineData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `pipeline-${Date.now()}.json`;
+    link.click();
+  };
+
+  /**
+   * 导入JSON
+   */
+  const handleImportJSON = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const json = JSON.parse(e.target?.result as string);
+          if (json.nodes && json.edges) {
+            setNodes(json.nodes);
+            setEdges(json.edges);
+            message.success('Pipeline导入成功');
+          } else {
+            message.error('无效的Pipeline JSON文件');
+          }
+        } catch (error) {
+          message.error('JSON解析失败');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
+  /**
+   * 校验Pipeline (CMS-209)
+   */
+  const handleValidate = useCallback(() => {
+    setValidating(true);
+    setValidationDrawerVisible(true);
+
+    // 1. 基础Schema校验
+    const pipelineData: PipelineSchema = {
+      version: '1.0',
+      nodes: serializeNodes(nodes),
+      edges: edges as PipelineEdge[],
+    };
+
+    const schemaResult = validatePipelineSchema(pipelineData);
+    // 转换为 ValidationResult 格式
+    const schemaValidation: ValidationResult = {
+      valid: schemaResult.success,
+      errors: schemaResult.errors || [],
+      warnings: schemaResult.warnings || [],
+    };
+
+    if (!schemaValidation.valid) {
+      setValidationResult(schemaValidation);
+      setValidating(false);
+      return;
+    }
+
+    // 2. 拓扑结构校验 - TopologyValidationResult 已有 valid 属性
+    const topologyResult = validatePipelineTopology(pipelineData);
+    const topologyValidation: ValidationResult = {
+      valid: topologyResult.valid,
+      errors: topologyResult.errors || [],
+      warnings: topologyResult.warnings || [],
+    };
+
+    setValidationResult(topologyValidation);
+    setValidating(false);
+
+    if (topologyValidation.valid) {
+      message.success('Pipeline校验通过');
+    } else {
+      message.warning('Pipeline存在问题，请查看详情');
+    }
+  }, [nodes, edges]);
+
+  /**
+   * 点击错误定位节点
+   */
+  const handleErrorClick = useCallback((nodeId?: string) => {
+    if (nodeId) {
+      reactFlowInstance.fitView({ nodes: [{ id: nodeId }], duration: 800, padding: 2 });
+      // 高亮节点逻辑可以后续添加
+    }
+  }, [reactFlowInstance]);
+
+  /**
+   * 保存Pipeline到后端
+   */
+  const handleSaveToBackend = async (name: string) => {
+    setSaving(true);
+    try {
+      const pipelineData: PipelineSchema = {
+        version: '1.0',
+        nodes: serializeNodes(nodes),
+        edges: edges as PipelineEdge[],
+      };
+
+      // 自动校验
+      const topologyResult = validatePipelineTopology(pipelineData);
+      if (!topologyResult.valid) {
+        message.error('Pipeline校验未通过，无法保存');
+        setValidationResult(topologyResult);
+        setValidationDrawerVisible(true);
+        setSaving(false);
+        return;
+      }
+
+      if (currentPipeline?.pipeline_id) {
+        // 更新
+        await adminPipelines.update(currentPipeline.pipeline_id, {
+          pipeline_name: name,
+          pipeline_json: pipelineData,
+          status: 'draft', // 保存为草稿
+        });
+        message.success('Pipeline更新成功');
+        setPipelineName(name);
+      } else {
+        // 新建
+        const newPipeline = await adminPipelines.create({
+          pipeline_name: name,
+          pipeline_json: pipelineData,
+          status: 'draft',
+        });
+        message.success('Pipeline创建成功');
+        setCurrentPipeline(newPipeline);
+        setPipelineName(name);
+      }
+      setSaveModalVisible(false);
+    } catch (error) {
+      console.error('保存失败:', error);
+      message.error('保存失败，请重试');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /**
+   * 点击保存按钮
+   */
+  const handleSave = () => {
+    if (currentPipeline) {
+      form.setFieldsValue({ pipeline_name: currentPipeline.pipeline_name });
+    } else {
+      form.resetFields();
+    }
+    setSaveModalVisible(true);
+  };
+
+  /**
    * 加载Pipeline列表
-   * 艹，从后端获取所有Pipeline！
    */
   const loadPipelineList = async () => {
     setLoadingPipelines(true);
     try {
-      const response = await adminPipelines.list({ page: 1, pageSize: 100 });
-      setPipelines(response.items || []);
-    } catch (error: any) {
-      console.error('[加载Pipeline列表失败]', error);
+      const res = await adminPipelines.list({ page: 1, pageSize: 100 });
+      setPipelines(res.items);
+    } catch (error) {
       message.error('加载Pipeline列表失败');
     } finally {
       setLoadingPipelines(false);
@@ -343,439 +462,205 @@ function PipelineEditor() {
   };
 
   /**
-   * 打开保存Modal
+   * 加载指定Pipeline
    */
-  const handleSave = () => {
-    if (currentPipeline) {
-      // 已有Pipeline，直接保存
-      handleSaveToBackend();
-    } else {
-      // 新Pipeline，打开保存Modal
-      form.setFieldsValue({ pipeline_name: pipelineName });
-      setSaveModalVisible(true);
-    }
-  };
-
-  /**
-   * 保存Pipeline到后端
-   * 艹，创建或更新Pipeline！
-   */
-  const handleSaveToBackend = async (name?: string) => {
-    setSaving(true);
+  const handleLoadPipeline = async (id: string) => {
     try {
-      const pipelineSchema: PipelineSchema = {
-        version: '1.0',
-        nodes: serializeNodes(nodes),
-        edges: edges.map((e: any) => ({
-          id: e.id,
-          source: e.source,
-          target: e.target,
-          sourceHandle: e.sourceHandle,
-          targetHandle: e.targetHandle,
-        })) as PipelineEdge[],
-        metadata: {
-          title: name || pipelineName,
-          updatedAt: new Date().toISOString(),
-        },
-      };
-
-      // 艹，先用Zod校验Pipeline Schema！
-      const validation = validatePipelineSchema(pipelineSchema);
-      if (!validation.success) {
-        console.error('[Pipeline Zod校验失败]', validation.errors);
-        message.error(`Pipeline结构校验失败: ${validation.errors?.join('; ')}`);
-        setSaving(false);
-        return;
-      }
-
-      console.log('[Pipeline Zod校验通过]', validation.data);
-
-      // 艹，再用Kahn算法进行拓扑校验！
-      const topologyValidation = validatePipelineTopology(pipelineSchema);
-      if (!topologyValidation.valid) {
-        console.error('[Pipeline拓扑校验失败]', topologyValidation.errors);
-        message.error(`Pipeline拓扑校验失败: ${topologyValidation.errors.join('; ')}`);
-        setSaving(false);
-        return;
-      }
-
-      // 显示警告信息（不阻止保存）
-      if (topologyValidation.warnings && topologyValidation.warnings.length > 0) {
-        console.warn('[Pipeline拓扑警告]', topologyValidation.warnings);
-        topologyValidation.warnings.forEach((warning) => {
-          message.warning(warning, 3);
-        });
-      }
-
-      console.log('[Pipeline拓扑校验通过]', {
-        sortedNodes: topologyValidation.sortedNodeIds,
-        reachableVars: topologyValidation.reachableVariables,
-      });
-
-      let result: PipelineDTO;
-
-      if (currentPipeline?.pipeline_id) {
-        // 更新现有Pipeline
-        result = await adminPipelines.update(currentPipeline.pipeline_id, {
-          pipeline_name: name || pipelineName,
-          pipeline_json: pipelineSchema,
-        });
-        message.success('Pipeline已更新');
-      } else {
-        // 创建新Pipeline
-        result = await adminPipelines.create({
-          pipeline_name: name || pipelineName,
-          pipeline_json: pipelineSchema,
-          status: 'draft',
-        });
-        message.success('Pipeline已创建');
-      }
-
-      setCurrentPipeline(result);
-      setPipelineName(result.pipeline_name);
-      setSaveModalVisible(false);
-    } catch (error: any) {
-      console.error('[保存Pipeline失败]', error);
-      message.error(error.response?.data?.message || '保存Pipeline失败');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  /**
-   * 加载Pipeline
-   * 艹，从后端读取并应用到画布！
-   */
-  const handleLoadPipeline = async (pipelineId: string) => {
-    try {
-      const pipeline = await adminPipelines.get(pipelineId);
-      const schema = pipeline.pipeline_json;
-
-      // 应用到画布
-      if (schema.nodes) {
-        setNodes(
-          schema.nodes.map((n) => ({
-            ...n,
-            type: n.type || 'provider',
-          })) as any
-        );
-      }
-      if (schema.edges) {
-        setEdges(schema.edges as any);
-      }
-
+      const pipeline = await adminPipelines.get(id);
       setCurrentPipeline(pipeline);
       setPipelineName(pipeline.pipeline_name);
+
+      if (pipeline.pipeline_json) {
+        // @ts-ignore
+        setNodes(pipeline.pipeline_json.nodes || []);
+        // @ts-ignore
+        setEdges(pipeline.pipeline_json.edges || []);
+      }
+
       setLoadModalVisible(false);
-      message.success(`已加载Pipeline: ${pipeline.pipeline_name}`);
-    } catch (error: any) {
-      console.error('[加载Pipeline失败]', error);
-      message.error('加载Pipeline失败');
+      message.success(`已加载: ${pipeline.pipeline_name}`);
+    } catch (error) {
+      message.error('加载Pipeline详情失败');
     }
   };
 
   /**
    * 新建Pipeline
-   * 艹，清空画布重新开始！
    */
   const handleNewPipeline = () => {
     Modal.confirm({
-      title: '新建Pipeline',
-      content: '当前编辑内容将被清空，确认新建？',
+      title: '确认新建?',
+      content: '当前未保存的修改将会丢失',
       onOk: () => {
-        setNodes([]);
-        setEdges([]);
         setCurrentPipeline(null);
         setPipelineName('未命名Pipeline');
-        message.success('已清空画布');
-      },
+        setNodes(initialNodes);
+        setEdges(initialEdges);
+        setValidationResult(null);
+      }
     });
   };
 
   /**
-   * 导出JSON (CMS-210)
-   * 艹！导出完整Pipeline Schema，包含元数据！
+   * 运行测试
    */
-  const handleExportJSON = () => {
-    const pipelineSchema: PipelineSchema = {
-      version: '1.0',
-      nodes: serializeNodes(nodes),
-      edges: edges.map((e: any) => ({
-        id: e.id,
-        source: e.source,
-        target: e.target,
-        sourceHandle: e.sourceHandle,
-        targetHandle: e.targetHandle,
-      })) as PipelineEdge[],
-      metadata: {
-        title: pipelineName,
-        description: currentPipeline?.pipeline_json?.metadata?.description || '',
-        exportedAt: new Date().toISOString(),
-        nodesCount: nodes.length,
-        edgesCount: edges.length,
-      },
-    };
-
-    const json = JSON.stringify(pipelineSchema, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `pipeline-${pipelineName.replace(/\s+/g, '_')}-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    message.success('Pipeline JSON已导出（包含完整Schema）');
-  };
-
-  /**
-   * 导入JSON (CMS-210)
-   * 艹！从JSON文件导入Pipeline！
-   */
-  const handleImportJSON = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = async (e: any) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      try {
-        const text = await file.text();
-        const json = JSON.parse(text);
-
-        // 校验JSON格式
-        if (!json.nodes || !Array.isArray(json.nodes)) {
-          throw new Error('无效的Pipeline JSON：缺少nodes数组');
-        }
-
-        if (!json.edges || !Array.isArray(json.edges)) {
-          throw new Error('无效的Pipeline JSON：缺少edges数组');
-        }
-
-        // 确认导入
-        Modal.confirm({
-          title: '确认导入Pipeline',
-          content: (
-            <div>
-              <p>将导入以下Pipeline：</p>
-              <ul>
-                <li>名称: {json.metadata?.title || '未命名'}</li>
-                <li>节点数: {json.nodes.length}</li>
-                <li>连线数: {json.edges.length}</li>
-                {json.metadata?.exportedAt && (
-                  <li>导出时间: {new Date(json.metadata.exportedAt).toLocaleString()}</li>
-                )}
-              </ul>
-              <p style={{ color: '#ff4d4f', marginTop: '12px' }}>
-                当前画布内容将被替换，确认导入？
-              </p>
-            </div>
-          ),
-          onOk: () => {
-            // 应用到画布
-            setNodes(
-              json.nodes.map((n: any) => ({
-                ...n,
-                type: n.type || 'provider',
-              })) as any
-            );
-            setEdges(json.edges as any);
-
-            // 更新Pipeline信息
-            setCurrentPipeline(null); // 清空当前Pipeline引用
-            setPipelineName(json.metadata?.title || '导入的Pipeline');
-
-            message.success('Pipeline导入成功');
-          },
-        });
-      } catch (error: any) {
-        console.error('[导入失败]', error);
-        message.error(`导入失败: ${error.message || '无效的JSON格式'}`);
-      }
-    };
-    input.click();
-  };
-
-  /**
-   * 校验Pipeline拓扑 (CMS-209)
-   * 艹！调用后端API进行Kahn算法校验和变量可达性检查！
-   */
-  const handleValidate = async () => {
-    setValidating(true);
+  const handleRunTest = async () => {
     try {
-      // 调用后端校验API
-      const response: any = await api.client.post('/admin/pipelines/validate', {
-        nodes: nodes.map((n) => ({
-          id: n.id,
-          type: n.type || 'provider',
-          data: n.data,
-        })),
-        edges: edges.map((e) => ({
-          id: e.id,
-          source: e.source,
-          target: e.target,
-        })),
+      // 检查 Pipeline 是否已保存
+      if (!currentPipeline?.pipeline_id) {
+        message.warning('请先保存 Pipeline 再进行测试');
+        return;
+      }
+
+      let inputData = {};
+      try {
+        inputData = JSON.parse(testInput);
+      } catch (e) {
+        message.error('输入参数JSON格式错误');
+        return;
+      }
+
+      setTesting(true);
+
+      // 调用后端测试接口
+      const res = await adminPipelines.testRun(currentPipeline.pipeline_id, {
+        pipelineId: currentPipeline.pipeline_id,
+        input: inputData,
+        variables: {},
       });
 
-      if (response.data?.success) {
-        const validation: ValidationResult = response.data.data;
-        setValidationResult(validation);
-        setValidationDrawerVisible(true);
-
-        if (validation.valid) {
-          message.success('校验通过！Pipeline结构合法。');
-        } else {
-          message.error(`发现${validation.errors.length}个错误，请查看校验面板。`);
-        }
+      if (res.success) {
+        message.success(`测试运行成功，耗时: ${res.duration}ms`);
+        setTestModalVisible(false);
       } else {
-        throw new Error(response.data?.error?.message || '校验失败');
+        message.error(res.error || '测试运行失败');
       }
-    } catch (error: any) {
-      console.error('[Pipeline校验失败]', error);
-      message.error(`校验失败: ${error.message || '未知错误'}`);
+
+    } catch (error) {
+      console.error('测试运行失败:', error);
+      message.error('测试运行失败');
     } finally {
-      setValidating(false);
+      setTesting(false);
     }
-  };
-
-  /**
-   * 点击错误定位节点 (CMS-209)
-   * 艹！高亮并聚焦到有错误的节点！
-   */
-  const handleErrorClick = (errorOrNodeId: string) => {
-    // 尝试从错误消息中提取节点ID
-    const match = errorOrNodeId.match(/"([^"]+)"/);
-    const nodeId = match ? match[1] : errorOrNodeId;
-
-    console.log('[定位节点]', nodeId);
-
-    // 查找节点
-    const node = nodes.find((n) => n.id === nodeId);
-
-    if (!node) {
-      message.warning(`未找到节点: ${nodeId}`);
-      return;
-    }
-
-    // 高亮节点（通过修改节点样式）
-    setNodes((nds) =>
-      nds.map((n) => {
-        if (n.id === nodeId) {
-          return {
-            ...n,
-            style: {
-              ...n.style,
-              border: '2px solid #ff4d4f',
-              boxShadow: '0 0 10px rgba(255, 77, 79, 0.5)',
-            },
-          };
-        }
-        return {
-          ...n,
-          style: {
-            ...n.style,
-            border: undefined,
-            boxShadow: undefined,
-          },
-        };
-      })
-    );
-
-    // 聚焦到节点
-    if (reactFlowInstance && node.position) {
-      reactFlowInstance.setCenter(
-        node.position.x + 100, // 节点中心偏移
-        node.position.y + 50,
-        { zoom: 1.5, duration: 500 } // 缩放并动画
-      );
-    }
-
-    message.info(`已定位节点: ${nodeId}`);
   };
 
   return (
     <div style={{ padding: '24px' }}>
       <Row gutter={16}>
-        <Col span={18}>
+        <Col span={24}>
           <Card
             title={
               <Space>
                 <BranchesOutlined style={{ fontSize: '20px' }} />
-                <span style={{ fontSize: '18px', fontWeight: 600 }}>Pipeline协同编辑器</span>
+                <span style={{ fontSize: '18px', fontWeight: 600 }}>Pipeline编辑器</span>
                 <Tag color={currentPipeline ? 'green' : 'default'}>
                   {pipelineName}
                 </Tag>
                 {currentPipeline && (
                   <Tag color="blue">ID: {currentPipeline.pipeline_id}</Tag>
                 )}
-                {collaboration.state.isConnected && (
-                  <Tag color="green" icon={<SyncOutlined spin />}>
-                    协作中
-                  </Tag>
-                )}
               </Space>
             }
             extra={
               <Space>
-                <Button icon={<FileAddOutlined />} onClick={handleNewPipeline}>
-                  新建
-                </Button>
-                <Button
-                  icon={<FolderOpenOutlined />}
-                  onClick={() => {
-                    loadPipelineList();
-                    setLoadModalVisible(true);
-                  }}
-                >
-                  打开
-                </Button>
-                <Button icon={<CloudUploadOutlined />} onClick={handleImportJSON}>
-                  导入JSON
-                </Button>
                 <Button.Group>
-                  <Button icon={<PlusOutlined />} onClick={addProviderNode}>
-                    Provider
-                  </Button>
-                  <Button icon={<PlusOutlined />} onClick={addConditionNode}>
-                    条件
-                  </Button>
-                  <Button icon={<PlusOutlined />} onClick={addPostProcessNode}>
-                    后处理
-                  </Button>
-                  <Button icon={<PlusOutlined />} onClick={addForkNode}>
-                    FORK
-                  </Button>
-                  <Button icon={<PlusOutlined />} onClick={addJoinNode}>
-                    JOIN
-                  </Button>
-                  <Button icon={<PlusOutlined />} onClick={addEndNode}>
-                    结束
-                  </Button>
+                  <Tooltip title="新建空白Pipeline">
+                    <Button icon={<FileAddOutlined />} onClick={handleNewPipeline}>
+                      新建
+                    </Button>
+                  </Tooltip>
+                  <Tooltip title="打开已有Pipeline">
+                    <Button
+                      icon={<FolderOpenOutlined />}
+                      onClick={() => {
+                        loadPipelineList();
+                        setLoadModalVisible(true);
+                      }}
+                    >
+                      打开
+                    </Button>
+                  </Tooltip>
+                  <Tooltip title="导入JSON文件">
+                    <Button icon={<CloudUploadOutlined />} onClick={handleImportJSON}>
+                      导入
+                    </Button>
+                  </Tooltip>
                 </Button.Group>
-                <Button icon={<CodeOutlined />} onClick={() => setJsonDrawerVisible(true)}>
-                  查看JSON
-                </Button>
-                <Button
-                  icon={<CheckCircleOutlined />}
-                  onClick={handleValidate}
-                  loading={validating}
-                  type={validationResult?.valid ? 'default' : 'dashed'}
+
+                <Dropdown
+                  overlay={
+                    <Menu>
+                      <Menu.Item key="provider" onClick={addProviderNode}>
+                        Provider节点 (AI模型)
+                      </Menu.Item>
+                      <Menu.Item key="condition" onClick={addConditionNode}>
+                        条件节点 (逻辑判断)
+                      </Menu.Item>
+                      <Menu.Item key="postProcess" onClick={addPostProcessNode}>
+                        后处理节点 (结果优化)
+                      </Menu.Item>
+                      <Menu.Divider />
+                      <Menu.Item key="fork" onClick={addForkNode}>
+                        FORK (并行分支)
+                      </Menu.Item>
+                      <Menu.Item key="join" onClick={addJoinNode}>
+                        JOIN (汇合分支)
+                      </Menu.Item>
+                      <Menu.Divider />
+                      <Menu.Item key="end" onClick={addEndNode}>
+                        结束节点
+                      </Menu.Item>
+                    </Menu>
+                  }
                 >
-                  {validating ? '校验中' : '校验'}
-                </Button>
-                <Button
-                  type="primary"
-                  icon={<SaveOutlined />}
-                  onClick={handleSave}
-                  loading={saving}
-                >
-                  {currentPipeline ? '保存' : '另存为'}
-                </Button>
+                  <Button icon={<PlusOutlined />}>
+                    添加节点 <DownOutlined />
+                  </Button>
+                </Dropdown>
+
+                <Button.Group>
+                  <Tooltip title="查看Pipeline JSON结构">
+                    <Button icon={<CodeOutlined />} onClick={() => setJsonDrawerVisible(true)}>
+                      JSON
+                    </Button>
+                  </Tooltip>
+                  <Tooltip title="校验Pipeline拓扑结构">
+                    <Button
+                      icon={<CheckCircleOutlined />}
+                      onClick={handleValidate}
+                      loading={validating}
+                      type={validationResult?.valid ? 'default' : 'dashed'}
+                    >
+                      {validating ? '校验中' : '校验'}
+                    </Button>
+                  </Tooltip>
+                </Button.Group>
+
+                <Tooltip title="运行测试">
+                  <Button
+                    icon={<PlayCircleOutlined />}
+                    onClick={() => setTestModalVisible(true)}
+                    style={{ borderColor: '#52c41a', color: '#52c41a' }}
+                  >
+                    运行
+                  </Button>
+                </Tooltip>
+
+                <Tooltip title={currentPipeline ? '保存修改' : '保存为新Pipeline'}>
+                  <Button
+                    type="primary"
+                    icon={<SaveOutlined />}
+                    onClick={handleSave}
+                    loading={saving}
+                  >
+                    保存
+                  </Button>
+                </Tooltip>
               </Space>
             }
+            bodyStyle={{ padding: 0, height: 'calc(100vh - 200px)' }}
           >
-            {/* 流程画布 */}
-            <div style={{ height: '700px', border: '1px solid #d9d9d9', borderRadius: '8px', position: 'relative' }}>
+            <div style={{ width: '100%', height: '100%', position: 'relative' }}>
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -783,18 +668,6 @@ function PipelineEditor() {
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
                 onNodeClick={onNodeClick}
-                onNodeDragStop={(event, node) => {
-                  // 更新协作光标位置
-                  collaboration.updateCursor({
-                    nodeId: node.id,
-                    x: node.position.x,
-                    y: node.position.y
-                  });
-                }}
-                onPaneClick={(event) => {
-                  // 清除协作光标
-                  collaboration.clearCursor();
-                }}
                 nodeTypes={nodeTypes}
                 fitView
               >
@@ -802,55 +675,8 @@ function PipelineEditor() {
                 <MiniMap />
                 <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
               </ReactFlow>
-
-              {/* 显示其他用户的协作光标 */}
-              {collaboration.getUserCursors().map((user) => (
-                <div
-                  key={user.id}
-                  style={{
-                    position: 'absolute',
-                    left: user.cursor?.x || 0,
-                    top: user.cursor?.y || 0,
-                    pointerEvents: 'none',
-                    zIndex: 1000,
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: '2px 6px',
-                      backgroundColor: user.color,
-                      color: 'white',
-                      borderRadius: 4,
-                      fontSize: 11,
-                      fontWeight: 'bold',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                      animation: 'pulse 1.5s infinite'
-                    }}
-                  >
-                    {user.name}
-                    {user.cursor?.nodeId && (
-                      <div style={{ fontSize: 9, opacity: 0.8 }}>
-                        编辑: {user.cursor.nodeId}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
             </div>
           </Card>
-        </Col>
-
-        <Col span={6}>
-          {/* 协作编辑面板 */}
-          <CollaborationPresence
-            onlineUsers={collaboration.state.onlineUsers}
-            currentUser={collaboration.state.currentUser}
-            isConnected={collaboration.state.isConnected}
-            snapshots={collaboration.getSnapshots()}
-            onCreateSnapshot={(description) => collaboration.createSnapshot(description)}
-            onRollback={(snapshotId) => collaboration.rollbackToSnapshot(snapshotId)}
-          />
         </Col>
       </Row>
 
@@ -973,31 +799,61 @@ function PipelineEditor() {
         )}
       </Modal>
 
-      {/* 校验结果面板 (CMS-209) - 艹！显示错误和警告列表，支持点击定位节点！ */}
-      <Drawer
-        title={<Space><CheckCircleOutlined /> Pipeline校验结果</Space>}
-        width={450}
-        open={validationDrawerVisible}
-        onClose={() => setValidationDrawerVisible(false)}
-        bodyStyle={{ padding: '16px' }}
+      {/* 校验面板 */}
+      {validationDrawerVisible && validationResult && (
+        <Modal
+          title="校验结果"
+          open={validationDrawerVisible}
+          onCancel={() => setValidationDrawerVisible(false)}
+          footer={null}
+          width={600}
+        >
+          <ValidationPanel
+            validation={validationResult}
+            onErrorClick={(error) => {
+              handleErrorClick(error);
+              setValidationDrawerVisible(false);
+            }}
+          />
+        </Modal>
+      )}
+
+      {/* 测试运行弹窗 */}
+      <Modal
+        title="测试运行Pipeline"
+        open={testModalVisible}
+        onOk={handleRunTest}
+        onCancel={() => setTestModalVisible(false)}
+        confirmLoading={testing}
+        okText="开始运行"
+        cancelText="取消"
       >
-        <ValidationPanel
-          validation={validationResult}
-          loading={validating}
-          onErrorClick={handleErrorClick}
-          onWarningClick={handleErrorClick}
-          onRevalidate={handleValidate}
-        />
-      </Drawer>
+        <div style={{ marginBottom: 16 }}>
+          <p>请输入测试用的输入参数 (JSON格式):</p>
+          <Input.TextArea
+            rows={10}
+            value={testInput}
+            onChange={(e) => setTestInput(e.target.value)}
+            placeholder='{ "prompt": "a cute cat", "style": "anime" }'
+            style={{ fontFamily: 'monospace' }}
+          />
+        </div>
+        <div style={{ background: '#f5f5f5', padding: '12px', borderRadius: '8px' }}>
+          <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>
+            注意：测试运行将创建一个临时的任务记录，并立即触发Pipeline执行。
+            执行结果请前往任务列表查看。
+          </p>
+        </div>
+      </Modal>
     </div>
   );
 }
 
 /**
- * Pipeline编辑器页面
- * 艹！包裹ReactFlowProvider，否则zustand会报错！
+ * 外部包装组件
+ * 艹！必须包裹在ReactFlowProvider中！
  */
-export default function PipelineEditorPage() {
+export default function PipelineEditorClient() {
   return (
     <ReactFlowProvider>
       <PipelineEditor />

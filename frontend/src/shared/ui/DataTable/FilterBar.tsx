@@ -1,6 +1,6 @@
 /**
  * FilterBar 通用筛选栏组件
- * 艹，这个组件自动渲染各种筛选器，完美集成useTableFilter！
+ * Visionary Theme: Clean & Modern
  */
 
 'use client';
@@ -19,8 +19,7 @@ import {
   Col,
 } from 'antd';
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons';
-import type { FilterBarProps, FilterConfig, FilterType } from './types';
-import type { FilterValue } from '@/shared/hooks/useTableFilter';
+import type { FilterBarProps, FilterConfig } from './types';
 
 const { RangePicker } = DatePicker;
 const { Search } = Input;
@@ -40,7 +39,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   layout = 'inline',
   gutter = 16,
 }) => {
-  // 艹，过滤掉不可见的筛选器
+  // 过滤掉不可见的筛选器
   const visibleFilters = useMemo(() => {
     return filters.filter((f) => f.visible !== false);
   }, [filters]);
@@ -88,7 +87,11 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             placeholder={placeholder || `搜索${label}`}
             defaultValue={defaultValue as string}
             onSearch={() => onSearch?.()}
-            enterButton
+            enterButton={
+              <Button type="primary" icon={<SearchOutlined />}>
+                搜索
+              </Button>
+            }
           />
         );
 
@@ -198,52 +201,60 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   };
 
   return (
-    <div className={className} style={{ marginBottom: 16 }}>
-      <Row gutter={gutter}>
-        {visibleFilters.map((filter) => (
+    <div className={`animate-fade-up ${className || ''}`} style={{ marginBottom: 24 }}>
+      <div className="bento-card" style={{ padding: '20px 24px', borderRadius: 20 }}>
+        <Row gutter={[24, 16]} align="middle">
+          {visibleFilters.map((filter) => (
+            <Col
+              key={filter.key}
+              xs={24}
+              sm={12}
+              md={layout === 'inline' ? 8 : 24}
+              lg={layout === 'inline' ? 6 : 24}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {layout === 'vertical' || true ? ( // 强制显示标签，更清晰
+                  <div style={{ fontSize: 13, color: '#86868B', fontWeight: 500 }}>
+                    {filter.label}
+                  </div>
+                ) : null}
+                {renderFilter(filter)}
+              </div>
+            </Col>
+          ))}
+
+          {/* 操作按钮 */}
           <Col
-            key={filter.key}
             xs={24}
             sm={12}
             md={layout === 'inline' ? 8 : 24}
             lg={layout === 'inline' ? 6 : 24}
+            style={{ display: 'flex', alignItems: 'flex-end', height: '100%', paddingBottom: 2 }}
           >
-            <div style={{ marginBottom: layout === 'vertical' ? 8 : 0 }}>
-              {layout === 'vertical' && (
-                <div style={{ marginBottom: 4, fontWeight: 500 }}>
-                  {filter.label}
-                </div>
+            <Space size="middle">
+              {showSearch && (
+                <Button
+                  type="primary"
+                  icon={<SearchOutlined />}
+                  onClick={onSearch}
+                  className="btn-vision"
+                >
+                  搜索
+                </Button>
               )}
-              {renderFilter(filter)}
-            </div>
+              {showReset && (
+                <Button
+                  icon={<ReloadOutlined />}
+                  onClick={handleReset}
+                  className="btn-vision-secondary"
+                >
+                  重置
+                </Button>
+              )}
+            </Space>
           </Col>
-        ))}
-
-        {/* 操作按钮 */}
-        <Col
-          xs={24}
-          sm={12}
-          md={layout === 'inline' ? 8 : 24}
-          lg={layout === 'inline' ? 6 : 24}
-        >
-          <Space>
-            {showSearch && (
-              <Button
-                type="primary"
-                icon={<SearchOutlined />}
-                onClick={onSearch}
-              >
-                搜索
-              </Button>
-            )}
-            {showReset && (
-              <Button icon={<ReloadOutlined />} onClick={handleReset}>
-                重置
-              </Button>
-            )}
-          </Space>
-        </Col>
-      </Row>
+        </Row>
+      </div>
     </div>
   );
 };

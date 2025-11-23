@@ -42,7 +42,7 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
-  background: var(--bg-primary);
+  background: var(--bg-secondary); /* 默认使用浅灰背景，突出卡片 */
   color: var(--text-primary);
   /* 中文优先字体栈 */
   font-family: "SF Pro Display", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -64,21 +64,21 @@ body {
 
 /* 1. 巨型排版 (Massive Typography) */
 .hero-title {
-  font-size: clamp(48px, 6vw, 80px);
+  font-size: clamp(32px, 4vw, 48px); /* 调整为更适合管理后台的大小 */
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: -0.02em;
-  background: linear-gradient(180deg, #1D1D1F 0%, #434344 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--text-primary);
+  margin-bottom: 16px;
 }
 
 .hero-subtitle {
-  font-size: clamp(18px, 2vw, 24px);
+  font-size: clamp(16px, 1.5vw, 18px);
   font-weight: 400;
   color: var(--text-secondary);
   line-height: 1.6;
   letter-spacing: 0;
+  max-width: 600px;
 }
 
 /* 2. 便当盒卡片 (Bento Card) */
@@ -89,17 +89,16 @@ body {
   padding: 32px;
   position: relative;
   overflow: hidden;
-  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   /* Apple 缓动曲线 */
   border: 1px solid var(--border-light);
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
 }
 
 .bento-card:hover {
-  transform: scale(1.01);
+  transform: translateY(-2px);
   box-shadow: var(--shadow-md);
   border-color: var(--border-hover);
 }
@@ -120,8 +119,8 @@ body {
   color: #FFFFFF;
   border-radius: 999px;
   /* 胶囊形 */
-  padding: 14px 32px;
-  font-size: 16px;
+  padding: 12px 24px;
+  font-size: 15px;
   font-weight: 500;
   border: none;
   cursor: pointer;
@@ -134,16 +133,16 @@ body {
 
 .btn-vision:hover {
   background: #333336;
-  transform: translateY(-2px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .btn-vision-secondary {
   background: rgba(0, 0, 0, 0.05);
   color: #1D1D1F;
   border-radius: 999px;
-  padding: 14px 32px;
-  font-size: 16px;
+  padding: 12px 24px;
+  font-size: 15px;
   font-weight: 500;
   border: none;
   cursor: pointer;
@@ -151,7 +150,7 @@ body {
 }
 
 .btn-vision-secondary:hover {
-  background: rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 0.08);
 }
 
 /* 4. 毛玻璃面板 (Glass Panel) */
@@ -159,9 +158,7 @@ body {
   background: var(--bg-glass);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  border-radius: 24px;
-  box-shadow: var(--shadow-md);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 /* ============================================
@@ -170,7 +167,7 @@ body {
 @keyframes fadeUp {
   from {
     opacity: 0;
-    transform: translateY(40px);
+    transform: translateY(20px);
   }
 
   to {
@@ -180,8 +177,20 @@ body {
 }
 
 .animate-fade-up {
-  animation: fadeUp 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   opacity: 0;
+}
+
+/* AI 打字动画 */
+@keyframes typing {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
 }
 
 .delay-100 {
@@ -199,27 +208,85 @@ body {
 /* ============================================
    Ant Design 覆盖 (Visionary Style)
    ============================================ */
+/* 按钮 */
 .ant-btn {
-  border-radius: 999px !important;
+  border-radius: 12px !important; /* 统一圆角 */
   box-shadow: none !important;
+  font-weight: 500 !important;
 }
 
+.ant-btn-primary {
+  background: #1D1D1F !important;
+  border-color: #1D1D1F !important;
+}
+
+.ant-btn-primary:hover {
+  background: #333336 !important;
+  border-color: #333336 !important;
+  opacity: 0.9;
+}
+
+/* 输入框 */
 .ant-input,
-.ant-input-password {
+.ant-input-password,
+.ant-input-number,
+.ant-select-selector {
   border-radius: 12px !important;
-  padding: 12px 16px !important;
-  background: #F5F5F7 !important;
-  border: none !important;
+  padding: 8px 12px !important;
+  background: #FFFFFF !important;
+  border: 1px solid var(--border-light) !important;
   transition: all 0.3s ease !important;
 }
 
-.ant-input:focus,
-.ant-input-password:focus-within {
-  background: #FFFFFF !important;
-  box-shadow: 0 0 0 2px var(--text-accent) !important;
+.ant-input:hover,
+.ant-input-password:hover,
+.ant-input-number:hover,
+.ant-select-selector:hover {
+  border-color: var(--border-hover) !important;
 }
 
-/* 标签页样式 */
+.ant-input:focus,
+.ant-input-password:focus-within,
+.ant-input-number:focus-within,
+.ant-select-selector:focus-within {
+  border-color: var(--text-primary) !important;
+  box-shadow: 0 0 0 2px rgba(29, 29, 31, 0.1) !important;
+}
+
+/* 卡片 */
+.ant-card {
+  border-radius: 24px !important;
+  border: 1px solid var(--border-light) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.ant-card-head {
+  border-bottom: 1px solid var(--border-light) !important;
+  font-weight: 600 !important;
+  font-size: 18px !important;
+}
+
+/* 表格 */
+.ant-table-wrapper .ant-table {
+  background: transparent !important;
+}
+
+.ant-table-thead > tr > th {
+  background: transparent !important;
+  border-bottom: 1px solid var(--border-light) !important;
+  color: var(--text-secondary) !important;
+  font-weight: 500 !important;
+}
+
+.ant-table-tbody > tr > td {
+  border-bottom: 1px solid var(--border-light) !important;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background: rgba(0, 0, 0, 0.02) !important;
+}
+
+/* 标签页 */
 .ant-tabs-nav::before {
   border-bottom: none !important;
 }
@@ -227,6 +294,8 @@ body {
 .ant-tabs-tab {
   font-size: 16px !important;
   color: var(--text-secondary) !important;
+  padding: 12px 0 !important;
+  margin: 0 24px 0 0 !important;
 }
 
 .ant-tabs-tab-active .ant-tabs-tab-btn {
@@ -237,4 +306,12 @@ body {
 .ant-tabs-ink-bar {
   background: var(--text-primary) !important;
   height: 2px !important;
+}
+
+/* 标签 Tag */
+.ant-tag {
+  border-radius: 6px !important;
+  border: none !important;
+  padding: 2px 8px !important;
+  font-weight: 500 !important;
 }

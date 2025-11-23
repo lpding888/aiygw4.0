@@ -5,6 +5,7 @@ import { AppThemeProvider } from '@/shared/providers';
 import { MSWInitializer } from '@/components/MSWInitializer';
 import { generateMetadata } from '@/lib/seo';
 import WebVitalsInitializer from '@/components/WebVitalsInitializer';
+import ErrorProvider from '@/providers/ErrorProvider';
 import './fonts.css';
 import '../styles/tokens.css'; // UI-P2-TOKEN-205: Design Tokens
 import '../styles/accessibility.css'; // A11Y-P2-ACCESS-206: 可访问性样式
@@ -49,14 +50,16 @@ export default function RootLayout({
           跳过导航，直达主内容
         </a>
         <ErrorBoundary>
-          <AppThemeProvider>
-            <WebVitalsInitializer />
-            <MSWInitializer />
-            <Navigation />
-            <main id="main-content" tabIndex={-1}>
-              {children}
-            </main>
-          </AppThemeProvider>
+          <ErrorProvider>
+            <AppThemeProvider>
+              <WebVitalsInitializer />
+              <MSWInitializer />
+              <Navigation />
+              <main id="main-content" tabIndex={-1}>
+                {children}
+              </main>
+            </AppThemeProvider>
+          </ErrorProvider>
         </ErrorBoundary>
       </body>
     </html>

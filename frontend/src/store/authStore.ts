@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import Cookies from 'js-cookie';
 import { User } from '@/types';
 
 interface AuthState {
@@ -37,18 +38,13 @@ const syncLocalStorage = (user: User | null, accessToken: string | null, refresh
     version: 0
   });
 
+  // Sync to Cookie for Middleware
   if (user) {
     localStorage.setItem('user', JSON.stringify(user));
+    Cookies.set('auth-storage', persistPayload, { expires: 7, path: '/' });
   } else {
     localStorage.removeItem('user');
-  }
-
-  if (user || accessToken || refreshToken) {
-    localStorage.setItem('auth-storage', persistPayload);
-    document.cookie = `auth-storage=${encodeURIComponent(persistPayload)}; path=/; sameSite=Lax`;
-  } else {
-    localStorage.removeItem('auth-storage');
-    document.cookie = 'auth-storage=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    Cookies.remove('auth-storage', { path: '/' });
   }
 };
 

@@ -102,7 +102,7 @@ export class ProviderHealthService {
           const error = err instanceof Error ? err : new Error(String(err));
           logger.error(
             `[ProviderHealthService] Provider健康检查异常 ` +
-              `providerId=${provider.provider_id} error=${error.message}`
+            `providerId=${provider.provider_id} error=${error.message}`
           );
           return null;
         })
@@ -116,7 +116,7 @@ export class ProviderHealthService {
 
       logger.info(
         `[ProviderHealthService] 健康检查完成 ` +
-          `total=${providers.length} success=${successCount} fail=${failCount}`
+        `total=${providers.length} success=${successCount} fail=${failCount}`
       );
 
       return {
@@ -159,6 +159,12 @@ export class ProviderHealthService {
           isHealthy = await this.checkScfHealth(config);
           break;
 
+        case 'email':
+          // 邮件服务通过SMTP连接检查，这里暂时返回true，因为EmailService自己会检查配置
+          // 或者可以实现一个checkEmailHealth方法尝试连接SMTP
+          isHealthy = true;
+          break;
+
         default:
           logger.warn(`[ProviderHealthService] 未知的Provider类型: ${type}`);
           isHealthy = true; // 未知类型默认健康
@@ -171,7 +177,7 @@ export class ProviderHealthService {
 
       logger.info(
         `[ProviderHealthService] Provider检查完成 ` +
-          `providerId=${provider_id} healthy=${isHealthy} responseTime=${responseTime}ms`
+        `providerId=${provider_id} healthy=${isHealthy} responseTime=${responseTime}ms`
       );
 
       return { isHealthy, responseTime };
@@ -181,7 +187,7 @@ export class ProviderHealthService {
 
       logger.error(
         `[ProviderHealthService] Provider检查失败 ` +
-          `providerId=${provider_id} error=${err.message}`
+        `providerId=${provider_id} error=${err.message}`
       );
 
       // 更新为不健康状态

@@ -73,7 +73,7 @@ export const useFeatureStore = create<FeatureState>()(
             offset: (pagination.page - 1) * pagination.pageSize
           };
 
-          const response = await api.features.getAll(requestParams);
+          const response = await api.admin.getFeatures(requestParams);
 
           if (response.data?.success && response.data.data) {
             let features = response.data.data.features || response.data.data;
@@ -112,7 +112,7 @@ export const useFeatureStore = create<FeatureState>()(
         try {
           set({ loading: true, error: null });
 
-          const response = await api.features.getFormSchema(featureId);
+          const response = await api.admin.getFeatureSchema(featureId);
 
           if (response.data?.success) {
             const { success: _ignored, message: _msg, ...schema } = response.data as any;
