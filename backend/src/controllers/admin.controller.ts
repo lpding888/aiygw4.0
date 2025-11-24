@@ -93,6 +93,32 @@ const isSuperAdminUser = (req: Request): boolean => {
  * 管理后台控制器 - 处理管理相关请求
  */
 class AdminController {
+  constructor() {
+    // 绑定所有方法到实例，避免 this 上下文丢失
+    this.getUsers = this.getUsers.bind(this);
+    this.getUserStats = this.getUserStats.bind(this);
+    this.updateUser = this.updateUser.bind(this);
+    this.getTasks = this.getTasks.bind(this);
+    this.getTaskStats = this.getTaskStats.bind(this);
+    this.getFailedTasks = this.getFailedTasks.bind(this);
+    this.getOverview = this.getOverview.bind(this);
+    this.getFeatures = this.getFeatures.bind(this);
+    this.createFeature = this.createFeature.bind(this);
+    this.updateFeature = this.updateFeature.bind(this);
+    this.toggleFeature = this.toggleFeature.bind(this);
+    this.deleteFeature = this.deleteFeature.bind(this);
+    this.getDistributors = this.getDistributors.bind(this);
+    this.getDistributorDetail = this.getDistributorDetail.bind(this);
+    this.getDistributorReferrals = this.getDistributorReferrals.bind(this);
+    this.getDistributorCommissions = this.getDistributorCommissions.bind(this);
+    this.approveDistributor = this.approveDistributor.bind(this);
+    this.getWithdrawals = this.getWithdrawals.bind(this);
+    this.approveWithdrawal = this.approveWithdrawal.bind(this);
+    this.rejectWithdrawal = this.rejectWithdrawal.bind(this);
+    this.getDistributionSettings = this.getDistributionSettings.bind(this);
+    this.updateDistributionSettings = this.updateDistributionSettings.bind(this);
+  }
+
   /**
    * 获取用户列表
    * GET /api/admin/users?limit=10&offset=0&isMember=true

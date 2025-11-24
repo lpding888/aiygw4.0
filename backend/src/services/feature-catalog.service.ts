@@ -139,7 +139,7 @@ class FeatureCatalogService {
   async loadFeatureDefinitions(): Promise<void> {
     try {
       const features = await db('feature_definitions')
-        .where('is_active', true)
+        .where('is_enabled', true)
         .orderBy('category', 'asc')
         .orderBy('name', 'asc');
 
@@ -210,7 +210,7 @@ class FeatureCatalogService {
         query = query.where('is_public', isPublic);
       }
       if (typeof is_active === 'boolean') {
-        query = query.where('is_active', is_active);
+        query = query.where('is_enabled', is_active);
       }
       if (tags && tags.length > 0) {
         query = query.whereRaw('JSON_CONTAINS(tags, ?)', [JSON.stringify(tags)]);
