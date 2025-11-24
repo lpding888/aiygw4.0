@@ -35,7 +35,6 @@ describe('ProvidersController - 单元测试', () => {
 
     // 清除所有mock调用记录
     jest.clearAllMocks();
-
   });
 
   describe('listProviders', () => {

@@ -161,11 +161,11 @@ describe('Provider管理API集成测试', () => {
       ];
 
       (providerRegistryService.healthCheck as jest.Mock).mockResolvedValue(mockHealthData);
-      (providerRegistryService.getRegisteredProviders as jest.Mock).mockReturnValue(mockRegisteredProviders);
+      (providerRegistryService.getRegisteredProviders as jest.Mock).mockReturnValue(
+        mockRegisteredProviders
+      );
 
-      const response = await request(app)
-        .get('/api/providers/health')
-        .expect(200);
+      const response = await request(app).get('/api/providers/health').expect(200);
 
       expect(response.body.success).toBe(true);
       expect(response.body.data.status).toBe('healthy');
@@ -247,9 +247,7 @@ describe('Provider管理API集成测试', () => {
 
       (providerRepo.getProviderEndpoint as jest.Mock).mockResolvedValue(mockProvider);
 
-      const response = await request(app)
-        .get('/api/providers/test-provider')
-        .expect(200);
+      const response = await request(app).get('/api/providers/test-provider').expect(200);
 
       expect(response.body.success).toBe(true);
       expect(response.body.data.provider_ref).toBe('test-provider');
@@ -259,9 +257,7 @@ describe('Provider管理API集成测试', () => {
     it('获取不存在的Provider应该返回404', async () => {
       (providerRepo.getProviderEndpoint as jest.Mock).mockResolvedValue(null);
 
-      const response = await request(app)
-        .get('/api/providers/non-existent')
-        .expect(404);
+      const response = await request(app).get('/api/providers/non-existent').expect(404);
 
       expect(response.body.success).toBe(false);
       expect(response.body.error.code).toBe('NOT_FOUND');

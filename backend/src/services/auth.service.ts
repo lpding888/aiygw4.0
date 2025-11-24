@@ -71,7 +71,7 @@ interface VerificationCodeRecord {
  * 认证服务类
  */
 class AuthService implements AuthProvider {
-  constructor(private readonly tokenSigner: TokenSigner = tokenService) { }
+  constructor(private readonly tokenSigner: TokenSigner = tokenService) {}
   /**
    * 发送验证码
    * 艹，防刷限制一定要做！
@@ -370,7 +370,9 @@ class AuthService implements AuthProvider {
     try {
       await cacheService.set(`email:${normalized}`, code, { ttl: 5 * 60, skipMemoryCache: true });
     } catch (cacheError) {
-      logger.warn(`[AuthService] 缓存写入失败（不影响业务）: email=${normalized}, error=${cacheError}`);
+      logger.warn(
+        `[AuthService] 缓存写入失败（不影响业务）: email=${normalized}, error=${cacheError}`
+      );
     }
 
     logger.info(`[AuthService] 邮箱验证码已发送: email=${normalized}, ip=${ip}`);

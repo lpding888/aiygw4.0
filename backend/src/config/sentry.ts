@@ -32,7 +32,7 @@ export function initSentry() {
 
     integrations: [
       // 性能分析
-      nodeProfilingIntegration(),
+      nodeProfilingIntegration()
     ],
 
     // 过滤掉一些不重要的错误
@@ -62,7 +62,7 @@ export function initSentry() {
         if (breadcrumb.data.accessToken) breadcrumb.data.accessToken = '[FILTERED]';
       }
       return breadcrumb;
-    },
+    }
   });
 
   logger.info('[Sentry] 初始化成功！错误追踪已启用');
@@ -102,7 +102,7 @@ export function setUser(user: { id: string; email?: string; phone?: string }) {
   Sentry.setUser({
     id: user.id,
     email: user.email,
-    username: user.phone,
+    username: user.phone
   });
 }
 

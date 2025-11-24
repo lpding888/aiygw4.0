@@ -116,12 +116,7 @@ router.post(
 );
 
 // Pipeline 测试运行
-router.post(
-  '/pipelines/test',
-  authenticate,
-  requireAdmin,
-  adminController.testPipeline
-);
+router.post('/pipelines/test', authenticate, requireAdmin, adminController.testPipeline);
 
 // 表单Schema管理
 router.get('/form-schemas', authenticate, requireAdmin, formSchemasController.listFormSchemas);

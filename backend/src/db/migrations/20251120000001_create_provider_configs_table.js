@@ -18,7 +18,10 @@ exports.up = async function (knex) {
 
     // 基本信息
     table.string('provider_name', 100).notNullable().comment('Provider名称');
-    table.string('type', 50).notNullable().comment('Provider类型: runninghub/scf/sync_image/email等');
+    table
+      .string('type', 50)
+      .notNullable()
+      .comment('Provider类型: runninghub/scf/sync_image/email等');
     table.text('description').nullable().comment('描述信息');
 
     // 核心配置（JSON格式，灵活存储各种配置）

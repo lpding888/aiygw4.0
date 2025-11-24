@@ -90,8 +90,14 @@ exports.up = async function (knex) {
     table.integer('plan_id').unsigned().nullable().comment('套餐ID');
 
     // 会员信息
-    table.string('membership_type', 50).notNullable().comment('会员类型（free/basic/premium/enterprise）');
-    table.enum('status', ['active', 'expired', 'cancelled', 'suspended']).defaultTo('active').comment('会员状态');
+    table
+      .string('membership_type', 50)
+      .notNullable()
+      .comment('会员类型（free/basic/premium/enterprise）');
+    table
+      .enum('status', ['active', 'expired', 'cancelled', 'suspended'])
+      .defaultTo('active')
+      .comment('会员状态');
 
     // 时间信息
     table.timestamp('start_date').notNullable().comment('开始时间');
@@ -137,7 +143,10 @@ exports.up = async function (knex) {
     // 内容基本信息
     table.string('title', 200).nullable().comment('标题');
     table.text('description').nullable().comment('描述');
-    table.enum('content_type', ['image', 'video', 'text', 'model', 'mixed']).notNullable().comment('内容类型');
+    table
+      .enum('content_type', ['image', 'video', 'text', 'model', 'mixed'])
+      .notNullable()
+      .comment('内容类型');
     table.string('category', 50).nullable().comment('分类');
 
     // 内容存储
@@ -153,8 +162,14 @@ exports.up = async function (knex) {
     table.integer('duration').nullable().comment('时长（秒，用于视频）');
 
     // 状态和权限
-    table.enum('status', ['draft', 'published', 'archived', 'deleted']).defaultTo('draft').comment('状态');
-    table.enum('visibility', ['public', 'private', 'unlisted']).defaultTo('private').comment('可见性');
+    table
+      .enum('status', ['draft', 'published', 'archived', 'deleted'])
+      .defaultTo('draft')
+      .comment('状态');
+    table
+      .enum('visibility', ['public', 'private', 'unlisted'])
+      .defaultTo('private')
+      .comment('可见性');
 
     // 统计信息
     table.integer('view_count').defaultTo(0).comment('浏览次数');
@@ -201,11 +216,20 @@ exports.up = async function (knex) {
     // 合作伙伴基本信息
     table.string('partnership_name', 200).nullable().comment('合作伙伴名称');
     table.string('partnership_code', 50).nullable().unique().comment('合作伙伴代码');
-    table.enum('partnership_type', ['affiliate', 'reseller', 'integration', 'strategic', 'other']).notNullable().comment('合作类型');
-    table.enum('partnership_level', ['bronze', 'silver', 'gold', 'platinum']).defaultTo('bronze').comment('合作等级');
+    table
+      .enum('partnership_type', ['affiliate', 'reseller', 'integration', 'strategic', 'other'])
+      .notNullable()
+      .comment('合作类型');
+    table
+      .enum('partnership_level', ['bronze', 'silver', 'gold', 'platinum'])
+      .defaultTo('bronze')
+      .comment('合作等级');
 
     // 状态
-    table.enum('status', ['pending', 'active', 'suspended', 'terminated']).defaultTo('pending').comment('合作状态');
+    table
+      .enum('status', ['pending', 'active', 'suspended', 'terminated'])
+      .defaultTo('pending')
+      .comment('合作状态');
 
     // 合作期限
     table.timestamp('start_date').notNullable().comment('开始时间');

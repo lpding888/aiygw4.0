@@ -70,14 +70,10 @@ class OpenAIProvider {
     }
 
     try {
-      logger.info(
-        `[OpenAIProvider] 开始调用OpenAI taskId=${taskId} model=${model}`
-      );
+      logger.info(`[OpenAIProvider] 开始调用OpenAI taskId=${taskId} model=${model}`);
 
       // 构建消息
-      const messages: any[] = [
-        { role: 'system', content: systemPrompt },
-      ];
+      const messages: any[] = [{ role: 'system', content: systemPrompt }];
 
       // 如果有图片URL，使用多模态格式
       if (imageUrl && (model.includes('gpt-4o') || model.includes('gpt-4-vision'))) {
@@ -97,7 +93,7 @@ class OpenAIProvider {
         method: 'POST',
         url: 'https://api.openai.com/v1/chat/completions',
         headers: {
-          'Authorization': `Bearer ${openaiApiKey}`,
+          Authorization: `Bearer ${openaiApiKey}`,
           'Content-Type': 'application/json'
         },
         data: {
@@ -124,16 +120,14 @@ class OpenAIProvider {
         model: data.model
       };
 
-      logger.info(
-        `[OpenAIProvider] 调用成功 taskId=${taskId} tokens=${result.usage.totalTokens}`
-      );
+      logger.info(`[OpenAIProvider] 调用成功 taskId=${taskId} tokens=${result.usage.totalTokens}`);
 
       return result;
     } catch (error: any) {
-      logger.error(
-        `[OpenAIProvider] 调用失败 taskId=${taskId} error=${error.message}`,
-        { taskId, error }
-      );
+      logger.error(`[OpenAIProvider] 调用失败 taskId=${taskId} error=${error.message}`, {
+        taskId,
+        error
+      });
       throw error;
     }
   }

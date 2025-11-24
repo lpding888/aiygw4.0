@@ -76,9 +76,7 @@ class QwenProvider {
     }
 
     try {
-      logger.info(
-        `[QwenProvider] 开始调用通义千问 taskId=${taskId} model=${model}`
-      );
+      logger.info(`[QwenProvider] 开始调用通义千问 taskId=${taskId} model=${model}`);
 
       // 构建消息
       const messages: any[] = [];
@@ -95,10 +93,7 @@ class QwenProvider {
       if (imageUrl && (model.includes('vl') || model.includes('vision'))) {
         messages.push({
           role: 'user',
-          content: [
-            { text: prompt },
-            { image: imageUrl }
-          ]
+          content: [{ text: prompt }, { image: imageUrl }]
         });
       } else {
         messages.push({
@@ -112,7 +107,7 @@ class QwenProvider {
         method: 'POST',
         url: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
         headers: {
-          'Authorization': `Bearer ${qwenApiKey}`,
+          Authorization: `Bearer ${qwenApiKey}`,
           'Content-Type': 'application/json'
         },
         data: {
@@ -151,16 +146,14 @@ class QwenProvider {
         finishReason: choice.finish_reason
       };
 
-      logger.info(
-        `[QwenProvider] 调用成功 taskId=${taskId} tokens=${result.usage.totalTokens}`
-      );
+      logger.info(`[QwenProvider] 调用成功 taskId=${taskId} tokens=${result.usage.totalTokens}`);
 
       return result;
     } catch (error: any) {
-      logger.error(
-        `[QwenProvider] 调用失败 taskId=${taskId} error=${error.message}`,
-        { taskId, error }
-      );
+      logger.error(`[QwenProvider] 调用失败 taskId=${taskId} error=${error.message}`, {
+        taskId,
+        error
+      });
       throw error;
     }
   }

@@ -102,7 +102,7 @@ export class ProviderHealthService {
           const error = err instanceof Error ? err : new Error(String(err));
           logger.error(
             `[ProviderHealthService] Provider健康检查异常 ` +
-            `providerId=${provider.provider_id} error=${error.message}`
+              `providerId=${provider.provider_id} error=${error.message}`
           );
           return null;
         })
@@ -116,7 +116,7 @@ export class ProviderHealthService {
 
       logger.info(
         `[ProviderHealthService] 健康检查完成 ` +
-        `total=${providers.length} success=${successCount} fail=${failCount}`
+          `total=${providers.length} success=${successCount} fail=${failCount}`
       );
 
       return {
@@ -177,7 +177,7 @@ export class ProviderHealthService {
 
       logger.info(
         `[ProviderHealthService] Provider检查完成 ` +
-        `providerId=${provider_id} healthy=${isHealthy} responseTime=${responseTime}ms`
+          `providerId=${provider_id} healthy=${isHealthy} responseTime=${responseTime}ms`
       );
 
       return { isHealthy, responseTime };
@@ -187,7 +187,7 @@ export class ProviderHealthService {
 
       logger.error(
         `[ProviderHealthService] Provider检查失败 ` +
-        `providerId=${provider_id} error=${err.message}`
+          `providerId=${provider_id} error=${err.message}`
       );
 
       // 更新为不健康状态

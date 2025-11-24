@@ -79,9 +79,9 @@ class ProviderRegistryService {
   private async registerExternalProviders() {
     try {
       // 从数据库读取LLM Provider配置（provider_ref以llm_开头的）
-      const providers = await db('provider_endpoints')
+      const providers = (await db('provider_endpoints')
         .where('provider_ref', 'like', 'llm_%')
-        .select('*') as DbProviderConfig[];
+        .select('*')) as DbProviderConfig[];
 
       logger.info(`[ProviderRegistry] 从数据库读取到 ${providers.length} 个LLM Provider配置`);
 
@@ -93,7 +93,9 @@ class ProviderRegistryService {
           // 创建Provider实例
           const providerInstance = this.createProviderInstance(providerType);
           if (!providerInstance) {
-            logger.warn(`[ProviderRegistry] 不支持的Provider类型: ${providerType}，跳过: ${dbConfig.provider_name}`);
+            logger.warn(
+              `[ProviderRegistry] 不支持的Provider类型: ${providerType}，跳过: ${dbConfig.provider_name}`
+            );
             continue;
           }
 
@@ -118,7 +120,9 @@ class ProviderRegistryService {
 
           // 注册Provider（使用provider_ref作为标识）
           this.registerProvider(dbConfig.provider_ref, providerInstance, wrapperConfig);
-          logger.info(`[ProviderRegistry] 已注册LLM Provider: ${dbConfig.provider_name} (${dbConfig.provider_ref})`);
+          logger.info(
+            `[ProviderRegistry] 已注册LLM Provider: ${dbConfig.provider_name} (${dbConfig.provider_ref})`
+          );
         } catch (error) {
           logger.error(`[ProviderRegistry] 注册Provider失败: ${dbConfig.provider_name}`, error);
         }

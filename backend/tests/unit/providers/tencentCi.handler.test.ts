@@ -4,11 +4,7 @@
  */
 
 import { TencentCiProvider } from '../../../src/providers/handlers/tencentCi.handler.ts';
-import {
-  ExecContext,
-  ProviderErrorCode,
-  type ExecResult
-} from '../../../src/providers/types.ts';
+import { ExecContext, ProviderErrorCode, type ExecResult } from '../../../src/providers/types.ts';
 import { ILogger } from '../../../src/providers/base/base-provider.ts';
 
 // Mock Logger

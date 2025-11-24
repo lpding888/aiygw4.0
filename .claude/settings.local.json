@@ -33,7 +33,8 @@
       "Bash(test:*)",
       "Bash(systemctl status:*)",
       "Bash(npm ls:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(gh run list:*)"
     ],
     "deny": [],
     "ask": []

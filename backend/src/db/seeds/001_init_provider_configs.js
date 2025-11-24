@@ -56,8 +56,8 @@ exports.seed = async function (knex) {
         port: parseInt(process.env.SMTP_PORT || '465'),
         secure: true,
         auth: {
-          user_ref: 'SMTP_USER',     // 引用环境变量
-          pass_ref: 'SMTP_PASSWORD'  // 引用环境变量
+          user_ref: 'SMTP_USER', // 引用环境变量
+          pass_ref: 'SMTP_PASSWORD' // 引用环境变量
         },
         from: {
           name: 'AI衣柜',

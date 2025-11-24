@@ -404,7 +404,9 @@ class PipelineExecutionService extends EventEmitter {
         throw new Error(`Provider未注册: ${providerType}`);
       }
 
-      logger.info(`[PipelineExecution] 执行Transform节点: ${node.node_id}, Provider: ${providerType}`);
+      logger.info(
+        `[PipelineExecution] 执行Transform节点: ${node.node_id}, Provider: ${providerType}`
+      );
 
       // 解析参数中的变量模板 (支持 {{variable}} 语法)
       const resolvedParams = this.resolveVariables(parameters, previousResults);
@@ -452,7 +454,10 @@ class PipelineExecutionService extends EventEmitter {
   /**
    * 解析单个值中的变量模板
    */
-  private resolveValue(value: unknown, previousResults: Record<string, NodeExecutionResult>): unknown {
+  private resolveValue(
+    value: unknown,
+    previousResults: Record<string, NodeExecutionResult>
+  ): unknown {
     if (typeof value === 'string') {
       // 解析 {{nodeId.outputKey}} 或 {{nodeId}} 格式
       return value.replace(/\{\{([^}]+)\}\}/g, (match, path) => {

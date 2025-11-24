@@ -72,9 +72,7 @@ class ClaudeProvider {
     }
 
     try {
-      logger.info(
-        `[ClaudeProvider] 开始调用Claude taskId=${taskId} model=${model}`
-      );
+      logger.info(`[ClaudeProvider] 开始调用Claude taskId=${taskId} model=${model}`);
 
       // 构建消息内容
       const messageContent: any[] = [];
@@ -145,16 +143,14 @@ class ClaudeProvider {
         stopReason: data.stop_reason
       };
 
-      logger.info(
-        `[ClaudeProvider] 调用成功 taskId=${taskId} tokens=${result.usage.totalTokens}`
-      );
+      logger.info(`[ClaudeProvider] 调用成功 taskId=${taskId} tokens=${result.usage.totalTokens}`);
 
       return result;
     } catch (error: any) {
-      logger.error(
-        `[ClaudeProvider] 调用失败 taskId=${taskId} error=${error.message}`,
-        { taskId, error }
-      );
+      logger.error(`[ClaudeProvider] 调用失败 taskId=${taskId} error=${error.message}`, {
+        taskId,
+        error
+      });
       throw error;
     }
   }

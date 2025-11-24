@@ -11,21 +11,11 @@ import process from 'node:process';
 const projectRoot = process.cwd();
 const canonicalMigrationDir = path.resolve(projectRoot, 'src/db/migrations');
 
-const ignoreDirs = new Set([
-  'node_modules',
-  '.git',
-  'dist',
-  '.turbo',
-  '.next',
-  'logs'
-]);
+const ignoreDirs = new Set(['node_modules', '.git', 'dist', '.turbo', '.next', 'logs']);
 
 type DuplicateBucket = Record<string, string[]>;
 
-async function walkForStrayMigrations(
-  dir: string,
-  stray: string[]
-): Promise<void> {
+async function walkForStrayMigrations(dir: string, stray: string[]): Promise<void> {
   const entries = await readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     if (ignoreDirs.has(entry.name)) {
@@ -37,10 +27,7 @@ async function walkForStrayMigrations(
       continue;
     }
 
-    if (
-      entry.name === 'migrations' &&
-      path.resolve(fullPath) !== canonicalMigrationDir
-    ) {
+    if (entry.name === 'migrations' && path.resolve(fullPath) !== canonicalMigrationDir) {
       stray.push(fullPath);
       continue;
     }
@@ -74,18 +61,14 @@ async function main(): Promise<void> {
   await walkForStrayMigrations(projectRoot, strayDirs);
 
   const duplicates = await collectDuplicates();
-  const duplicateEntries = Object.entries(duplicates).filter(
-    ([, files]) => files.length > 1
-  );
+  const duplicateEntries = Object.entries(duplicates).filter(([, files]) => files.length > 1);
 
   let hasError = false;
 
   if (strayDirs.length > 0) {
     hasError = true;
     console.error('⚠️ 发现非规范迁移目录:');
-    strayDirs
-      .sort()
-      .forEach((dir) => console.error(`  - ${path.relative(projectRoot, dir)}`));
+    strayDirs.sort().forEach((dir) => console.error(`  - ${path.relative(projectRoot, dir)}`));
   }
 
   if (duplicateEntries.length > 0) {
@@ -93,16 +76,12 @@ async function main(): Promise<void> {
     console.error('\n⚠️ 发现命名重复的迁移文件（去除时间戳后相同）:');
     duplicateEntries.forEach(([suffix, files]) => {
       console.error(`\n  • ${suffix}`);
-      files.forEach((file) =>
-        console.error(`    - ${path.relative(projectRoot, file)}`)
-      );
+      files.forEach((file) => console.error(`    - ${path.relative(projectRoot, file)}`));
     });
   }
 
   if (hasError) {
-    console.error(
-      '\n请先处理上述问题，再继续运行 knex migrate 或提交代码。'
-    );
+    console.error('\n请先处理上述问题，再继续运行 knex migrate 或提交代码。');
     process.exitCode = 1;
     return;
   }

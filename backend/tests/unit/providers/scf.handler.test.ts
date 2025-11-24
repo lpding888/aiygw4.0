@@ -511,7 +511,9 @@ describe('SCF Provider - 单元测试', () => {
 
       expect(result.success).toBe(false);
       expect(result.error!.message).toContain('内部错误');
-      const internalDetails = result.error?.details as { category?: string; retryable?: boolean } | undefined;
+      const internalDetails = result.error?.details as
+        | { category?: string; retryable?: boolean }
+        | undefined;
       expect(internalDetails?.category).toBe('internal');
       expect(internalDetails?.retryable).toBe(true);
     });

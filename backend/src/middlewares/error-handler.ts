@@ -54,8 +54,12 @@ export function appErrorHandler(
 
   // 记录增强的错误日志
   if (appError.options.shouldLog) {
-    const logLevel = appError.metadata.severity === 'critical' ? 'error' :
-                     appError.metadata.severity === 'high' ? 'warn' : 'error';
+    const logLevel =
+      appError.metadata.severity === 'critical'
+        ? 'error'
+        : appError.metadata.severity === 'high'
+          ? 'warn'
+          : 'error';
 
     logger[logLevel]('[ErrorHandler] 捕获到异常', {
       ...appError.toLogFormat(),
