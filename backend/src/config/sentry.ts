@@ -71,7 +71,7 @@ export function initSentry() {
 /**
  * 手动捕获异常
  */
-export function captureException(error: Error, context?: Record<string, Sentry.Context>) {
+export function captureException(error: Error, context?: Record<string, Record<string, unknown>>) {
   if (!SENTRY_DSN) return;
 
   if (context) {
