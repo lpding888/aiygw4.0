@@ -37,22 +37,18 @@ services:
       - "3306:3306"
     volumes:
       # 艹！数据持久化，删容器不删数据
-      - mysql_data:/var/lib/mysql
+      - mysql-data:/var/lib/mysql
       # 艹！MySQL配置优化（针对4核4G服务器）
       - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-      - --default-authentication-plugin=mysql_native_password
-      - --max-connections=200
-      - --innodb-buffer-pool-size=512M
+    entrypoint: ["sh", "-c", "mkdir -p /var/log/mysql && chown mysql:mysql /var/log/mysql && exec mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --max-connections=200 --innodb-buffer-pool-size=512M --datadir=/var/lib/mysql --user=mysql"]
+    command: []
     networks:
       - ai-photo-network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-your_mysql_root_password}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    # healthcheck:
+    #   test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-your_mysql_root_password}"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 5
 
   # ========== Redis 缓存 ==========
   redis:
@@ -93,7 +89,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: ai-photo-backend:latest
+    image: ghcr.io/lpding888/aiygw4.0/backend:latest
     container_name: ai-photo-backend
     restart: always
     ports:
@@ -147,14 +143,15 @@ services:
       RUNNINGHUB_API_KEY: ${RUNNINGHUB_API_KEY}
       HUNYUAN_API_KEY: ${HUNYUAN_API_KEY}
       KUAI_API_KEY: ${KUAI_API_KEY}
+
+      # 密钥管理
+      MASTER_KEY: ${MASTER_KEY}
     volumes:
       # 艹！日志持久化
       - ./backend/logs:/app/logs
     depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - mysql
+      - redis
     networks:
       - ai-photo-network
     healthcheck:
@@ -254,8 +251,9 @@ services:
 # ========== 数据卷 ==========
 # 艹！持久化存储，删容器不删数据
 volumes:
-  mysql_data:
-    driver: local
+  mysql-data:
+    external: true
+    name: fashion-ai-saas_mysql-data
   redis_data:
     driver: local
   prometheus_data:

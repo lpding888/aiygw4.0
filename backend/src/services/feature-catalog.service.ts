@@ -96,6 +96,13 @@ type FeatureListResult = {
   offset: number;
 };
 
+const SORT_FIELD_MAP: Record<string, string> = {
+  name: 'display_name',
+  released_at: 'created_at'
+};
+
+const FALLBACK_SORT_FIELDS = new Set(['display_name', 'category', 'plan_required', 'created_at', 'updated_at']);
+
 class FeatureCatalogService {
   private initialized: boolean;
   private readonly cachePrefix: string;
@@ -113,6 +120,43 @@ class FeatureCatalogService {
     this.lastCacheUpdate = 0;
     this.cacheUpdateInterval = 300000; // 5分钟更新一次
     this.cacheRefreshTimer = undefined;
+  }
+
+  private resolveSortField(sortBy?: string): string {
+    if (!sortBy) {
+      return 'display_name';
+    }
+    const normalized = sortBy.toLowerCase();
+    if (normalized in SORT_FIELD_MAP) {
+      return SORT_FIELD_MAP[normalized as keyof typeof SORT_FIELD_MAP];
+    }
+    if (FALLBACK_SORT_FIELDS.has(normalized)) {
+      return normalized;
+    }
+    return 'display_name';
+  }
+
+  private normalizeFeatureRecord(feature: FeatureDefinitionRecord): FeatureDefinitionRecord {
+    if (!feature) {
+      return feature;
+    }
+
+    const normalizedName = feature.display_name ?? feature.name ?? feature.feature_key;
+    const normalizedIsEnabled =
+      typeof feature.is_enabled === 'boolean'
+        ? feature.is_enabled
+        : typeof feature.is_active === 'boolean'
+          ? feature.is_active
+          : false;
+
+    return {
+      ...feature,
+      display_name: normalizedName,
+      name: feature.name ?? normalizedName,
+      is_enabled: normalizedIsEnabled,
+      is_active:
+        typeof feature.is_active === 'boolean' ? feature.is_active : normalizedIsEnabled
+    };
   }
 
   /**
@@ -146,15 +190,17 @@ class FeatureCatalogService {
   async loadFeatureDefinitions(): Promise<void> {
     try {
       const features = await db('feature_definitions')
+        .whereNull('deleted_at')
         .where('is_enabled', true)
         .whereNull('deleted_at')
         .orderBy('category', 'asc')
-        .orderBy('name', 'asc');
+        .orderBy('display_name', 'asc');
 
       this.featureDefinitions.clear();
       for (const feature of features) {
-        this.featureDefinitions.set(feature.feature_key, {
-          ...feature,
+        const normalizedFeature = this.normalizeFeatureRecord(feature);
+        this.featureDefinitions.set(normalizedFeature.feature_key, {
+          ...normalizedFeature,
           configurations: new Map(),
           permissions: new Map()
         });
@@ -200,7 +246,7 @@ class FeatureCatalogService {
       tags,
       limit = 50,
       offset = 0,
-      sortBy = 'name',
+      sortBy = 'display_name',
       sortOrder = 'asc',
       search
     } = options;
@@ -225,16 +271,22 @@ class FeatureCatalogService {
         query = query.where('category', category);
       }
       if (type) {
-        query = query.where('type', type);
+        query = query.where('plan_required', type);
       }
       if (typeof isPublic === 'boolean') {
-        query = query.where('is_public', isPublic);
+        if (isPublic) {
+          query = query.whereNot('access_scope', 'whitelist');
+        } else {
+          query = query.where('access_scope', 'whitelist');
+        }
       }
       if (typeof is_active === 'boolean') {
         query = query.where('is_enabled', is_active);
       }
       if (tags && tags.length > 0) {
-        query = query.whereRaw('JSON_CONTAINS(tags, ?)', [JSON.stringify(tags)]);
+        logger.debug(
+          '[FeatureCatalogService] tags filter ignored because legacy schema does not support JSON tags column'
+        );
       }
       if (trimmedSearch) {
         const keyword = `%${trimmedSearch}%`;
@@ -250,8 +302,7 @@ class FeatureCatalogService {
       const total = Number(totalRow?.count ?? 0);
 
       // 应用排序
-      const validSortFields = ['name', 'category', 'type', 'released_at', 'created_at'];
-      const sortField = validSortFields.includes(sortBy) ? sortBy : 'name';
+      const sortField = this.resolveSortField(sortBy);
 
       const features = await query
         .clone()
@@ -300,16 +351,21 @@ class FeatureCatalogService {
       }
 
       // 从数据库查找
-      const feature = await db('feature_definitions').where('feature_key', featureKey).first();
+      const feature = await db('feature_definitions')
+        .where('feature_key', featureKey)
+        .whereNull('deleted_at')
+        .first();
 
       if (!feature) {
         return null;
       }
 
-      // 添加到内存缓存
-      this.featureDefinitions.set(featureKey, feature);
+      const normalizedFeature = this.normalizeFeatureRecord(feature);
 
-      return feature;
+      // 添加到内存缓存
+      this.featureDefinitions.set(featureKey, normalizedFeature);
+
+      return normalizedFeature;
     } catch (error) {
       logger.error('[FeatureCatalogService] Failed to get feature by key:', error);
       throw AppError.fromError(error, ERROR_CODES.INTERNAL_SERVER_ERROR);
@@ -446,8 +502,9 @@ class FeatureCatalogService {
 
       // 软删除：设置为不活跃
       await db('feature_definitions').where('feature_key', featureKey).update({
-        is_active: false,
-        deprecated_at: new Date()
+        is_enabled: false,
+        deleted_at: new Date(),
+        updated_at: new Date()
       });
 
       // 从内存缓存中移除
@@ -601,16 +658,20 @@ class FeatureCatalogService {
         return false;
       }
 
-      // 如果功能不活跃或未公开，拒绝访问
-      if (!feature.is_active || !feature.is_public) {
+      // 如果功能不活跃或已删除，拒绝访问
+      if (!feature.is_enabled || feature.deleted_at) {
         return false;
+      }
+
+      if (feature.access_scope !== 'whitelist') {
+        return true;
       }
 
       // 获取功能权限设置
       const permissions = await this.getFeaturePermissions(feature.id);
       if (permissions.length === 0) {
         // 没有特定权限设置，默认允许访问公开功能
-        return feature.is_public;
+        return feature.access_scope !== 'whitelist';
       }
 
       // 检查用户权限
@@ -807,7 +868,7 @@ class FeatureCatalogService {
         .select(
           'fus.feature_id',
           'fd.feature_key',
-          'fd.name as feature_name',
+          'fd.display_name as feature_name',
           'fd.category',
           'fus.usage_date',
           db.raw('SUM(fus.usage_count) as total_usage'),
@@ -815,7 +876,8 @@ class FeatureCatalogService {
           db.raw('COUNT(*) as active_days')
         )
         .join('feature_definitions as fd', 'fus.feature_id', '=', 'fd.id')
-        .where('fd.is_active', true);
+        .where('fd.is_enabled', true)
+        .whereNull('fd.deleted_at');
 
       // 应用过滤条件
       if (featureKey) {
