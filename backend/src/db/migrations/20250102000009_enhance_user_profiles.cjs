@@ -142,7 +142,6 @@ exports.up = async function (knex) {
   ];
 
   for (const [column, builder] of columnDefinitions) {
-    // eslint-disable-next-line no-await-in-loop
     await addColumnIfMissing(knex, column, builder);
   }
 
@@ -163,7 +162,6 @@ exports.up = async function (knex) {
   ];
 
   for (const [indexName, builder] of indexes) {
-    // eslint-disable-next-line no-await-in-loop
     await addIndexIfMissing(knex, indexName, builder);
   }
 
@@ -342,7 +340,6 @@ exports.down = async function (knex) {
     'user_social_links'
   ];
   for (const table of tables) {
-    // eslint-disable-next-line no-await-in-loop
     await knex.schema.dropTableIfExists(table);
   }
 
@@ -397,7 +394,6 @@ exports.down = async function (knex) {
   ];
 
   for (const column of columns) {
-    // eslint-disable-next-line no-await-in-loop
     await dropColumnIfExists(knex, column);
   }
 };

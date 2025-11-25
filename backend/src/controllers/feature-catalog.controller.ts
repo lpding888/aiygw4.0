@@ -7,18 +7,21 @@ import type { SupportedLanguageCode } from '../config/i18n-messages.js';
 import featureCatalogService, {
   type FeatureUsageMetrics,
   type FeatureUsageError,
-  type FeatureMetricValue
+  type FeatureMetricValue,
+  type FeatureQueryOptions
 } from '../services/feature-catalog.service.js';
 
 type FeatureListQuery = {
   category?: string;
   type?: string;
   is_public?: string;
+  is_enabled?: string;
   tags?: string;
   limit?: string;
   offset?: string;
   sort_by?: string;
   sort_order?: string;
+  search?: string;
 };
 
 type FeatureUsageBody = {
@@ -166,37 +169,73 @@ class FeatureCatalogController {
         category,
         type,
         is_public,
+        is_enabled,
         tags,
         limit = '20',
         offset = '0',
         sort_by = 'name',
-        sort_order = 'asc'
+        sort_order = 'asc',
+        search
       } = req.query as FeatureListQuery;
 
       const normalizedSortOrder: 'asc' | 'desc' =
         (sort_order?.toLowerCase() as 'asc' | 'desc') === 'desc' ? 'desc' : 'asc';
 
-      const options = {
-        category,
-        type,
-        isPublic: parseBoolean(is_public),
-        tags: tags ? tags.split(',').map((tag) => tag.trim()) : undefined,
+      const options: Record<string, unknown> = {
         limit: parseInteger(limit, 20),
         offset: parseInteger(offset, 0),
         sortBy: sort_by ?? 'name',
         sortOrder: normalizedSortOrder
       };
 
-      const features = await featureCatalogService.getFeatures(options);
+      if (category) {
+        options.category = category;
+      }
+      if (type) {
+        options.type = type;
+      }
+
+      const isPublicFilter = parseBoolean(is_public);
+      if (typeof isPublicFilter === 'boolean') {
+        options.isPublic = isPublicFilter;
+      }
+
+      const isEnabledFilter = parseBoolean(is_enabled);
+      if (typeof isEnabledFilter === 'boolean') {
+        options.is_active = isEnabledFilter;
+      }
+
+      if (tags) {
+        const parsedTags = tags
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter(Boolean);
+        if (parsedTags.length > 0) {
+          options.tags = parsedTags;
+        }
+      }
+
+      const trimmedSearch = search?.trim();
+      if (trimmedSearch) {
+        options.search = trimmedSearch;
+      }
+
+      const typedOptions = options as FeatureQueryOptions;
+      const {
+        items,
+        total,
+        limit: safeLimit,
+        offset: safeOffset
+      } = await featureCatalogService.getFeatures(typedOptions);
 
       respondGenericSuccess(
         res,
         {
-          features,
+          features: items,
           pagination: {
-            limit: options.limit,
-            offset: options.offset,
-            total: features.length
+            limit: safeLimit,
+            offset: safeOffset,
+            total
           }
         },
         req.i18n?.getMessage?.('features.retrieved_success') ?? 'Features retrieved successfully'
@@ -257,9 +296,9 @@ class FeatureCatalogController {
     }
   }
 
-  async getFeatureById(req: Request<{ id: string }>, res: Response) {
+  async getFeatureById(req: Request<{ featureKey: string }>, res: Response) {
     try {
-      const featureKey = req.params.id;
+      const { featureKey } = req.params;
 
       const feature = await featureCatalogService.getFeatureByKey(featureKey);
       if (!feature) {

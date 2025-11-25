@@ -14,10 +14,49 @@ import {
 } from 'antd';
 import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons';
 import { api } from '@/lib/api';
+import type { Feature } from '@/types';
 import JSONEditor from '@/components/JSONEditor';
 
 const { TextArea } = Input;
 const { Option } = Select;
+
+const unwrapResponse = (response: any) =>
+  response?.data?.success !== undefined ? response.data : response;
+
+const toAllowedAccountsInput = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return (value as Array<string | null | undefined>)
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean)
+      .join('\n');
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(/[,\n]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .join('\n');
+  }
+  return '';
+};
+
+const toPrettyJSON = (value: unknown): string => {
+  if (!value) {
+    return JSON.stringify({}, null, 2);
+  }
+  if (typeof value === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2);
+    } catch {
+      return value;
+    }
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return JSON.stringify({}, null, 2);
+  }
+};
 
 /**
  * 功能卡片编辑页
@@ -42,39 +81,41 @@ export default function AdminFeatureEditPage() {
 
     try {
       setLoading(true);
-      // 从列表接口获取所有功能，找到当前编辑的
-      const response: any = await api.admin.getFeatures();
+      const rawResponse = await api.admin.getFeatureByKey(featureId);
+      const payload = unwrapResponse(rawResponse);
 
-      if (response.success && response.features) {
-        const feature = response.features.find((f: any) => f.feature_id === featureId);
-
-        if (feature) {
-          // 填充表单
-          form.setFieldsValue({
-            feature_id: feature.feature_id,
-            display_name: feature.display_name,
-            category: feature.category,
-            description: feature.description,
-            is_enabled: feature.is_enabled,
-            plan_required: feature.plan_required,
-            access_scope: feature.access_scope,
-            allowed_accounts: feature.allowed_accounts?.join('\n') || '',
-            quota_cost: feature.quota_cost,
-            rate_limit_policy: feature.rate_limit_policy || '',
-            output_type: feature.output_type,
-            save_to_asset_library: feature.save_to_asset_library
-          });
-
-          setAccessScope(feature.access_scope);
-
-          // 填充 JSON Schema（需要从详情接口获取）
-          // TODO: 调用详情接口获取完整schema
-          setFormSchema(JSON.stringify(feature.form_schema || {}, null, 2));
-          setPipelineSchema(JSON.stringify(feature.pipeline_schema || {}, null, 2));
-        }
+      if (!payload?.success || !payload?.data) {
+        throw new Error(payload?.error?.message ?? '获取功能详情失败');
       }
+
+      const feature = payload.data as Feature;
+
+      if (!feature) {
+        throw new Error('功能不存在或已被删除');
+      }
+
+      form.setFieldsValue({
+        feature_id: feature.feature_id ?? feature.feature_key ?? featureId,
+        display_name: feature.display_name ?? feature.name ?? '',
+        category: feature.category ?? '',
+        description: feature.description ?? '',
+        is_enabled: feature.is_enabled ?? false,
+        plan_required: feature.plan_required ?? 'basic',
+        access_scope: feature.access_scope ?? 'plan',
+        allowed_accounts: toAllowedAccountsInput(feature.allowed_accounts),
+        quota_cost: feature.quota_cost ?? 0,
+        rate_limit_policy: feature.rate_limit_policy ?? '',
+        output_type: feature.output_type ?? 'multiImage',
+        save_to_asset_library: feature.save_to_asset_library ?? false
+      });
+
+      setAccessScope((feature.access_scope as 'plan' | 'whitelist') ?? 'plan');
+
+      setFormSchema(toPrettyJSON(feature.form_schema ?? feature.form_schema_ref ?? {}));
+      setPipelineSchema(toPrettyJSON(feature.pipeline_schema ?? feature.pipeline_schema_ref ?? {}));
     } catch (error: any) {
-      message.error('获取功能详情失败');
+      message.error(error?.message || '获取功能详情失败');
+      router.replace('/admin/features');
     } finally {
       setLoading(false);
     }

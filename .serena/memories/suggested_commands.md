@@ -1,0 +1,6 @@
+- Install deps: `cd backend && npm install`, `cd frontend && npm install`, others on demand (miniapp, scf).
+- Run backend dev server: `cd backend && npm run dev` (tsx live reload) or `npm run start:dev`; production build via `npm run build` + `npm start`.
+- Backend quality gates: `npm run lint`, `npm run format`, `npm run test`, `npm run test:unit`, `npm run test:integration`, DB migrations via `npm run db:migrate`, rollback with `npm run db:rollback`, audit names via `npm run migrate:audit`.
+- Frontend dev server: `cd frontend && npm run dev`; production: `npm run build` + `npm run start`. Tests via `npm run test`, `npm run test:unit`, `npm run test:e2e`, Playwright admin helpers. Lint with `npm run lint` or `npm run lint:fix`; Storybook via `npm run storybook` or `npm run storybook:build`.
+- Miniapp-specific scripts (from repo root package.json): `npm run build:miniprogram`, `npm run lint:miniprogram`, `npm run format` (targets apps/miniprogram).
+- Common tooling on Windows: PowerShell `Get-ChildItem`, `rg` for search, `npm`, `node`, `tsx`, `knex`, `playwright test`.

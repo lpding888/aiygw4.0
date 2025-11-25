@@ -2,7 +2,7 @@
  * 创建 Casbin 策略表
  */
 
-export async function up(knex) {
+exports.up = async function up(knex) {
   const exists = await knex.schema.hasTable('casbin_rule');
   if (exists) return;
 
@@ -17,10 +17,10 @@ export async function up(knex) {
     table.string('v5', 255).nullable();
     table.timestamps(true, true);
   });
-}
+};
 
-export async function down(knex) {
+exports.down = async function down(knex) {
   const exists = await knex.schema.hasTable('casbin_rule');
   if (!exists) return;
   await knex.schema.dropTable('casbin_rule');
-}
+};

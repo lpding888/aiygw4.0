@@ -231,7 +231,6 @@ exports.down = async function (knex) {
 
   for (const [tableName, indexes] of Object.entries(indexMap)) {
     for (const indexName of indexes) {
-      // eslint-disable-next-line no-await-in-loop
       await dropIndexIfExists(knex, tableName, indexName);
     }
   }

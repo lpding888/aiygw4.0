@@ -1,0 +1,5 @@
+- Codebase uses modern TypeScript (ESM) both backend (Express services, Knex repos) and frontend (Next.js App Router). Stick to strict typing, async/await, modular services/controllers, and DRY service abstractions.
+- Linting via ESLint + Prettier everywhere (backend: `eslint src --ext .ts`, frontend: `next lint`, miniapp-specific configs). Follow formatting rules enforced by prettier configs and avoid manual style deviations.
+- Backend domain rules emphasize transactional quota updates, avoiding hard-coded quotas (use env vars) and gating vendor polling to processing state; Casbin policies configured via files + DB.
+- Commit and PR workflow: feature branches off develop, conventional commit prefixes (feat/fix/docs/refactor/chore) per README.
+- Comments typically Chinese/English mix; stay consistent with existing tone, keep docstrings short and purposeful.

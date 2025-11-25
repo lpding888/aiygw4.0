@@ -42,6 +42,31 @@ interface ClaudeResponse {
   stop_reason: string;
 }
 
+type ClaudeMessageContent =
+  | {
+      type: 'image';
+      source: {
+        type: 'url';
+        url: string;
+        media_type?: string;
+      };
+    }
+  | {
+      type: 'text';
+      text: string;
+    };
+
+interface ClaudeRequestPayload {
+  model: string;
+  messages: Array<{
+    role: 'user';
+    content: ClaudeMessageContent[];
+  }>;
+  max_tokens: number;
+  temperature: number;
+  system?: string;
+}
+
 class ClaudeProvider {
   private httpClient = createHttpClient({
     serviceName: 'claude',
@@ -75,7 +100,7 @@ class ClaudeProvider {
       logger.info(`[ClaudeProvider] 开始调用Claude taskId=${taskId} model=${model}`);
 
       // 构建消息内容
-      const messageContent: any[] = [];
+      const messageContent: ClaudeMessageContent[] = [];
 
       // 如果有图片，先添加图片
       if (imageUrl) {
@@ -98,7 +123,7 @@ class ClaudeProvider {
       });
 
       // 调用Claude API
-      const requestData: any = {
+      const requestData: ClaudeRequestPayload = {
         model,
         messages: [
           {
@@ -146,12 +171,13 @@ class ClaudeProvider {
       logger.info(`[ClaudeProvider] 调用成功 taskId=${taskId} tokens=${result.usage.totalTokens}`);
 
       return result;
-    } catch (error: any) {
-      logger.error(`[ClaudeProvider] 调用失败 taskId=${taskId} error=${error.message}`, {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`[ClaudeProvider] 调用失败 taskId=${taskId} error=${err.message}`, {
         taskId,
-        error
+        error: err
       });
-      throw error;
+      throw err;
     }
   }
 }

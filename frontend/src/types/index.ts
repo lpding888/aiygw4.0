@@ -63,21 +63,68 @@ export interface STSCredentials {
 }
 
 // 功能卡片相关类型
+export interface FeatureConfiguration {
+  id?: string;
+  feature_id: string;
+  config_key: string;
+  config_value?: string | null;
+  data_type?: 'string' | 'number' | 'boolean' | 'json' | 'array' | string;
+  description?: string | null;
+  is_required?: boolean;
+  is_sensitive?: boolean;
+  validation_rules?: Record<string, any> | null;
+  default_value?: string | null;
+  enum_values?: any;
+  sort_order?: number | null;
+}
+
+export interface FeaturePermission {
+  id?: string;
+  feature_id: string;
+  permission_type: 'role' | 'user' | 'membership' | 'custom' | string;
+  permission_value: string;
+  access_level?: 'none' | 'read' | 'write' | 'admin' | string;
+  conditions?: Record<string, any> | null;
+  is_granted: boolean;
+  granted_at?: string | null;
+  expires_at?: string | null;
+  notes?: string | null;
+}
+
 export interface Feature {
   feature_id: string;
+  feature_key?: string;
+  name?: string;
   display_name: string;
   category: string;
   description: string;
   quota_cost: number;
   rate_limit_policy: string | null;
   is_enabled: boolean;
+  is_active?: boolean;
+  is_public?: boolean;
+  type?: 'basic' | 'premium' | 'enterprise' | 'beta' | string;
   plan_required: string;
   output_type: 'singleImage' | 'multiImage' | 'video' | 'zip' | 'textBundle';
   save_to_asset_library: boolean;
   access_scope: 'plan' | 'whitelist';
-  allowed_accounts: string[] | null;
+  allowed_accounts: string[] | string | null;
+  form_schema_ref?: string;
+  pipeline_schema_ref?: string;
+  form_schema?: Record<string, any> | string | null;
+  pipeline_schema?: Record<string, any> | string | null;
+  tags?: string[] | null;
+  metadata?: Record<string, any> | null;
+  requirements?: Record<string, any> | null;
+  limits?: Record<string, any> | null;
+  pricing?: Record<string, any> | null;
   icon?: string; // 可选的图标类型
   color?: string; // 可选的主题色
+  version?: string | null;
+  released_at?: string | null;
+  deprecated_at?: string | null;
+  configurations?: FeatureConfiguration[];
+  permissions?: FeaturePermission[];
 }
 
 // 表单字段类型

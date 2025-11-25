@@ -217,7 +217,7 @@ class AdminController {
         return;
       }
 
-      const updateData: any = { updated_at: new Date() };
+      const updateData: { status?: string; updated_at: Date } = { updated_at: new Date() };
       if (status) updateData.status = status;
 
       const updated = await db('users').where('id', userId).update(updateData);
@@ -785,7 +785,15 @@ ${context || '无'}
 
       // 创建临时任务ID
       const taskId = `test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const userId = (req.user as any).id;
+      const user = req.user as { id?: string } | undefined;
+      if (!user?.id) {
+        res.status(401).json({
+          success: false,
+          error: { code: 4010, message: '缺少用户身份，无法运行Pipeline' }
+        });
+        return;
+      }
+      const userId = user.id;
 
       // 记录测试任务（可选：存入数据库或仅在内存中运行）
       // 这里为了简单起见，我们模拟创建一个临时任务记录，以便PipelineEngine可以使用

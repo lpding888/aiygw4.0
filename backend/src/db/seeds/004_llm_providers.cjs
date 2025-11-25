@@ -113,9 +113,21 @@ exports.seed = async function (knex) {
   console.log('✅ LLM Providers初始化完成');
   console.log('');
   console.log('已创建的Provider：');
-  console.log(`  ${hasOpenAI ? '✅' : '⚠️ '} OpenAI GPT (llm_openai) - ${hasOpenAI ? '已配置API Key' : '使用占位符'}`);
-  console.log(`  ${hasClaude ? '✅' : '⚠️ '} Anthropic Claude (llm_claude) - ${hasClaude ? '已配置API Key' : '使用占位符'}`);
-  console.log(`  ${hasQwen ? '✅' : '⚠️ '} 阿里通义千问 (llm_qwen) - ${hasQwen ? '已配置API Key' : '使用占位符'}`);
+  console.log(
+    `  ${hasOpenAI ? '✅' : '⚠️ '} OpenAI GPT (llm_openai) - ${
+      hasOpenAI ? '已配置API Key' : '使用占位符'
+    }`
+  );
+  console.log(
+    `  ${hasClaude ? '✅' : '⚠️ '} Anthropic Claude (llm_claude) - ${
+      hasClaude ? '已配置API Key' : '使用占位符'
+    }`
+  );
+  console.log(
+    `  ${hasQwen ? '✅' : '⚠️ '} 阿里通义千问 (llm_qwen) - ${
+      hasQwen ? '已配置API Key' : '使用占位符'
+    }`
+  );
   console.log('');
 
   if (!hasOpenAI || !hasClaude || !hasQwen) {

@@ -136,7 +136,6 @@ exports.down = async function (knex) {
   ];
 
   for (const column of columns) {
-    // eslint-disable-next-line no-await-in-loop
     await dropColumnIfExists(column);
   }
 };

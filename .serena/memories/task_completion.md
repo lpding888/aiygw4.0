@@ -1,0 +1,4 @@
+- Before declaring a task done, run relevant lint + test suites for touched packages (e.g., backend `npm run lint` + `npm run test:unit` and required migration audits; frontend `npm run lint`/`npm run test`/Playwright slices as applicable; miniapp `npm run lint:miniprogram`).
+- Ensure DB migrations applied locally (`npm run db:migrate`) and rollbacks validated if schema touched.
+- Update docs/README if behavior or processes change; keep branch in sync with develop workflow before PR.
+- Provide summary + verification steps (tests executed, pending checks) along with any environment variable or config changes.

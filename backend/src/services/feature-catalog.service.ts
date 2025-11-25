@@ -4,7 +4,6 @@ import { db } from '../config/database.js';
 import cacheService from './cache.service.js';
 import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
-import type { Knex } from 'knex';
 
 /**
  * 功能目录服务类
@@ -16,7 +15,7 @@ import type { Knex } from 'knex';
  * - 功能版本管理
  * - 功能使用统计
  */
-type FeatureQueryOptions = {
+export type FeatureQueryOptions = {
   category?: string;
   type?: string;
   isPublic?: boolean;
@@ -26,6 +25,7 @@ type FeatureQueryOptions = {
   offset?: number;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  search?: string;
 };
 
 type UsageFilterOptions = {
@@ -89,6 +89,13 @@ type FeatureDefinitionCacheEntry = FeatureDefinitionRecord & {
   permissions: Map<string, any>;
 };
 
+type FeatureListResult = {
+  items: any[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 class FeatureCatalogService {
   private initialized: boolean;
   private readonly cachePrefix: string;
@@ -140,6 +147,7 @@ class FeatureCatalogService {
     try {
       const features = await db('feature_definitions')
         .where('is_enabled', true)
+        .whereNull('deleted_at')
         .orderBy('category', 'asc')
         .orderBy('name', 'asc');
 
@@ -181,23 +189,36 @@ class FeatureCatalogService {
   /**
    * 获取功能列表
    * @param {Object} options - 查询选项
-   * @returns {Array} 功能列表
+   * @returns {Object} 功能列表及分页信息
    */
-  async getFeatures(options: FeatureQueryOptions = {}): Promise<any[]> {
+  async getFeatures(options: FeatureQueryOptions = {}): Promise<FeatureListResult> {
     const {
       category,
       type,
       isPublic,
-      is_active = true,
+      is_active,
       tags,
       limit = 50,
       offset = 0,
       sortBy = 'name',
-      sortOrder = 'asc'
+      sortOrder = 'asc',
+      search
     } = options;
 
+    const toNumber = (value: number | undefined, fallback: number): number => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+      }
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+
+    const safeLimit = Math.min(Math.max(toNumber(limit, 50), 1), 100);
+    const safeOffset = Math.max(toNumber(offset, 0), 0);
+
     try {
-      let query = db('feature_definitions');
+      const trimmedSearch = search?.trim();
+      let query = db('feature_definitions').whereNull('deleted_at');
 
       // 应用过滤条件
       if (category) {
@@ -215,16 +236,28 @@ class FeatureCatalogService {
       if (tags && tags.length > 0) {
         query = query.whereRaw('JSON_CONTAINS(tags, ?)', [JSON.stringify(tags)]);
       }
+      if (trimmedSearch) {
+        const keyword = `%${trimmedSearch}%`;
+        query = query.where((builder) => {
+          builder
+            .where('name', 'like', keyword)
+            .orWhere('display_name', 'like', keyword)
+            .orWhere('feature_key', 'like', keyword);
+        });
+      }
+
+      const totalRow = await query.clone().count<{ count: number }>('id as count').first();
+      const total = Number(totalRow?.count ?? 0);
 
       // 应用排序
       const validSortFields = ['name', 'category', 'type', 'released_at', 'created_at'];
       const sortField = validSortFields.includes(sortBy) ? sortBy : 'name';
-      query = query.orderBy(sortField, sortOrder === 'desc' ? 'desc' : 'asc');
 
-      // 应用分页
-      query = query.limit(limit).offset(offset);
-
-      const features = await query;
+      const features = await query
+        .clone()
+        .orderBy(sortField, sortOrder === 'desc' ? 'desc' : 'asc')
+        .limit(safeLimit)
+        .offset(safeOffset);
 
       // 为每个功能添加配置和权限信息
       const featuresWithDetails = await Promise.all(
@@ -242,7 +275,12 @@ class FeatureCatalogService {
         })
       );
 
-      return featuresWithDetails;
+      return {
+        items: featuresWithDetails,
+        total,
+        limit: safeLimit,
+        offset: safeOffset
+      };
     } catch (error) {
       logger.error('[FeatureCatalogService] Failed to get features:', error);
       throw AppError.fromError(error, ERROR_CODES.INTERNAL_SERVER_ERROR);
@@ -529,8 +567,9 @@ class FeatureCatalogService {
 
       const permissions = await db('feature_permissions')
         .where('feature_id', featureId)
-        .where('expires_at', '>', new Date())
-        .orWhere('expires_at', null)
+        .andWhere((builder) =>
+          builder.where('expires_at', '>', new Date()).orWhereNull('expires_at')
+        )
         .orderBy('permission_type', 'asc')
         .orderBy('permission_value', 'asc');
 

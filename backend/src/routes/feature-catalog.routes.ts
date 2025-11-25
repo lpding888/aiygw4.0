@@ -3,7 +3,6 @@ import { body, query, param } from 'express-validator';
 import featureCatalogController from '../controllers/feature-catalog.controller.js';
 import { authenticate, requireRole } from '../middlewares/auth.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
-import cacheMiddleware from '../middlewares/cache.middleware.js';
 
 const router = Router();
 
@@ -29,6 +28,13 @@ const queryValidationRules = [
     .isIn(['basic', 'premium', 'enterprise', 'beta'])
     .withMessage('类型必须是basic、premium、enterprise或beta'),
   query('is_public').optional().isBoolean().withMessage('is_public必须是布尔值'),
+  query('is_enabled').optional().isBoolean().withMessage('is_enabled必须是布尔值'),
+  query('tags').optional().isString().withMessage('tags必须是字符串'),
+  query('search')
+    .optional()
+    .isString()
+    .isLength({ min: 1, max: 100 })
+    .withMessage('search长度需在1-100字符之间'),
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit必须是1-100之间的整数'),
   query('offset').optional().isInt({ min: 0 }).withMessage('offset必须是非负整数'),
   query('sort_by')
@@ -49,10 +55,10 @@ router.get(
 );
 
 router.get(
-  '/:id',
+  '/:featureKey',
   authenticate,
   requireRole('admin'),
-  [param('id').notEmpty()],
+  [param('featureKey').notEmpty()],
   validate,
   featureCatalogController.getFeatureById
 );
@@ -71,18 +77,26 @@ router.post(
 );
 
 router.put(
-  '/:id',
+  '/:featureKey',
   authenticate,
   requireRole('admin'),
-  [param('id').notEmpty()],
+  [param('featureKey').notEmpty()],
+  validate,
+  featureCatalogController.updateFeature
+);
+router.patch(
+  '/:featureKey',
+  authenticate,
+  requireRole('admin'),
+  [param('featureKey').notEmpty()],
   validate,
   featureCatalogController.updateFeature
 );
 router.delete(
-  '/:id',
+  '/:featureKey',
   authenticate,
   requireRole('admin'),
-  [param('id').notEmpty()],
+  [param('featureKey').notEmpty()],
   validate,
   featureCatalogController.deleteFeature
 );

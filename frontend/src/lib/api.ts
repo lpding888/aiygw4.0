@@ -404,6 +404,9 @@ class APIClient {
     getFeatures: (params?: { search?: string; enabled?: boolean; category?: string; limit?: number; offset?: number }) =>
       this.client.get<APIResponse>('/admin/features', { params }),
 
+    getFeatureByKey: (featureKey: string) =>
+      this.client.get<APIResponse>(`/admin/features/${featureKey}`),
+
     createFeature: (data: any) =>
       this.client.post<APIResponse>('/admin/features', data),
 

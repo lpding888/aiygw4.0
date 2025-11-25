@@ -1,0 +1,4 @@
+- Monorepo for a fashion e-commerce AI photo processing SaaS platform (backend APIs, Next.js web console, WeChat miniapp, SCF workers, deployment scripts, and docs).
+- Key directories: backend (Express + Knex TypeScript API + migrations), frontend (Next.js 14 web app + Playwright tests + Storybook), miniapp (WeChat TS client), scf (cloud functions), deploy/docker/docs/scripts/tests/skills (process guides).
+- Core workflows: phone/SMS auth, subscription + quota, AI task orchestration (basic_clean via Tencent, model_pose12 via RunningHub), quota transactions, COS media, and payment integrations.
+- Uses Node.js >=20 for backend, >=18 for frontend, MySQL via Knex, Redis/BullMQ for queues, Casbin for authorization, COS + Tencent cloud services.

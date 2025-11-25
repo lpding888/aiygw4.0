@@ -41,6 +41,31 @@ interface OpenAIResponse {
   model: string;
 }
 
+type OpenAIMessage =
+  | {
+      role: 'system';
+      content: string;
+    }
+  | {
+      role: 'user';
+      content: string;
+    }
+  | {
+      role: 'user';
+      content: Array<
+        | {
+            type: 'text';
+            text: string;
+          }
+        | {
+            type: 'image_url';
+            image_url: {
+              url: string;
+            };
+          }
+      >;
+    };
+
 class OpenAIProvider {
   private httpClient = createHttpClient({
     serviceName: 'openai',
@@ -73,7 +98,7 @@ class OpenAIProvider {
       logger.info(`[OpenAIProvider] 开始调用OpenAI taskId=${taskId} model=${model}`);
 
       // 构建消息
-      const messages: any[] = [{ role: 'system', content: systemPrompt }];
+      const messages: OpenAIMessage[] = [{ role: 'system', content: systemPrompt }];
 
       // 如果有图片URL，使用多模态格式
       if (imageUrl && (model.includes('gpt-4o') || model.includes('gpt-4-vision'))) {
@@ -123,12 +148,13 @@ class OpenAIProvider {
       logger.info(`[OpenAIProvider] 调用成功 taskId=${taskId} tokens=${result.usage.totalTokens}`);
 
       return result;
-    } catch (error: any) {
-      logger.error(`[OpenAIProvider] 调用失败 taskId=${taskId} error=${error.message}`, {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`[OpenAIProvider] 调用失败 taskId=${taskId} error=${err.message}`, {
         taskId,
-        error
+        error: err
       });
-      throw error;
+      throw err;
     }
   }
 }

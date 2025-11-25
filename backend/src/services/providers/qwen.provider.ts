@@ -47,6 +47,25 @@ interface QwenResponse {
   };
 }
 
+type QwenMessage =
+  | {
+      role: 'system';
+      content: string;
+    }
+  | {
+      role: 'user';
+      content:
+        | string
+        | Array<
+            | {
+                text: string;
+              }
+            | {
+                image: string;
+              }
+          >;
+    };
+
 class QwenProvider {
   private httpClient = createHttpClient({
     serviceName: 'qwen',
@@ -79,7 +98,7 @@ class QwenProvider {
       logger.info(`[QwenProvider] 开始调用通义千问 taskId=${taskId} model=${model}`);
 
       // 构建消息
-      const messages: any[] = [];
+      const messages: QwenMessage[] = [];
 
       // 添加系统提示词
       if (systemPrompt) {
@@ -149,12 +168,13 @@ class QwenProvider {
       logger.info(`[QwenProvider] 调用成功 taskId=${taskId} tokens=${result.usage.totalTokens}`);
 
       return result;
-    } catch (error: any) {
-      logger.error(`[QwenProvider] 调用失败 taskId=${taskId} error=${error.message}`, {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`[QwenProvider] 调用失败 taskId=${taskId} error=${err.message}`, {
         taskId,
-        error
+        error: err
       });
-      throw error;
+      throw err;
     }
   }
 }
