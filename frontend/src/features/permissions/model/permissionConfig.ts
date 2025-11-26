@@ -109,6 +109,13 @@ export const PERMISSION_RULES: PermissionRule[] = [
     description: '查看统计数据权限',
   },
 
+  // 分销功能（需要分销商或管理员）
+  {
+    resource: 'feature:distribution',
+    roles: [Role.DISTRIBUTOR, Role.ADMIN, Role.SUPER_ADMIN],
+    description: '分销功能权限',
+  },
+
   // ==================== 操作权限 ====================
 
   // 艹，创建任务（需要登录）
