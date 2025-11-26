@@ -292,9 +292,9 @@ class FeatureCatalogService {
         const keyword = `%${trimmedSearch}%`;
         query = query.where((builder) => {
           builder
-            .where('name', 'like', keyword)
-            .orWhere('display_name', 'like', keyword)
-            .orWhere('feature_key', 'like', keyword);
+            .where('display_name', 'like', keyword)
+            .orWhere('feature_key', 'like', keyword)
+            .orWhere('description', 'like', keyword);
         });
       }
 
