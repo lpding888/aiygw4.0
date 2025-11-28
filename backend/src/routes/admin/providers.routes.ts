@@ -259,6 +259,44 @@ router.post(
 );
 
 /**
+ * 智能解析Provider示例
+ * POST /api/admin/providers/parse-example
+ */
+router.post(
+  '/parse-example',
+  requirePermission({
+    resource: 'providers',
+    actions: ['create']
+  }),
+  body('example').notEmpty().withMessage('示例代码不能为空'),
+  validate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = ensureUserId(req, res);
+      if (!userId) return;
+      const { example } = req.body;
+
+      const config = await providerManagementService.parseProviderExample(example);
+
+      logger.info('Provider示例解析成功', {
+        requestedBy: userId,
+        ip: req.ip
+      });
+
+      res.json({
+        success: true,
+        data: config,
+        requestId: req.id
+      });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('Provider示例解析失败:', err);
+      next(err);
+    }
+  }
+);
+
+/**
  * 更新供应商
  * PUT /api/admin/providers/:id
  */

@@ -50,11 +50,15 @@ export function ProviderNode({ data }: NodeProps) {
         <ApiOutlined style={{ fontSize: '18px', color: '#1890ff' }} />
         <div>
           <div style={{ fontWeight: 600, fontSize: '14px' }}>
-            {nodeData.label || 'Provider节点'}
+            {nodeData.label || 'AI模型节点'}
           </div>
-          {nodeData.providerRef && (
+          {nodeData.providerRef ? (
             <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
               {nodeData.providerRef}
+            </div>
+          ) : (
+            <div style={{ fontSize: '12px', color: '#faad14', marginTop: '4px', fontWeight: 500 }}>
+              ⚠️ 点击配置模型
             </div>
           )}
         </div>

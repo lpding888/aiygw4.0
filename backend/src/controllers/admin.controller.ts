@@ -4,6 +4,8 @@ import { db } from '../config/database.js';
 import logger from '../utils/logger.js';
 import encryptionUtils from '../utils/encryption.js';
 import { aiGateway } from '../services/ai-gateway.service.js';
+import pipelineSimulationService from '../services/pipelineSimulation.service.js'; // Import new simulation service
+import type { PipelineSchema } from '../engine/pipeline-types.js';
 
 type CountValue = string | number | bigint | null | undefined;
 
@@ -117,6 +119,8 @@ class AdminController {
     this.rejectWithdrawal = this.rejectWithdrawal.bind(this);
     this.getDistributionSettings = this.getDistributionSettings.bind(this);
     this.updateDistributionSettings = this.updateDistributionSettings.bind(this);
+    this.testPipeline = this.testPipeline.bind(this);
+    this.simulatePipeline = this.simulatePipeline.bind(this); // Bind new method
   }
 
   /**
@@ -858,6 +862,38 @@ ${context || '无'}
       });
     } catch (error) {
       logAndNext(next, error, '[AdminController] 测试运行失败');
+    }
+  }
+
+  /**
+   * 模拟运行Pipeline
+   * POST /api/admin/pipelines/simulate
+   */
+  async simulatePipeline(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { pipeline, initialInputs } = req.body;
+
+      // Basic validation
+      if (!pipeline || !pipeline.nodes || !pipeline.edges) {
+        res.status(400).json({
+          success: false,
+          error: { code: 4001, message: '无效的Pipeline配置' }
+        });
+        return;
+      }
+
+      // Call the simulation service
+      const simulationReport = await pipelineSimulationService.simulatePipeline(
+        pipeline as PipelineSchema, // Type assertion
+        initialInputs || {}
+      );
+
+      res.json({
+        success: true,
+        data: simulationReport
+      });
+    } catch (error) {
+      logAndNext(next, error, '[AdminController] 模拟运行失败');
     }
   }
 

@@ -18,6 +18,7 @@ import {
   Tag,
   message,
   Card,
+  Alert,
 } from 'antd';
 import {
   ApiOutlined,
@@ -178,27 +179,43 @@ export default function NodeConfigDrawer({
           <>
             {commonFields}
 
-            <Form.Item
-              label="选择Provider"
-              name="providerRef"
-              rules={[{ required: true, message: '请选择Provider' }]}
-            >
-              <Select
-                placeholder="选择AI Provider"
-                loading={loadingProviders}
-                showSearch
-                optionFilterProp="label"
-                options={providers.map((p) => ({
-                  label: `${p.provider_name} (${p.provider_ref})`,
-                  value: p.provider_ref,
-                }))}
-              />
-            </Form.Item>
+            {providers.length === 0 && !loadingProviders ? (
+              <div style={{ marginBottom: 24 }}>
+                <Alert
+                  message="暂无可用AI模型"
+                  description={
+                    <span>
+                      系统未检测到可用的AI模型服务商。请先前往 <a href="/admin/providers">系统运维 - 模型服务商</a> 进行配置。
+                    </span>
+                  }
+                  type="warning"
+                  showIcon
+                />
+              </div>
+            ) : (
+              <Form.Item
+                label="选择AI模型"
+                name="providerRef"
+                rules={[{ required: true, message: '请选择一个AI模型' }]}
+                tooltip="选择用于处理任务的AI模型服务"
+              >
+                <Select
+                  placeholder="请选择一个AI模型"
+                  loading={loadingProviders}
+                  showSearch
+                  optionFilterProp="label"
+                  options={providers.map((p) => ({
+                    label: `${p.provider_name} (${p.provider_ref})`,
+                    value: p.provider_ref,
+                  }))}
+                />
+              </Form.Item>
+            )}
 
             <Form.Item
-              label="Prompt模板"
+              label="提示词 (Prompt)"
               name="prompt"
-              tooltip="使用 {{variable}} 引用变量"
+              tooltip="告诉AI模型你想做什么。可以使用 {{变量名}} 来插入动态内容。"
             >
               <TextArea
                 rows={6}

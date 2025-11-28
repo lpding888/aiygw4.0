@@ -36,7 +36,7 @@ const routeDefinitions: RouteDefinition[] = [
   { mountPath: '/api/auth', modulePath: './routes/auth.routes.js' },
   { mountPath: '/api/account', modulePath: './routes/account.routes.js' },
   { mountPath: '/api/users', modulePath: './routes/users.routes.js' },
-  { mountPath: '/api', modulePath: './routes/providers.routes.js' },
+  { mountPath: '/api/providers', modulePath: './routes/providers.routes.js' },
   { mountPath: '/api', modulePath: './routes/announcements.routes.js' },
   { mountPath: '/api', modulePath: './routes/banners.routes.js' },
   { mountPath: '/api', modulePath: './routes/membershipPlans.routes.js' },

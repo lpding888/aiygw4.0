@@ -140,8 +140,8 @@ export default function WorkspacePage() {
           background: '#F9FAFB',
         }}
       >
-        {/* 顶部导航 */}
-        <div
+        {/* 顶部导航 - 已隐藏，功能已整合到全局导航栏 */}
+        {/* <div
           style={{
             background: '#FFFFFF',
             padding: '16px 24px',
@@ -185,7 +185,7 @@ export default function WorkspacePage() {
               </Button>
             </Space>
           </div>
-        </div>
+        </div> */}
 
         {/* 会员状态卡片 */}
         <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>

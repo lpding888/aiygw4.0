@@ -109,6 +109,7 @@ class AIGatewayService {
     this.registerAdapter('openai', new OpenAIAdapter());
     this.registerAdapter('anthropic', new AnthropicAdapter());
     this.registerAdapter('buildingai', new BuildingAIAdapter());
+    this.registerAdapter('deepseek', new DeepSeekAdapter()); // Register DeepSeek adapter
   }
 
   /**
@@ -301,7 +302,9 @@ class AIGatewayService {
       ? 'openai'
       : providerName.toLowerCase().includes('anthropic')
         ? 'anthropic'
-        : 'buildingai';
+        : providerName.toLowerCase().includes('deepseek') // Identify DeepSeek providers
+          ? 'deepseek'
+          : 'buildingai';
 
     const adapter = this.adapters.get(providerType);
     if (!adapter) {
@@ -321,7 +324,10 @@ class AIGatewayService {
     const authType = provider.auth_type;
     const credentials = provider.credentials_encrypted as Record<string, unknown> | undefined;
 
-    if (authType === 'bearer' && credentials?.api_key) {
+    // DeepSeek uses API key in Authorization: Bearer header
+    if (provider.provider_name.toLowerCase().includes('deepseek') && credentials?.api_key) {
+      headers['Authorization'] = `Bearer ${credentials.api_key as string}`;
+    } else if (authType === 'bearer' && credentials?.api_key) {
       headers['Authorization'] = `Bearer ${credentials.api_key as string}`;
     }
 
@@ -455,6 +461,38 @@ class BuildingAIAdapter implements ProviderAdapter {
 
   adaptResponse(response: Record<string, unknown>): ChatResponse {
     return response as unknown as ChatResponse; // BuildingAI返回标准格式
+  }
+
+  adaptStreamChunk(chunk: string): ChatResponse | null {
+    try {
+      return JSON.parse(chunk);
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
+ * DeepSeek适配器
+ */
+class DeepSeekAdapter implements ProviderAdapter {
+  adaptRequest(request: ChatRequest): Record<string, unknown> {
+    // DeepSeek API 与 OpenAI Chat Completions 基本兼容
+    return {
+      model: request.model,
+      messages: request.messages,
+      temperature: request.temperature,
+      max_tokens: request.max_tokens,
+      top_p: request.top_p,
+      stream: request.stream,
+      tools: request.tools,
+      tool_choice: request.tool_choice,
+      user: request.user
+    };
+  }
+
+  adaptResponse(response: Record<string, unknown>): ChatResponse {
+    return response as unknown as ChatResponse;
   }
 
   adaptStreamChunk(chunk: string): ChatResponse | null {

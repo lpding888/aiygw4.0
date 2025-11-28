@@ -1,6 +1,33 @@
 import { Redis, type RedisOptions } from 'ioredis';
 import logger from './logger.js';
 
+const serializeError = (error: unknown): Record<string, unknown> => {
+  if (error instanceof Error) {
+    const details: Record<string, unknown> = {
+      name: error.name,
+      message: error.message
+    };
+
+    if (error.stack) {
+      details.stack = error.stack;
+    }
+
+    for (const key of Object.getOwnPropertyNames(error)) {
+      if (!['name', 'message', 'stack'].includes(key)) {
+        details[key] = (error as Record<string, unknown>)[key];
+      }
+    }
+
+    return details;
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    return { ...(error as Record<string, unknown>) };
+  }
+
+  return { message: String(error) };
+};
+
 const buildRedisUrl = (): string => {
   const directUrl = process.env.REDIS_URL?.trim();
   if (directUrl) {
@@ -51,11 +78,17 @@ export class RedisManager {
     enableReadyCheck: true
   };
 
-  private createClient(label: keyof ManagedClients): Redis {
-    const client = new Redis(this.redisUrl, this.baseOptions);
+  private createClient(
+    label: keyof ManagedClients,
+    overrides: Partial<RedisOptions> = {}
+  ): Redis {
+    const client = new Redis(this.redisUrl, {
+      ...this.baseOptions,
+      ...overrides
+    });
 
     client.on('error', (error: unknown) => {
-      logger.error(`[Redis] ${label} 客户端错误`, { error });
+      logger.error(`[Redis] ${label} 客户端错误`, { error: serializeError(error) });
     });
 
     client.on('reconnecting', () => {
@@ -74,13 +107,18 @@ export class RedisManager {
 
   private async getSubscriberClient(): Promise<Redis> {
     if (!this.clients.subscriber) {
-      const subscriber = this.createClient('subscriber');
+      const subscriber = this.createClient('subscriber', {
+        enableReadyCheck: false
+      });
       subscriber.on('message', (channel: string, message: string) => {
         const handlers = this.channelHandlers.get(channel);
         if (!handlers) return;
         handlers.forEach((handler) => {
           Promise.resolve(handler(message, channel)).catch((error) => {
-            logger.error('[Redis] 订阅回调执行失败', { channel, error });
+            logger.error('[Redis] 订阅回调执行失败', {
+              channel,
+              error: serializeError(error)
+            });
           });
         });
       });
@@ -91,13 +129,19 @@ export class RedisManager {
 
   private async getPatternSubscriber(): Promise<Redis> {
     if (!this.clients.patternSubscriber) {
-      const patternSubscriber = this.createClient('patternSubscriber');
+      const patternSubscriber = this.createClient('patternSubscriber', {
+        enableReadyCheck: false
+      });
       patternSubscriber.on('pmessage', (pattern: string, channel: string, message: string) => {
         const handlers = this.patternHandlers.get(pattern);
         if (!handlers) return;
         handlers.forEach((handler) => {
           Promise.resolve(handler(message, channel, pattern)).catch((error) => {
-            logger.error('[Redis] 模式订阅回调执行失败', { pattern, channel, error });
+            logger.error('[Redis] 模式订阅回调执行失败', {
+              pattern,
+              channel,
+              error: serializeError(error)
+            });
           });
         });
       });

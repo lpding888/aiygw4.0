@@ -9,6 +9,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { message } from 'antd';
 import { PipelineCollaboration, CollaborativeUser, VersionSnapshot } from '@/lib/collaboration/pipeline-collab';
 
+const COLLABORATION_ENABLED = process.env.NEXT_PUBLIC_PIPELINE_COLLAB === 'true';
+
 const generateUserColor = (userId?: string): string => {
   const colors = [
     '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
@@ -55,6 +57,11 @@ export function usePipelineCollaboration(config: CollaborationConfig) {
 
   // 初始化协作实例
   useEffect(() => {
+    if (!COLLABORATION_ENABLED) {
+      console.info('[Pipeline协作] 协作功能已禁用');
+      return;
+    }
+
     const collab = new PipelineCollaboration(
       config.pipelineId,
       config.userId,
@@ -165,6 +172,10 @@ export function usePipelineCollaboration(config: CollaborationConfig) {
 
   // 安排重连
   const scheduleReconnect = useCallback(() => {
+    if (!COLLABORATION_ENABLED) {
+      return;
+    }
+
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }
@@ -173,11 +184,11 @@ export function usePipelineCollaboration(config: CollaborationConfig) {
       console.log('[Pipeline协作] 尝试重连...');
       connect();
     }, 5000);
-  }, []);
+  }, [connect]);
 
   // 连接到协作服务器
   const connect = useCallback(async () => {
-    if (!collaborationRef.current) return false;
+    if (!COLLABORATION_ENABLED || !collaborationRef.current) return false;
 
     try {
       const success = await collaborationRef.current.connect(
@@ -209,70 +220,88 @@ export function usePipelineCollaboration(config: CollaborationConfig) {
 
   // 断开连接
   const disconnect = useCallback(() => {
-    if (collaborationRef.current) {
-      collaborationRef.current.disconnect();
-    }
+    if (!COLLABORATION_ENABLED) return;
+    collaborationRef.current?.disconnect();
   }, []);
 
   // 更新光标位置
   const updateCursor = useCallback((cursor: CollaborativeUser['cursor']) => {
+    if (!COLLABORATION_ENABLED) return;
     collaborationRef.current?.updateCursor(cursor);
   }, []);
 
   // 清除光标
   const clearCursor = useCallback(() => {
+    if (!COLLABORATION_ENABLED) return;
     collaborationRef.current?.clearCursor();
   }, []);
 
   // 添加节点
   const addNode = useCallback((nodeId: string, nodeData: any) => {
+    if (!COLLABORATION_ENABLED) return;
     collaborationRef.current?.addNode(nodeId, nodeData);
   }, []);
 
   // 更新节点
   const updateNode = useCallback((nodeId: string, updates: any) => {
+    if (!COLLABORATION_ENABLED) return;
     collaborationRef.current?.updateNode(nodeId, updates);
   }, []);
 
   // 删除节点
   const deleteNode = useCallback((nodeId: string) => {
+    if (!COLLABORATION_ENABLED) return;
     collaborationRef.current?.deleteNode(nodeId);
   }, []);
 
   // 添加边
   const addEdge = useCallback((edgeId: string, edgeData: any) => {
+    if (!COLLABORATION_ENABLED) return;
     collaborationRef.current?.addEdge(edgeId, edgeData);
   }, []);
 
   // 更新边
   const updateEdge = useCallback((edgeId: string, updates: any) => {
+    if (!COLLABORATION_ENABLED) return;
     collaborationRef.current?.updateEdge(edgeId, updates);
   }, []);
 
   // 删除边
   const deleteEdge = useCallback((edgeId: string) => {
+    if (!COLLABORATION_ENABLED) return;
     collaborationRef.current?.deleteEdge(edgeId);
   }, []);
 
   // 创建快照
   const createSnapshot = useCallback((description?: string) => {
-    if (!collaborationRef.current) return '';
+    if (!COLLABORATION_ENABLED || !collaborationRef.current) return '';
     return collaborationRef.current.createSnapshot(description);
   }, []);
 
   // 获取快照列表
   const getSnapshots = useCallback((): VersionSnapshot[] => {
+    if (!COLLABORATION_ENABLED) {
+      return [];
+    }
     return collaborationRef.current?.getSnapshots() || [];
   }, []);
 
   // 回滚到快照
   const rollbackToSnapshot = useCallback(async (snapshotId: string) => {
-    if (!collaborationRef.current) return false;
+    if (!COLLABORATION_ENABLED || !collaborationRef.current) return false;
     return collaborationRef.current.rollbackToSnapshot(snapshotId);
   }, []);
 
   // 获取当前数据
   const getCurrentData = useCallback(() => {
+    if (!COLLABORATION_ENABLED) {
+      return {
+        nodes: {},
+        edges: {},
+        operations: [],
+        snapshots: []
+      };
+    }
     return collaborationRef.current?.getCurrentData() || {
       nodes: {},
       edges: {},
@@ -299,6 +328,7 @@ export function usePipelineCollaboration(config: CollaborationConfig) {
   return {
     // 状态
     state,
+    enabled: COLLABORATION_ENABLED,
 
     // 连接管理
     connect,

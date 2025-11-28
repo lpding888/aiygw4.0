@@ -7,6 +7,7 @@
 const crypto = require('crypto');
 const axios = require('axios');
 import { db as knex } from '../db/index.js';
+import aiGateway from './ai-gateway.service.js';
 const logger = require('../utils/logger');
 const kmsService = require('./kms.service');
 
@@ -339,6 +340,57 @@ class ProviderManagementService {
     } catch (error) {
       logger.error('获取供应商列表失败:', error);
       return { providers: [], total: 0 };
+    }
+  }
+
+  /**
+   * 智能解析Provider示例
+   */
+  async parseProviderExample(example: string): Promise<Partial<ProviderConfig> & { request_template?: string, header_template?: string }> {
+    try {
+      const systemPrompt = `你是一个API集成专家。你的任务是解析用户提供的cURL命令或API请求示例(JSON)，并提取出集成所需的配置信息。
+      
+请分析以下API请求示例，并返回一个JSON对象，包含以下字段：
+1. name: 猜测的服务商名称 (例如 "Gemini Pro", "OpenAI GPT-4")
+2. type: 服务类型 ("ai", "image", "text", "video")
+3. baseUrl: API的基础URL (例如 "https://generativelanguage.googleapis.com")
+4. config_template: 一个Handlebars格式的请求体模板(JSON字符串)。将用户输入的prompt替换为 {{prompt}}，将图片URL替换为 {{imageUrl}}。保留其他固定参数。
+5. header_template: 一个JSON格式的请求头模板(字符串)。如果API Key在header中，请用 {{apiKey}} 占位。
+6. response_rules: 一个JSON对象，描述如何从响应中提取结果。例如 {"result": "candidates[0].content.parts[0].text"} (使用JSONPath语法)。
+
+注意：
+- 如果是GET请求且参数在URL中，请在config_template中说明。
+- 如果API Key在URL参数中(如 ?key=...)，请在config_template或baseUrl中处理，或者说明。
+- 只返回纯JSON，不要包含Markdown格式化(如 \`\`\`json)。`;
+
+      const response = await aiGateway.chat({
+        model: 'deepseek-chat', // 优先使用DeepSeek
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: example }
+        ],
+        temperature: 0.1 //以此降低幻觉，提高准确性
+      }, 'deepseek-chat');
+
+      let content = response.choices[0]?.message?.content || '{}';
+      // 清理Markdown代码块标记
+      content = content.replace(/```json\n?|```/g, '');
+      
+      const parsed = JSON.parse(content);
+      
+      // 简单的映射和校验
+      return {
+        name: parsed.name || 'Unknown Provider',
+        type: parsed.type || 'ai',
+        baseUrl: parsed.baseUrl || '',
+        // 扩展字段，虽然ProviderConfig接口没定义，但Controller可以直接透传
+        ...parsed
+      };
+
+    } catch (error: any) {
+      logger.error('智能解析API示例失败:', error);
+      // Fallback: 尝试使用OpenAI如果DeepSeek失败（可选）
+      throw new Error(`解析失败: ${error.message}`);
     }
   }
 

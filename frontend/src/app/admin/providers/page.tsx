@@ -13,6 +13,7 @@ import {
   DeleteOutlined,
   ApiOutlined,
   KeyOutlined,
+  BulbOutlined, // 艹！智能解析图标
 } from '@ant-design/icons';
 import api from '@/lib/api';
 import type { ColumnType } from 'antd/es/table';
@@ -114,6 +115,11 @@ export default function ProvidersPage() {
   const [apiKeyModalVisible, setApiKeyModalVisible] = useState(false);
   const [apiKeyProvider, setApiKeyProvider] = useState<Provider | null>(null);
   const [apiKeyForm] = Form.useForm();
+
+  // 智能解析Modal状态
+  const [parserVisible, setParserVisible] = useState(false);
+  const [isParsing, setIsParsing] = useState(false);
+  const [exampleCode, setExampleCode] = useState('');
 
   // Provider健康状态（艹！实时监控Provider健康度）
   const [healthData, setHealthData] = useState<any>(null);
@@ -505,6 +511,55 @@ export default function ProvidersPage() {
     ));
   };
 
+  /**
+   * 智能解析API示例
+   */
+  const handleParseExample = async () => {
+    if (!exampleCode.trim()) {
+      message.warning('请先粘贴代码示例');
+      return;
+    }
+
+    setIsParsing(true);
+    try {
+      // 调用后端解析接口
+      const response = await api.client.post('/admin/providers/parse-example', {
+        example: exampleCode,
+      });
+
+      if (response.data.success) {
+        const config = response.data.data;
+        message.success('解析成功！已自动填充表单');
+        
+        // 关闭解析弹窗，打开创建弹窗
+        setParserVisible(false);
+        handleCreate();
+
+        // 自动填充表单
+        // 注意：这里使用了setTimeout来确保Drawer打开后再填充，虽然React状态更新通常够快
+        setTimeout(() => {
+          form.setFieldsValue({
+            provider_name: config.name,
+            provider_ref: config.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.floor(Math.random() * 1000),
+            endpoint_url: config.baseUrl,
+            auth_type: 'api_key', // 默认假设，后续可以让AI判断
+            // 如果有高级字段，这里也可以填充
+          });
+          
+          // 如果解析结果包含 request_template 等动态字段，也应该填充
+          // 但目前的表单还没有这些字段，这是下一步"前端界面升级"的后半部分
+        }, 100);
+      } else {
+        message.error('解析失败：' + response.data.message);
+      }
+    } catch (error: any) {
+      console.error('智能解析失败', error);
+      message.error('智能解析失败，请检查后端服务');
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
   // ========== 渲染UI（新框架组件） ==========
   return (
     <div style={{ padding: '24px' }}>
@@ -588,9 +643,23 @@ export default function ProvidersPage() {
         onFilter={tableData.setFilters}
       />
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-          新建Provider
-        </Button>
+        <Space>
+          <Button
+            icon={<BulbOutlined />}
+            onClick={() => setParserVisible(true)}
+            style={{
+              background: 'linear-gradient(135deg, #E2B0FF 0%, #9F44D3 100%)',
+              color: 'white',
+              border: 'none',
+              boxShadow: '0 4px 10px rgba(159, 68, 211, 0.3)',
+            }}
+          >
+            智能解析 (Beta)
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+            新建Provider
+          </Button>
+        </Space>
       </div>
 
       {/* 新框架：DataTable */}
@@ -860,6 +929,56 @@ export default function ProvidersPage() {
           <p style={{ margin: 0, color: '#d46b08', fontSize: '12px' }}>
             🔒 API Key将使用AES-256-GCM加密后存储，安全可靠
           </p>
+        </div>
+      </Modal>
+
+      {/* 智能解析Modal */}
+      <Modal
+        title={
+          <Space>
+            <BulbOutlined style={{ color: '#9F44D3' }} />
+            <span style={{ background: 'linear-gradient(135deg, #E2B0FF 0%, #9F44D3 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 'bold' }}>
+              智能API解析器
+            </span>
+          </Space>
+        }
+        open={parserVisible}
+        onCancel={() => setParserVisible(false)}
+        footer={null}
+        width={600}
+      >
+        <Alert
+          message="粘贴官方文档示例，AI帮您自动配置"
+          description="支持 cURL 命令、Python 代码片段或 JSON 请求体。DeepSeek 将自动提取 URL、参数结构和认证方式。"
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+        
+        <Input.TextArea
+          rows={8}
+          placeholder={`例如：\ncurl https://api.openai.com/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer $OPENAI_API_KEY" \\\n  -d '{\n    "model": "gpt-4",\n    "messages": [{"role": "user", "content": "Hello!"}]\n  }'`}
+          value={exampleCode}
+          onChange={(e) => setExampleCode(e.target.value)}
+          style={{ fontFamily: 'monospace', fontSize: '12px', marginBottom: 16 }}
+        />
+
+        <div style={{ textAlign: 'right' }}>
+          <Button onClick={() => setParserVisible(false)} style={{ marginRight: 8 }}>
+            取消
+          </Button>
+          <Button 
+            type="primary" 
+            icon={isParsing ? <Spin indicator={<ApiOutlined spin />} /> : <BulbOutlined />}
+            onClick={handleParseExample}
+            loading={isParsing}
+            style={{
+              background: 'linear-gradient(135deg, #9F44D3 0%, #722ED1 100%)',
+              border: 'none',
+            }}
+          >
+            {isParsing ? '正在分析...' : '一键解析'}
+          </Button>
         </div>
       </Modal>
     </div>

@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { Card, Button, Space, message, Drawer, Input, Modal, Form, Select, Tag, Row, Col } from 'antd';
+import { Card, Button, Space, message, Drawer, Input, Modal, Form, Select, Tag, Row, Col, Alert } from 'antd';
 import {
   BranchesOutlined,
   SaveOutlined,
@@ -19,7 +19,9 @@ import {
   TeamOutlined,
   UserOutlined,
   SyncOutlined,
-  HistoryOutlined
+  HistoryOutlined,
+  ExperimentOutlined, // Added ExperimentOutlined for simulation button
+  ToolOutlined // Added ToolOutlined for PostProcess node
 } from '@ant-design/icons';
 import {
   ReactFlow,
@@ -47,6 +49,7 @@ import { PipelineSchema, PipelineDTO, PipelineEdge, PipelineNode } from '@/lib/t
 import { validatePipelineSchema } from '@/lib/validators';
 import { validatePipelineTopology } from '@/lib/utils/pipelineTopology';
 import api from '@/lib/api';
+import SimulationPanel from '@/components/flow/SimulationPanel';
 
 /**
  * 初始节点示例
@@ -102,6 +105,9 @@ function PipelineEditor() {
   const [jsonDrawerVisible, setJsonDrawerVisible] = useState(false);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [configDrawerOpen, setConfigDrawerOpen] = useState(false);
+  const [simulationDrawerVisible, setSimulationDrawerVisible] = useState(false); // New state for simulation drawer
+  const [simulationResult, setSimulationResult] = useState<any>(null); // New state for simulation results
+  const [simulationLoading, setSimulationLoading] = useState(false); // New state for simulation loading
 
   // Pipeline状态
   const [currentPipeline, setCurrentPipeline] = useState<PipelineDTO | null>(null);
@@ -693,6 +699,48 @@ function PipelineEditor() {
     message.info(`已定位节点: ${nodeId}`);
   };
 
+  /**
+   * 处理模拟运行Pipeline
+   */
+  const handleSimulatePipeline = useCallback(async (initialInputs: { text_input?: string; image_url?: string }) => {
+    setSimulationLoading(true);
+    setSimulationResult(null);
+    try {
+      const pipelineSchema: PipelineSchema = {
+        version: '1.0',
+        nodes: serializeNodes(nodes),
+        edges: edges.map((e: any) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          sourceHandle: e.sourceHandle,
+          targetHandle: e.targetHandle,
+        })) as PipelineEdge[],
+        metadata: {
+          title: pipelineName,
+          updatedAt: new Date().toISOString(),
+        },
+      };
+
+      const response = await api.client.post('/admin/pipelines/simulate', {
+        pipeline: pipelineSchema,
+        initialInputs: initialInputs,
+      });
+
+      if (response.data?.success) {
+        setSimulationResult(response.data.data);
+        message.success('模拟运行完成！');
+      } else {
+        message.error(response.data?.error?.message || '模拟运行失败');
+      }
+    } catch (error: any) {
+      console.error('[模拟运行失败]', error);
+      message.error(error.response?.data?.message || '模拟运行失败');
+    } finally {
+      setSimulationLoading(false);
+    }
+  }, [nodes, edges, pipelineName]);
+
   return (
     <div style={{ padding: '24px' }}>
       <Row gutter={16}>
@@ -708,10 +756,16 @@ function PipelineEditor() {
                 {currentPipeline && (
                   <Tag color="blue">ID: {currentPipeline.pipeline_id}</Tag>
                 )}
-                {collaboration.state.isConnected && (
-                  <Tag color="green" icon={<SyncOutlined spin />}>
-                    协作中
-                  </Tag>
+                {collaboration.enabled ? (
+                  collaboration.state.isConnected ? (
+                    <Tag color="green" icon={<SyncOutlined spin />}>
+                      协作中
+                    </Tag>
+                  ) : (
+                    <Tag color="warning">等待协作连接</Tag>
+                  )
+                ) : (
+                  <Tag color="default">协作已停用</Tag>
                 )}
               </Space>
             }
@@ -733,27 +787,30 @@ function PipelineEditor() {
                   导入JSON
                 </Button>
                 <Button.Group>
-                  <Button icon={<PlusOutlined />} onClick={addProviderNode}>
-                    Provider
+                  <Button icon={<PlusOutlined />} onClick={addProviderNode} title="调用AI大模型处理任务">
+                    AI模型
                   </Button>
-                  <Button icon={<PlusOutlined />} onClick={addConditionNode}>
-                    条件
+                  <Button icon={<BranchesOutlined />} onClick={addConditionNode} title="根据结果判断走哪条路">
+                    条件判断
                   </Button>
-                  <Button icon={<PlusOutlined />} onClick={addPostProcessNode}>
-                    后处理
+                  <Button icon={<ToolOutlined />} onClick={addPostProcessNode} title="对AI结果进行格式化或提取">
+                    结果处理
                   </Button>
-                  <Button icon={<PlusOutlined />} onClick={addForkNode}>
-                    FORK
+                  <Button icon={<BranchesOutlined rotate={90} />} onClick={addForkNode} title="同时执行多个任务">
+                    并行分支
                   </Button>
-                  <Button icon={<PlusOutlined />} onClick={addJoinNode}>
-                    JOIN
+                  <Button icon={<BranchesOutlined rotate={270} />} onClick={addJoinNode} title="等待所有任务完成">
+                    汇合
                   </Button>
-                  <Button icon={<PlusOutlined />} onClick={addEndNode}>
-                    结束
+                  <Button icon={<CheckCircleOutlined />} onClick={addEndNode} title="流程结束并输出结果">
+                    结束输出
                   </Button>
                 </Button.Group>
                 <Button icon={<CodeOutlined />} onClick={() => setJsonDrawerVisible(true)}>
                   查看JSON
+                </Button>
+                <Button icon={<ExperimentOutlined />} onClick={() => setSimulationDrawerVisible(true)}>
+                  实时预览
                 </Button>
                 <Button
                   icon={<CheckCircleOutlined />}
@@ -785,72 +842,86 @@ function PipelineEditor() {
                 onNodeClick={onNodeClick}
                 onNodeDragStop={(event, node) => {
                   // 更新协作光标位置
-                  collaboration.updateCursor({
-                    nodeId: node.id,
-                    x: node.position.x,
-                    y: node.position.y
-                  });
+                  if (collaboration.enabled) {
+                    collaboration.updateCursor({
+                      nodeId: node.id,
+                      x: node.position.x,
+                      y: node.position.y
+                    });
+                  }
                 }}
                 onPaneClick={(event) => {
                   // 清除协作光标
-                  collaboration.clearCursor();
+                  if (collaboration.enabled) {
+                    collaboration.clearCursor();
+                  }
                 }}
                 nodeTypes={nodeTypes}
                 fitView
               >
-                <Controls />
+                {/* <Controls /> */}  {/* 已隐藏控制面板 */}
                 <MiniMap />
                 <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
               </ReactFlow>
 
               {/* 显示其他用户的协作光标 */}
-              {collaboration.getUserCursors().map((user) => (
-                <div
-                  key={user.id}
-                  style={{
-                    position: 'absolute',
-                    left: user.cursor?.x || 0,
-                    top: user.cursor?.y || 0,
-                    pointerEvents: 'none',
-                    zIndex: 1000,
-                    transition: 'all 0.2s ease'
-                  }}
-                >
+              {collaboration.enabled &&
+                collaboration.getUserCursors().map((user) => (
                   <div
+                    key={user.id}
                     style={{
-                      padding: '2px 6px',
-                      backgroundColor: user.color,
-                      color: 'white',
-                      borderRadius: 4,
-                      fontSize: 11,
-                      fontWeight: 'bold',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                      animation: 'pulse 1.5s infinite'
+                      position: 'absolute',
+                      left: user.cursor?.x || 0,
+                      top: user.cursor?.y || 0,
+                      pointerEvents: 'none',
+                      zIndex: 1000,
+                      transition: 'all 0.2s ease'
                     }}
                   >
-                    {user.name}
-                    {user.cursor?.nodeId && (
-                      <div style={{ fontSize: 9, opacity: 0.8 }}>
-                        编辑: {user.cursor.nodeId}
-                      </div>
-                    )}
+                    <div
+                      style={{
+                        padding: '2px 6px',
+                        backgroundColor: user.color,
+                        color: 'white',
+                        borderRadius: 4,
+                        fontSize: 11,
+                        fontWeight: 'bold',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                        animation: 'pulse 1.5s infinite'
+                      }}
+                    >
+                      {user.name}
+                      {user.cursor?.nodeId && (
+                        <div style={{ fontSize: 9, opacity: 0.8 }}>
+                          编辑: {user.cursor.nodeId}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           </Card>
         </Col>
 
         <Col span={6}>
           {/* 协作编辑面板 */}
-          <CollaborationPresence
-            onlineUsers={collaboration.state.onlineUsers}
-            currentUser={collaboration.state.currentUser}
-            isConnected={collaboration.state.isConnected}
-            snapshots={collaboration.getSnapshots()}
-            onCreateSnapshot={(description) => collaboration.createSnapshot(description)}
-            onRollback={(snapshotId) => collaboration.rollbackToSnapshot(snapshotId)}
-          />
+          {collaboration.enabled ? (
+            <CollaborationPresence
+              onlineUsers={collaboration.state.onlineUsers}
+              currentUser={collaboration.state.currentUser}
+              isConnected={collaboration.state.isConnected}
+              snapshots={collaboration.getSnapshots()}
+              onCreateSnapshot={(description) => collaboration.createSnapshot(description)}
+              onRollback={(snapshotId) => collaboration.rollbackToSnapshot(snapshotId)}
+            />
+          ) : (
+            <Alert
+              type="info"
+              showIcon
+              message="协作功能未启用"
+              description="后端协作服务未启动，或环境变量 NEXT_PUBLIC_PIPELINE_COLLAB 未设置为 true。单人编辑仍可使用，实时协作与快照功能暂不可用。"
+            />
+          )}
         </Col>
       </Row>
 
@@ -989,6 +1060,15 @@ function PipelineEditor() {
           onRevalidate={handleValidate}
         />
       </Drawer>
+
+      {/* 模拟运行面板 */}
+      <SimulationPanel
+        open={simulationDrawerVisible}
+        onClose={() => setSimulationDrawerVisible(false)}
+        onSimulate={handleSimulatePipeline}
+        simulationResult={simulationResult}
+        loading={simulationLoading}
+      />
     </div>
   );
 }

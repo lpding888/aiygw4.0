@@ -40,7 +40,11 @@ export const useWebSocket = (options: UseWebSocketOptions = {}) => {
 
   // 自动连接
   useEffect(() => {
-    if (autoConnect && !isInitialized.current && typeof window !== 'undefined') {
+    // ⚠️ WebSocket 协作功能已禁用
+    // TODO: 如需启用，请先确保后端 WebSocket 服务已启动
+    const WEBSOCKET_ENABLED = false;
+
+    if (WEBSOCKET_ENABLED && autoConnect && !isInitialized.current && typeof window !== 'undefined') {
       const wsUrl = process.env.NEXT_PUBLIC_WS_URL || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
       connect(wsUrl);
       isInitialized.current = true;
