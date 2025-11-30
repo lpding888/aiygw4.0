@@ -13,12 +13,12 @@ import {
     MenuFoldOutlined,
     MenuUnfoldOutlined,
     SafetyCertificateOutlined,
-    ApartmentOutlined,
-    FormOutlined,
     DollarOutlined,
     RocketOutlined,
     FileTextOutlined,
-    CloudServerOutlined
+    ThunderboltOutlined,
+    ToolOutlined,
+    ShopOutlined
 } from '@ant-design/icons';
 import { useAuthStore } from '@/store/authStore';
 import { ADMIN_BRAND, getBreadcrumbItems, getMenuOpenKeys } from '@/config/admin';
@@ -50,42 +50,45 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
         }
     }, [user, router]);
 
-    // 菜单配置
+    // 菜单配置 (重构后)
     const menuItems = [
         {
             key: '/admin/dashboard',
             icon: <DashboardOutlined />,
             label: '仪表盘',
         },
+        // 新增：AI 智能工厂 (核心入口)
         {
-            key: 'app-management',
-            icon: <AppstoreOutlined />,
-            label: '应用管理',
+            key: 'ai-factory',
+            icon: <ThunderboltOutlined />,
+            label: 'AI 智能工厂',
             children: [
                 {
-                    key: '/admin/features',
-                    label: '功能列表',
+                    key: '/admin/pipelines/editor',
+                    icon: <RocketOutlined />, // 火箭图标，代表启动引擎
+                    label: '积木编排 (Pipeline)',
                 },
                 {
-                    key: '/admin/features/new',
-                    label: '新建AI应用',
+                    key: '/admin/providers',
+                    icon: <ToolOutlined />, // 工具图标
+                    label: '技能管理 (Providers)',
                 },
             ],
         },
+        // 应用管理 (App Store)
         {
-            key: 'core-engine',
-            icon: <RocketOutlined />,
-            label: '核心引擎',
+            key: 'app-management',
+            icon: <AppstoreOutlined />,
+            label: '应用商店',
             children: [
                 {
-                    key: '/admin/forms/builder',
-                    icon: <FormOutlined />,
-                    label: '表单设计器',
+                    key: '/admin/features',
+                    icon: <ShopOutlined />,
+                    label: '已上架应用',
                 },
                 {
-                    key: '/admin/pipelines/editor',
-                    icon: <ApartmentOutlined />,
-                    label: '流程编辑器',
+                    key: '/admin/features/new',
+                    label: '应用上架',
                 },
             ],
         },
@@ -122,11 +125,6 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
                     key: '/admin/system/audit',
                     icon: <SafetyCertificateOutlined />,
                     label: '审计日志',
-                },
-                {
-                    key: '/admin/providers',
-                    icon: <CloudServerOutlined />,
-                    label: '模型服务商',
                 },
             ],
         },
@@ -173,16 +171,16 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
     // 获取当前选中的菜单键
     const getSelectedKeys = () => {
         if (!pathname) return [];
-        // 精确匹配
         if (pathname === '/admin/dashboard') return ['/admin/dashboard'];
-
-        // 模糊匹配（例如 /admin/features/new 应该高亮 /admin/features）
-        // 这里简单处理，直接返回pathname
         return [pathname];
     };
 
     // 获取当前展开的菜单键 - 使用配置
-    const getOpenKeys = () => getMenuOpenKeys(pathname);
+    const getOpenKeys = () => {
+        // 如果在编辑器页面，自动展开 AI 工厂
+        if (pathname.startsWith('/admin/pipelines')) return ['ai-factory'];
+        return getMenuOpenKeys(pathname);
+    };
 
     if (!user || user.role !== 'admin') return null;
 

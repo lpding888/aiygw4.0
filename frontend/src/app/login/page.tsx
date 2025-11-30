@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { Form, Input, Button, message, Modal, Typography, Tabs, Tooltip } from 'antd';
+import { Form, Input, Button, message, Modal, Typography, Tabs, Tooltip, Checkbox } from 'antd';
 import {
   MobileOutlined,
   SafetyOutlined,
@@ -37,7 +37,7 @@ function LoginPageContent() {
   const initialReferralCode = searchParams?.get('ref') || searchParams?.get('referralCode') || '';
 
   // State
-  const [method, setMethod] = useState<LoginMethod>('code');
+  const [method, setMethod] = useState<LoginMethod>('password');
   const [loading, setLoading] = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -286,7 +286,8 @@ function LoginPageContent() {
                   className="vision-input"
                 />
               </Form.Item>
-              <div style={{ textAlign: 'right', marginBottom: 24 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                <Checkbox defaultChecked style={{ color: '#666' }}>自动登录</Checkbox>
                 <Link href="#" className="vision-link">忘记密码?</Link>
               </div>
               <Form.Item>

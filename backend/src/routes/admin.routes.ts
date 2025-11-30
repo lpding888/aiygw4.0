@@ -6,6 +6,7 @@ import { requireAdmin } from '../middlewares/adminAuth.middleware.js';
 
 // 子控制器（JS），以 d.ts 桥接
 import featureWizardController from '../controllers/admin/featureWizard.controller.js';
+import toolGeneratorController from '../controllers/admin/toolGenerator.controller.js';
 import pipelinesValidateController from '../controllers/admin/pipelines-validate.controller.js';
 import formSchemasController from '../controllers/admin/formSchemas.controller.js';
 import promptsController from '../controllers/admin/prompts.controller.js';
@@ -40,8 +41,17 @@ router.post(
   featureWizardController.createFeatureFromWizard
 );
 
+// AI 自动导入工具 (AI 读文档)
+router.post(
+  '/tools/generate',
+  authenticate,
+  requireAdmin,
+  toolGeneratorController.generate
+);
+
 // 素材库管理（管理员查看所有用户素材）
 router.get('/assets', authenticate, requireAdmin, assetController.getAllAssets);
+
 
 // 分销代理管理
 router.get('/distributors', authenticate, requireAdmin, adminController.getDistributors);

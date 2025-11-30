@@ -57,7 +57,7 @@ const CATEGORY_LABELS: Record<FeatureCategory, string> = {
 export const FeatureGrid: React.FC<FeatureGridProps> = ({
   features,
   columns = 3,
-  gutter = [16, 16],
+  gutter = [24, 24], // 增加间距
   groupByCategory = false,
   onFeatureClick,
   showDisabledState = true,
@@ -155,18 +155,33 @@ export const FeatureGrid: React.FC<FeatureGridProps> = ({
   return (
     <div>
       {groupedFeatures.map((group) => (
-        <div key={group.category} style={{ marginBottom: 32 }}>
+        <div key={group.category} style={{ marginBottom: 40 }}>
           {/* 分类标题 */}
           <div
             style={{
-              fontSize: 18,
-              fontWeight: 600,
-              marginBottom: 16,
-              paddingBottom: 8,
-              borderBottom: '2px solid #f0f0f0',
+              display: 'flex',
+              alignItems: 'center',
+              marginBottom: 20,
             }}
           >
-            {group.label}
+            <div
+              style={{
+                width: 4,
+                height: 18,
+                background: '#1890ff',
+                borderRadius: 2,
+                marginRight: 12
+              }}
+            />
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 600,
+                color: '#1f2937',
+              }}
+            >
+              {group.label}
+            </div>
           </div>
 
           {/* 分类卡片 */}

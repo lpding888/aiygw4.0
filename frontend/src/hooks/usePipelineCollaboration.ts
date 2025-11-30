@@ -55,36 +55,53 @@ export function usePipelineCollaboration(config: CollaborationConfig) {
   const collaborationRef = useRef<PipelineCollaboration | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 初始化协作实例
-  useEffect(() => {
+  // 连接到协作服务器
+  const connect = useCallback(async () => {
+    if (!COLLABORATION_ENABLED || !collaborationRef.current) return false;
+
+    try {
+      const success = await collaborationRef.current.connect(
+        config.serverUrl,
+        config.pipelineId
+      );
+
+      if (success) {
+        // 设置当前用户信息
+        const currentUser: CollaborativeUser = {
+          id: config.userId,
+          name: config.userName,
+          color: generateUserColor(config.userId),
+          status: 'online'
+        };
+
+        setState(prev => ({
+          ...prev,
+          currentUser
+        }));
+      }
+
+      return success;
+    } catch (error) {
+      console.error('[Pipeline协作] 连接失败:', error);
+      return false;
+    }
+  }, [config]);
+
+  // 安排重连
+  const scheduleReconnect = useCallback(() => {
     if (!COLLABORATION_ENABLED) {
-      console.info('[Pipeline协作] 协作功能已禁用');
       return;
     }
 
-    const collab = new PipelineCollaboration(
-      config.pipelineId,
-      config.userId,
-      config.userName
-    );
-
-    collaborationRef.current = collab;
-
-    // 设置事件监听器
-    setupEventListeners(collab);
-
-    // 自动连接
-    if (config.autoConnect !== false) {
-      connect();
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
     }
 
-    return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      collab.destroy();
-    };
-  }, [config.pipelineId, config.userId, config.userName]);
+    reconnectTimeoutRef.current = setTimeout(() => {
+      console.log('[Pipeline协作] 尝试重连...');
+      connect();
+    }, 5000);
+  }, [connect]);
 
   // 设置事件监听器
   const setupEventListeners = (collab: PipelineCollaboration) => {
@@ -170,53 +187,36 @@ export function usePipelineCollaboration(config: CollaborationConfig) {
     });
   };
 
-  // 安排重连
-  const scheduleReconnect = useCallback(() => {
+  // 初始化协作实例
+  useEffect(() => {
     if (!COLLABORATION_ENABLED) {
+      console.info('[Pipeline协作] 协作功能已禁用');
       return;
     }
 
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-    }
+    const collab = new PipelineCollaboration(
+      config.pipelineId,
+      config.userId,
+      config.userName
+    );
 
-    reconnectTimeoutRef.current = setTimeout(() => {
-      console.log('[Pipeline协作] 尝试重连...');
+    collaborationRef.current = collab;
+
+    // 设置事件监听器
+    setupEventListeners(collab);
+
+    // 自动连接
+    if (config.autoConnect !== false) {
       connect();
-    }, 5000);
-  }, [connect]);
-
-  // 连接到协作服务器
-  const connect = useCallback(async () => {
-    if (!COLLABORATION_ENABLED || !collaborationRef.current) return false;
-
-    try {
-      const success = await collaborationRef.current.connect(
-        config.serverUrl,
-        config.pipelineId
-      );
-
-      if (success) {
-        // 设置当前用户信息
-        const currentUser: CollaborativeUser = {
-          id: config.userId,
-          name: config.userName,
-          color: generateUserColor(config.userId),
-          status: 'online'
-        };
-
-        setState(prev => ({
-          ...prev,
-          currentUser
-        }));
-      }
-
-      return success;
-    } catch (error) {
-      console.error('[Pipeline协作] 连接失败:', error);
-      return false;
     }
-  }, [config]);
+
+    return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      collab.destroy();
+    };
+  }, [config.pipelineId, config.userId, config.userName, connect]);
 
   // 断开连接
   const disconnect = useCallback(() => {

@@ -82,7 +82,7 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
         <Badge
           count={feature.badge}
           color={feature.badgeColor}
-          style={{ position: 'absolute', top: 12, right: 12 }}
+          style={{ position: 'absolute', top: 12, right: 12, zIndex: 1 }}
         />
       );
     }
@@ -97,7 +97,7 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 
     if (feature.isNew) {
       tags.push(
-        <Tag key="new" color="blue">
+        <Tag key="new" color="#108ee9" style={{ borderRadius: 12, border: 'none', padding: '0 8px' }}>
           NEW
         </Tag>
       );
@@ -105,7 +105,7 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
 
     if (feature.isHot) {
       tags.push(
-        <Tag key="hot" color="red">
+        <Tag key="hot" color="#f50" style={{ borderRadius: 12, border: 'none', padding: '0 8px' }}>
           HOT
         </Tag>
       );
@@ -115,24 +115,36 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
       return null;
     }
 
-    return <div style={{ marginTop: 8 }}>{tags}</div>;
+    return <div style={{ marginTop: 12 }}>{tags}</div>;
   };
 
   // 卡片样式
   const cardStyle: React.CSSProperties = {
     height: getSizeHeight(feature.size),
     cursor: feature.disabled ? 'not-allowed' : 'pointer',
-    opacity: showDisabledState && feature.disabled ? 0.5 : 1,
-    transition: 'all 0.3s',
+    opacity: showDisabledState && feature.disabled ? 0.6 : 1,
+    transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
     position: 'relative',
+    borderRadius: 16,
+    border: '1px solid rgba(0,0,0,0.06)',
+    overflow: 'hidden',
+    background: feature.disabled ? '#f5f5f5' : '#fff',
   };
 
-  const hoverStyle = feature.disabled
-    ? {}
-    : {
-        transform: 'translateY(-4px)',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-      };
+  // 图标容器样式
+  const iconContainerStyle: React.CSSProperties = {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    background: feature.disabled 
+      ? '#e6e6e6' 
+      : 'linear-gradient(135deg, #E6F7FF 0%, #BAE7FF 100%)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    transition: 'all 0.3s',
+  };
 
   return (
     <Card
@@ -140,6 +152,7 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
       style={cardStyle}
       hoverable={!feature.disabled}
       onClick={handleClick}
+      bordered={false}
       styles={{
         body: {
           height: '100%',
@@ -148,25 +161,44 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
           justifyContent: 'center',
           alignItems: 'center',
           textAlign: 'center',
-          padding: '24px 16px',
+          padding: '24px',
         },
+      }}
+      onMouseEnter={(e) => {
+        if (!feature.disabled) {
+          e.currentTarget.style.transform = 'translateY(-8px)';
+          e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)';
+          e.currentTarget.style.borderColor = 'transparent';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!feature.disabled) {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = 'none';
+          e.currentTarget.style.borderColor = 'rgba(0,0,0,0.06)';
+        }
       }}
     >
       {/* 徽标 */}
       {renderBadge()}
 
       {/* 图标 */}
-      <div style={{ marginBottom: 12 }}>
-        <DynamicIcon icon={feature.icon} size={48} color="#1890ff" />
+      <div style={iconContainerStyle}>
+        <DynamicIcon 
+          icon={feature.icon} 
+          size={32} 
+          color={feature.disabled ? '#999' : '#1890ff'} 
+        />
       </div>
 
       {/* 标题 */}
       <div
         style={{
-          fontSize: 16,
+          fontSize: 17,
           fontWeight: 600,
           marginBottom: 8,
-          color: feature.disabled ? '#999' : '#000',
+          color: feature.disabled ? '#999' : '#1f2937',
+          letterSpacing: '-0.025em',
         }}
       >
         {feature.title}
@@ -176,8 +208,9 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
       <div
         style={{
           fontSize: 13,
-          color: feature.disabled ? '#ccc' : '#666',
-          lineHeight: 1.4,
+          color: feature.disabled ? '#ccc' : '#6b7280',
+          lineHeight: 1.5,
+          maxWidth: '90%',
         }}
       >
         {feature.description}

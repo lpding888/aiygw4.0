@@ -48,6 +48,7 @@ const routeDefinitions: RouteDefinition[] = [
   { mountPath: '/api/admin/kb', modulePath: './routes/admin/kb.route.js' },
   { mountPath: '/api/admin/uploads', modulePath: './routes/admin/uploads.route.js' },
   { mountPath: '/api/admin/configs', modulePath: './routes/admin/configs.route.js' },
+  { mountPath: '/api/admin/providers', modulePath: './routes/admin/providers.routes.js' },
   { mountPath: '/api/admin/features', modulePath: './routes/feature-catalog.routes.js' },
   { mountPath: '/api/admin/ui', modulePath: './routes/ui.routes.js' },
   { mountPath: '/api/admin/pipeline-schemas', modulePath: './routes/pipelineSchemas.routes.js' },
@@ -102,7 +103,7 @@ const buildCorsWhitelist = (input?: string | string[]): Set<string> => {
     .map((origin) => normalizeOrigin(origin.trim()))
     .filter((value): value is string => Boolean(value));
   if (normalized.length === 0) {
-    normalized.push('http://localhost:3001');
+    normalized.push('http://localhost:3000');
   }
   return new Set(normalized);
 };

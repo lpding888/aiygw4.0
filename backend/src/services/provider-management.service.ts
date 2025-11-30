@@ -4,12 +4,12 @@
  * 管理外部服务提供商，支持密钥加密存储和连接测试
  */
 
-const crypto = require('crypto');
-const axios = require('axios');
+import crypto from 'crypto';
+import axios from 'axios';
 import { db as knex } from '../db/index.js';
 import aiGateway from './ai-gateway.service.js';
-const logger = require('../utils/logger');
-const kmsService = require('./kms.service');
+import logger from '../utils/logger.js';
+import kmsService from './kms.service.js';
 
 interface ProviderConfig {
   id: string;
