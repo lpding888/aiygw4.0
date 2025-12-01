@@ -177,4 +177,7 @@ router.get('/prompts/helpers', authenticate, requireAdmin, promptsController.get
 // AI助手
 router.post('/ai/chat', authenticate, requireAdmin, adminController.chatWithAI);
 
+// 系统初始化
+router.post('/system/init', authenticate, requireAdmin, adminController.initializeSystem);
+
 export default router;

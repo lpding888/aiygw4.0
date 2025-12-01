@@ -53,6 +53,12 @@ const edgeTypes = {
 const initialNodes: Node[] = [];
 const initialEdges: any[] = [];
 
+const normalizeEdges = (edgeList: any[] = []): any[] =>
+  edgeList.map((edge) => ({
+    ...edge,
+    type: edge.type ?? 'custom'
+  }));
+
 const serializeNodes = (rfNodes: Node[]): PipelineNode[] =>
   rfNodes.map((n) => ({
     id: n.id,
@@ -200,7 +206,7 @@ function PipelineEditor() {
           const json = JSON.parse(e.target?.result as string);
           if (json.nodes && json.edges) {
             setNodes(json.nodes);
-            setEdges(json.edges);
+            setEdges(normalizeEdges(json.edges));
             message.success('Pipeline导入成功');
           } else {
             message.error('无效的Pipeline JSON文件');
@@ -302,7 +308,7 @@ function PipelineEditor() {
         // @ts-ignore
         setNodes(pipeline.pipeline_json.nodes || []);
         // @ts-ignore
-        setEdges(pipeline.pipeline_json.edges || []);
+        setEdges(normalizeEdges(pipeline.pipeline_json.edges || []));
       }
       setLoadModalVisible(false);
       message.success(`已加载: ${pipeline.pipeline_name}`);

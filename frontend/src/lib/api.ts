@@ -489,6 +489,10 @@ class APIClient {
     // AI助手
     chatWithAI: (data: AIChatRequest) =>
       this.client.post<APIResponse<AIChatResponse>>('/admin/ai/chat', data),
+
+    // 系统初始化
+    initializeSystem: () =>
+      this.client.post<APIResponse>('/admin/system/init'),
   };
 
   // 素材库相关

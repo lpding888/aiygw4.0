@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Steps, Card, Button, message } from 'antd';
+import { Steps, Card, Button, message, Alert } from 'antd';
 import {
   InfoCircleOutlined,
   FormOutlined,
@@ -208,6 +208,22 @@ export default function FeatureWizardPage() {
       <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px' }}>
         创建新功能 (Feature)
       </h1>
+
+      {/* 新手引导 */}
+      <Alert
+        message="如何创建一个 AI 应用？"
+        description={
+          <ul style={{ paddingLeft: '20px', margin: '8px 0 0 0' }}>
+            <li><strong>1. 基本信息</strong>：给你的应用起个名字（比如“AI模特生成”），选个好看的图标。</li>
+            <li><strong>2. 表单设计</strong>：设计用户需要填写的“订单”（比如上传衣服图、选择模特性别）。</li>
+            <li><strong>3. 流程编排</strong>：最关键的一步！像搭积木一样，把用户的“订单”交给 AI 处理，最后输出结果。</li>
+            <li><strong>4. 预览发布</strong>：检查一遍没问题，就可以上架给用户使用了！</li>
+          </ul>
+        }
+        type="info"
+        showIcon
+        style={{ marginBottom: '24px' }}
+      />
 
       {/* 步骤导航 */}
       <Card style={{ marginBottom: '24px' }}>

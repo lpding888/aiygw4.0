@@ -84,7 +84,7 @@ exports.up = async function (knex) {
     // 索引（用于欺诈检测查询）
     table.index(['user_id']);
     table.index(['ip_address']);
-    table.index(['user_agent']);
+    // user_agent 是 TEXT 类型，在 MySQL 中需要指定长度，这里暂不索引
     table.index(['created_at']);
     table.index(['status']);
     table.index(['user_id', 'ip_address']);

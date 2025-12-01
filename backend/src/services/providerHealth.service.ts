@@ -83,11 +83,13 @@ export class ProviderHealthService {
     try {
       logger.info('[ProviderHealthService] 开始健康检查');
 
-      // 1. 获取所有需要监控的Provider配置
-      const providers: ProviderConfig[] = await db('provider_configs')
-        .where('is_enabled', true)
-        .whereNull('deleted_at')
-        .select('*');
+      // 1. 获取所有需要监控的Provider端点 (从 provider_endpoints 表)
+      const providers = await db('provider_endpoints').select(
+        'provider_ref as provider_id',
+        'provider_name',
+        'auth_type as type',
+        db.raw("'{}' as config")
+      );
 
       if (providers.length === 0) {
         logger.info('[ProviderHealthService] 没有需要检查的Provider');
@@ -97,7 +99,7 @@ export class ProviderHealthService {
       logger.info(`[ProviderHealthService] 检查${providers.length}个Provider`);
 
       // 2. 并发执行健康检查
-      const checkPromises = providers.map((provider) =>
+      const checkPromises = providers.map((provider: ProviderConfig) =>
         this.checkProviderHealth(provider).catch((err: unknown) => {
           const error = err instanceof Error ? err : new Error(String(err));
           logger.error(
@@ -271,38 +273,31 @@ export class ProviderHealthService {
   ): Promise<void> {
     try {
       const now = new Date();
+      const status = isHealthy ? 'up' : 'down';
 
-      // 查询是否已存在记录
-      const existing = await db('provider_health_checks').where('provider_id', providerId).first();
+      // 查询是否已存在记录 (使用 provider_ref 字段)
+      const existing = await db('provider_health').where('provider_ref', providerId).first();
 
       if (existing) {
-        // 更新现有记录
-        const updateData: UpdateHealthRecordData = {
-          is_healthy: isHealthy,
-          last_check_at: now,
-          response_time_ms: responseTime,
-          error_message: errorMessage,
-          consecutive_failures: isHealthy
-            ? 0
-            : ((existing.consecutive_failures as number) || 0) + 1,
-          updated_at: now
-        };
-
-        // 如果从不健康恢复为健康,记录恢复时间
-        if (isHealthy && !existing.is_healthy) {
-          updateData.last_recovery_at = now;
-        }
-
-        await db('provider_health_checks').where('provider_id', providerId).update(updateData);
+        // 更新现有记录 (使用实际表字段)
+        await db('provider_health')
+          .where('provider_ref', providerId)
+          .update({
+            status,
+            avg_latency_ms: responseTime,
+            last_check_at: now,
+            last_error: errorMessage,
+            updated_at: now
+          });
       } else {
-        // 创建新记录
-        await db('provider_health_checks').insert({
-          provider_id: providerId,
-          is_healthy: isHealthy,
+        // 创建新记录 (使用实际表字段)
+        await db('provider_health').insert({
+          provider_ref: providerId,
+          status,
+          avg_latency_ms: responseTime,
           last_check_at: now,
-          response_time_ms: responseTime,
-          error_message: errorMessage,
-          consecutive_failures: isHealthy ? 0 : 1,
+          last_error: errorMessage,
+          success_rate_24h: isHealthy ? 100 : 0,
           created_at: now,
           updated_at: now
         });
@@ -320,21 +315,19 @@ export class ProviderHealthService {
    */
   async getHealthSummary(): Promise<HealthRecord[]> {
     try {
-      const healthRecords = await db('provider_health_checks as phc')
-        .join('provider_configs as pc', 'phc.provider_id', 'pc.provider_id')
-        .where('pc.is_enabled', true)
-        .whereNull('pc.deleted_at')
+      const healthRecords = await db('provider_health as ph')
+        .join('provider_endpoints as pe', 'ph.provider_ref', 'pe.provider_ref')
         .select(
-          'phc.provider_id',
-          'pc.provider_name',
-          'pc.type',
-          'phc.is_healthy',
-          'phc.last_check_at',
-          'phc.response_time_ms',
-          'phc.consecutive_failures',
-          'phc.error_message'
+          'ph.provider_ref as provider_id',
+          'pe.provider_name',
+          'pe.auth_type as type',
+          db.raw("CASE WHEN ph.status = 'up' THEN 1 ELSE 0 END as is_healthy"),
+          'ph.last_check_at',
+          'ph.avg_latency_ms as response_time_ms',
+          db.raw('0 as consecutive_failures'),
+          'ph.last_error as error_message'
         )
-        .orderBy('phc.last_check_at', 'desc');
+        .orderBy('ph.last_check_at', 'desc');
 
       return healthRecords;
     } catch (error: unknown) {
@@ -351,20 +344,18 @@ export class ProviderHealthService {
    */
   async getUnhealthyProviders(): Promise<Partial<HealthRecord>[]> {
     try {
-      const unhealthyProviders = await db('provider_health_checks as phc')
-        .join('provider_configs as pc', 'phc.provider_id', 'pc.provider_id')
-        .where('pc.is_enabled', true)
-        .whereNull('pc.deleted_at')
-        .where('phc.is_healthy', false)
+      const unhealthyProviders = await db('provider_health as ph')
+        .join('provider_endpoints as pe', 'ph.provider_ref', 'pe.provider_ref')
+        .where('ph.status', '!=', 'up')
         .select(
-          'phc.provider_id',
-          'pc.provider_name',
-          'pc.type',
-          'phc.consecutive_failures',
-          'phc.last_check_at',
-          'phc.error_message'
+          'ph.provider_ref as provider_id',
+          'pe.provider_name',
+          'pe.auth_type as type',
+          db.raw('0 as consecutive_failures'),
+          'ph.last_check_at',
+          'ph.last_error as error_message'
         )
-        .orderBy('phc.consecutive_failures', 'desc');
+        .orderBy('ph.last_check_at', 'desc');
 
       return unhealthyProviders;
     } catch (error: unknown) {

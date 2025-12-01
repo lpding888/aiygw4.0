@@ -103,3 +103,6 @@ bower_components/
 # -------------------------
 # - 推荐提交 package-lock.json / yarn.lock / pnpm-lock.yaml（用于 CI 的 npm ci / 缓存）
 # - 如果你确实不想把 lock 文件提交，请在此处取消注释相应一行（但不推荐）
+
+# 证书文件
+certs/

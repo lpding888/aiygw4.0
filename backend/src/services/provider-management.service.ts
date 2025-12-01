@@ -17,7 +17,7 @@ interface ProviderConfig {
   type: string;
   baseUrl: string;
   apiKeyId: string;
-  handlerKeyId: string;
+  handlerKeyId?: string;
   weight: number;
   timeoutMs: number;
   maxRetries: number;
@@ -42,7 +42,7 @@ class ProviderManagementService {
     providerData: Partial<ProviderConfig>,
     secrets: {
       apiKey: string;
-      handlerKey: string;
+      handlerKey?: string;
     },
     createdBy: string
   ): Promise<ProviderConfig> {
@@ -55,10 +55,13 @@ class ProviderManagementService {
           secrets.apiKey,
           `provider_${providerId}_api_key`
         );
-        const encryptedHandlerKey = await kmsService.encrypt(
-          secrets.handlerKey,
-          `provider_${providerId}_handler_key`
-        );
+        let encryptedHandlerKey;
+        if (secrets.handlerKey) {
+          encryptedHandlerKey = await kmsService.encrypt(
+            secrets.handlerKey,
+            `provider_${providerId}_handler_key`
+          );
+        }
 
         // 创建供应商配置
         const provider: ProviderConfig = {
@@ -67,7 +70,7 @@ class ProviderManagementService {
           type: providerData.type!,
           baseUrl: providerData.baseUrl!,
           apiKeyId: encryptedApiKey.id,
-          handlerKeyId: encryptedHandlerKey.id,
+          handlerKeyId: encryptedHandlerKey?.id,
           weight: providerData.weight || 1,
           timeoutMs: providerData.timeoutMs || 30000,
           maxRetries: providerData.maxRetries || 3,
@@ -131,10 +134,11 @@ class ProviderManagementService {
 
     try {
       // 获取密钥
-      const [apiKey, handlerKey] = await Promise.all([
-        kmsService.decrypt(provider.apiKeyId),
-        kmsService.decrypt(provider.handlerKeyId)
-      ]);
+      const apiKey = await kmsService.decrypt(provider.apiKeyId);
+      let handlerKey;
+      if (provider.handlerKeyId) {
+        handlerKey = await kmsService.decrypt(provider.handlerKeyId);
+      }
 
       // 执行健康检查
       const response = await axios.get(`${provider.baseUrl}/health`, {
@@ -375,9 +379,9 @@ class ProviderManagementService {
       let content = response.choices[0]?.message?.content || '{}';
       // 清理Markdown代码块标记
       content = content.replace(/```json\n?|```/g, '');
-      
+
       const parsed = JSON.parse(content);
-      
+
       // 简单的映射和校验
       return {
         name: parsed.name || 'Unknown Provider',
@@ -388,10 +392,53 @@ class ProviderManagementService {
       };
 
     } catch (error: any) {
-      logger.error('智能解析API示例失败:', error);
-      // Fallback: 尝试使用OpenAI如果DeepSeek失败（可选）
-      throw new Error(`解析失败: ${error.message}`);
+      logger.warn('智能解析API示例失败，尝试使用正则解析:', error);
+
+      // Fallback: 正则解析
+      try {
+        return this.parseWithRegex(example);
+      } catch (regexError) {
+        logger.error('正则解析也失败了:', regexError);
+        throw new Error(`解析失败: ${error.message}`);
+      }
     }
+  }
+
+  /**
+   * 正则解析 (Fallback)
+   */
+  private parseWithRegex(example: string): Partial<ProviderConfig> {
+    const result: Partial<ProviderConfig> = {
+      type: 'ai', // 默认为AI
+      name: 'Unknown Provider'
+    };
+
+    // 1. 提取URL
+    const urlMatch = example.match(/https?:\/\/[^\s\\'"]+/);
+    if (urlMatch) {
+      result.baseUrl = urlMatch[0];
+
+      // 简单的名称推断
+      if (result.baseUrl.includes('runninghub')) result.name = 'RunningHub';
+      else if (result.baseUrl.includes('openai')) result.name = 'OpenAI';
+      else if (result.baseUrl.includes('anthropic')) result.name = 'Anthropic';
+      else if (result.baseUrl.includes('midjourney')) result.name = 'Midjourney';
+    }
+
+    // 2. 提取认证方式
+    if (example.match(/Authorization:\s*Bearer/i)) {
+      // Bearer Token
+      // 这里的auth_type其实在ProviderConfig里没定义，但Controller会透传
+      (result as any).auth_type = 'bearer';
+    } else if (example.match(/x-api-key/i) || example.match(/api-key/i)) {
+      // API Key Header
+      (result as any).auth_type = 'api_key';
+    } else {
+      // 默认 API Key
+      (result as any).auth_type = 'api_key';
+    }
+
+    return result;
   }
 
   /**

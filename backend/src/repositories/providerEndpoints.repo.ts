@@ -23,6 +23,7 @@ export interface ProviderEndpoint {
   weight?: number | null;
   timeout_ms?: number | null;
   max_retries?: number | null;
+  enabled?: boolean;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -100,6 +101,7 @@ function toProviderEndpoint(row: Record<string, unknown>): ProviderEndpoint {
     weight: (row.weight as number | null | undefined) ?? null,
     timeout_ms: (row.timeout_ms as number | null | undefined) ?? null,
     max_retries: (row.max_retries as number | null | undefined) ?? null,
+    enabled: Boolean(row.enabled),
     created_at: row.created_at as Date | undefined,
     updated_at: row.updated_at as Date | undefined
   };
@@ -199,14 +201,20 @@ export async function listProviderEndpoints(options: {
   limit?: number;
   offset?: number;
   authType?: string;
+  enabled?: boolean;
 }): Promise<ProviderEndpoint[]> {
-  const { limit = 100, offset = 0, authType } = options;
+  const { limit = 100, offset = 0, authType, enabled } = options;
 
   let query = db<ProviderEndpoint>('provider_endpoints').select('*').limit(limit).offset(offset);
 
   // 可选过滤：按auth_type
   if (authType) {
     query = query.where({ auth_type: authType });
+  }
+
+  // 可选过滤：按enabled
+  if (enabled !== undefined) {
+    query = query.where({ enabled: enabled });
   }
 
   const rows = await query;

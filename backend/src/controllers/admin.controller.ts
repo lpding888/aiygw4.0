@@ -113,20 +113,8 @@ class AdminController {
     this.getDistributorDetail = this.getDistributorDetail.bind(this);
     this.getDistributorReferrals = this.getDistributorReferrals.bind(this);
     this.getDistributorCommissions = this.getDistributorCommissions.bind(this);
-    this.approveDistributor = this.approveDistributor.bind(this);
-    this.getWithdrawals = this.getWithdrawals.bind(this);
-    this.approveWithdrawal = this.approveWithdrawal.bind(this);
-    this.rejectWithdrawal = this.rejectWithdrawal.bind(this);
-    this.getDistributionSettings = this.getDistributionSettings.bind(this);
-    this.updateDistributionSettings = this.updateDistributionSettings.bind(this);
-    this.testPipeline = this.testPipeline.bind(this);
-    this.simulatePipeline = this.simulatePipeline.bind(this); // Bind new method
+    this.initializeSystem = this.initializeSystem.bind(this);
   }
-
-  /**
-   * 获取用户列表
-   * GET /api/admin/users?limit=10&offset=0&isMember=true
-   */
   async getUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { limit = 20, offset = 0, isMember } = req.query as Record<string, unknown>;
@@ -433,6 +421,14 @@ class AdminController {
 
       res.json({
         success: true,
+        data: {
+          features,
+          pagination: {
+            total: features.length,
+            limit: features.length,
+            offset: 0
+          }
+        },
         features
       });
     } catch (error) {
@@ -1575,7 +1571,149 @@ ${context || '无'}
       logAndNext(next, error, '[AdminController] 更新佣金设置失败');
     }
   }
+
+  /**
+   * 系统初始化：注入初始 Provider 配置
+   * POST /api/admin/system/init
+   */
+  async initializeSystem(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      // 检查是否已有数据
+      const existing = await db('provider_configs').count({ count: '*' }).first();
+      const count = existing ? normalizeCount(existing.count) : 0;
+
+      if (count > 0) {
+        res.json({
+          success: true,
+          message: '系统已初始化，无需重复操作',
+          data: { initialized: true }
+        });
+        return;
+      }
+
+      // 插入初始 Provider 配置 (复用 seeds/001_init_provider_configs.cjs 的逻辑)
+      await db('provider_configs').insert([
+        // ========== RunningHub Provider ==========
+        {
+          provider_id: 'runninghub_main',
+          provider_name: 'RunningHub 主服务',
+          type: 'runninghub',
+          description: 'AI 工作流主服务',
+          is_enabled: true,
+          priority: 10,
+          config: JSON.stringify({
+            api_url: 'https://api.runninghub.ai',
+            api_key_ref: 'RUNNING_HUB_API_KEY', // 引用环境变量
+            workflow_id: 'default_workflow',
+            timeout: 30000,
+            retry_count: 3,
+            features: ['image_generation', 'text_processing']
+          }),
+          metadata: JSON.stringify({
+            provider: 'runninghub',
+            version: 'v1',
+            region: 'global'
+          }),
+          created_at: new Date(),
+          updated_at: new Date()
+        },
+
+        // ========== 邮件服务 Provider ==========
+        {
+          provider_id: 'email_smtp_main',
+          provider_name: 'SMTP 邮件服务',
+          type: 'email',
+          description: '邮箱验证码发送服务',
+          is_enabled: true,
+          priority: 10,
+          config: JSON.stringify({
+            host: process.env.SMTP_HOST || 'smtp.example.com',
+            port: parseInt(process.env.SMTP_PORT || '465'),
+            secure: true,
+            auth: {
+              user_ref: 'SMTP_USER', // 引用环境变量
+              pass_ref: 'SMTP_PASSWORD' // 引用环境变量
+            },
+            from: {
+              name: 'AI衣柜',
+              address: process.env.SMTP_FROM || 'noreply@example.com'
+            },
+            timeout: 10000,
+            rate_limit: {
+              max_per_hour: 100,
+              max_per_day: 1000
+            }
+          }),
+          metadata: JSON.stringify({
+            provider: 'smtp',
+            version: 'v1'
+          }),
+          created_at: new Date(),
+          updated_at: new Date()
+        },
+
+        // ========== 腾讯云 SCF Provider ==========
+        {
+          provider_id: 'tencent_scf_main',
+          provider_name: '腾讯云云函数',
+          type: 'scf',
+          description: '图片后处理云函数',
+          is_enabled: false, // 默认禁用，需要配置后启用
+          priority: 20,
+          config: JSON.stringify({
+            region: 'ap-guangzhou',
+            function_name: 'image-post-process',
+            namespace: 'default',
+            secret_id_ref: 'COS_SECRET_ID',
+            secret_key_ref: 'COS_SECRET_KEY',
+            timeout: 60000,
+            memory: 512
+          }),
+          metadata: JSON.stringify({
+            provider: 'tencent_cloud',
+            service: 'scf',
+            version: 'v1'
+          }),
+          created_at: new Date(),
+          updated_at: new Date()
+        },
+
+        // ========== 图片同步处理 Provider ==========
+        {
+          provider_id: 'image_sync_main',
+          provider_name: '同步图片处理',
+          type: 'sync_image',
+          description: '本地同步图片处理服务',
+          is_enabled: true,
+          priority: 30,
+          config: JSON.stringify({
+            max_file_size: 10485760, // 10MB
+            allowed_types: ['image/jpeg', 'image/png', 'image/webp'],
+            quality: 85,
+            max_width: 2048,
+            max_height: 2048,
+            timeout: 5000
+          }),
+          metadata: JSON.stringify({
+            provider: 'local',
+            version: 'v1'
+          }),
+          created_at: new Date(),
+          updated_at: new Date()
+        }
+      ]);
+
+      logger.info('[AdminController] 系统初始化成功：Provider 配置已注入');
+
+      res.json({
+        success: true,
+        message: '系统初始化成功',
+        data: { initialized: true }
+      });
+    } catch (error) {
+      logAndNext(next, error, '[AdminController] 系统初始化失败');
+    }
+  }
 }
 
-const adminController = new AdminController();
-export default adminController;
+export default new AdminController();

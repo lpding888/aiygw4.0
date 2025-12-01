@@ -85,7 +85,8 @@ const routeDefinitions: RouteDefinition[] = [
   { mountPath: '/api/pipeline-schemas', modulePath: './routes/pipelineSchemas.routes.js' },
   { mountPath: '/api/pipeline-executions', modulePath: './routes/pipelineExecution.routes.js' },
   { mountPath: '/api/mcp-endpoints', modulePath: './routes/mcpEndpoints.routes.js' },
-  { mountPath: '/api/prompt-templates', modulePath: './routes/promptTemplates.routes.js' }
+  { mountPath: '/api/prompt-templates', modulePath: './routes/promptTemplates.routes.js' },
+  { mountPath: '/api/tenants', modulePath: './routes/tenants.routes.js' }
 ];
 
 const normalizeOrigin = (origin: string): string | null => {

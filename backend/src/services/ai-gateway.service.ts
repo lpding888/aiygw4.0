@@ -139,7 +139,7 @@ class AIGatewayService {
 
       logger.info(
         `[AIGateway] Chat请求: provider=${provider.provider_ref} ` +
-          `model=${request.model} stream=${request.stream || false}`
+        `model=${request.model} stream=${request.stream || false}`
       );
 
       // 获取适配器
@@ -162,7 +162,7 @@ class AIGatewayService {
 
       logger.info(
         `[AIGateway] Chat响应成功: provider=${provider.provider_ref} ` +
-          `tokens=${adaptedResponse.usage?.total_tokens || 'N/A'}`
+        `tokens=${adaptedResponse.usage?.total_tokens || 'N/A'}`
       );
 
       return adaptedResponse;
@@ -268,17 +268,34 @@ class AIGatewayService {
    * 选择Provider（负载均衡）
    * @private
    */
-  private async selectProvider(_model: string): Promise<ProviderEndpoint> {
-    // 简化实现：选择第一个可用的Provider
-    // 实际项目中应该实现负载均衡、权重选择等策略
-
-    const providers = await providerEndpointsRepo.listProviderEndpoints({});
+  private async selectProvider(model: string): Promise<ProviderEndpoint> {
+    // 1. 获取所有可用Provider
+    let providers = await providerEndpointsRepo.listProviderEndpoints({ enabled: true });
 
     if (providers.length === 0) {
       throw new Error('No available providers');
     }
 
-    // 按权重选择
+    // 2. 根据模型名称过滤Provider
+    // 如果请求的是特定模型（如 deepseek-chat），则优先选择对应的Provider
+    if (model.toLowerCase().includes('deepseek')) {
+      const deepseekProviders = providers.filter(p => p.provider_name.toLowerCase().includes('deepseek'));
+      if (deepseekProviders.length > 0) {
+        providers = deepseekProviders;
+      }
+    } else if (model.toLowerCase().includes('gpt') || model.toLowerCase().includes('openai')) {
+      const openaiProviders = providers.filter(p => p.provider_name.toLowerCase().includes('openai'));
+      if (openaiProviders.length > 0) {
+        providers = openaiProviders;
+      }
+    } else if (model.toLowerCase().includes('claude') || model.toLowerCase().includes('anthropic')) {
+      const anthropicProviders = providers.filter(p => p.provider_name.toLowerCase().includes('anthropic'));
+      if (anthropicProviders.length > 0) {
+        providers = anthropicProviders;
+      }
+    }
+
+    // 3. 按权重负载均衡选择
     const totalWeight = providers.reduce((sum, p) => sum + (p.weight ?? 100), 0) || 1;
     let random = Math.random() * totalWeight;
 

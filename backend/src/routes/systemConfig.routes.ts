@@ -10,6 +10,13 @@ router.get('/', authenticate, requireAdmin, systemConfigController.list);
 router.get('/categories', authenticate, requireAdmin, systemConfigController.getCategories);
 router.get('/category/:category', authenticate, requireAdmin, systemConfigController.getCategory);
 router.post(
+  '/init',
+  authenticate,
+  requireAdmin,
+  securityAudit({ includeRequestData: true }),
+  systemConfigController.init
+);
+router.post(
   '/reload-cache',
   authenticate,
   requireAdmin,

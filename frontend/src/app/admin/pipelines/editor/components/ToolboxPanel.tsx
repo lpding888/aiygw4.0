@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Button, List, Tooltip, Modal, Input, message, Tag, Space } from 'antd';
+import { Card, Button, List, Modal, Input, message, Tag, Space } from 'antd';
 import {
   AppstoreAddOutlined,
   RobotOutlined,
@@ -9,14 +9,17 @@ import {
   FileTextOutlined
 } from '@ant-design/icons';
 import api from '@/lib/api';
+import { adminProviders } from '@/lib/services/adminProviders';
 
 interface ToolFeature {
   feature_id: string;
   feature_key: string;
   name: string;
-  description: string;
+  display_name?: string;
+  description?: string;
   category: string;
   type: string; // 'api_tool' | 'basic' | ...
+  metadata?: Record<string, any>;
 }
 
 interface ToolboxPanelProps {
@@ -34,21 +37,78 @@ export default function ToolboxPanel({ onAddNode }: ToolboxPanelProps) {
   const loadTools = async () => {
     setLoading(true);
     try {
-      // 调用我们在 admin.routes.ts 里定义的接口
-      // 假设 GET /admin/features 返回所有积木
-      const res = await api.get('/admin/features?limit=100');
-      if (res.data?.success) {
-        // 过滤掉非工具类的 feature (比如套餐包)
-        // 这里假设我们只关心 'api_tool' 和 'pipeline_node' 类型的 feature
-        const allFeatures = res.data.data.items || [];
-        setTools(allFeatures);
+      const response = await api.admin.getFeatures({
+        limit: 200,
+        sort_by: 'name',
+        sort_order: 'asc'
+      });
+
+      if (!response?.success) {
+        throw new Error(response?.message || '获取积木列表失败');
       }
+
+      const rawFeatures =
+        (Array.isArray(response?.data?.features) && response.data.features) ||
+        (Array.isArray(response?.data) ? (response.data as ToolFeature[]) : []) ||
+        (Array.isArray((response as any)?.features) ? (response as any).features : []);
+
+      const normalizedTools = rawFeatures
+        .map((feature: any) => ({
+          ...feature,
+          feature_id: feature?.feature_id || feature?.feature_key,
+          feature_key: feature?.feature_key || feature?.feature_id,
+          name: feature?.display_name || feature?.name || feature?.feature_key || '未命名积木',
+          description: feature?.description || ''
+        }));
+      
+      setTools(normalizedTools);
     } catch (error) {
       console.error('加载工具箱失败:', error);
-      message.error('加载积木库失败');
+      message.error(
+        error instanceof Error ? error.message : '加载积木库失败，请稍后再试'
+      );
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadProviderTools = async (): Promise<ToolFeature[]> => {
+    try {
+      const response = await adminProviders.list({ limit: 500 });
+      const providers = Array.isArray(response?.items) ? response.items : [];
+      return providers
+        .filter((provider) => provider.enabled !== false)
+        .map((provider) => ({
+          feature_id: `provider:${provider.provider_ref}`,
+          feature_key: `provider_${provider.provider_ref}`,
+          name: provider.provider_name || provider.provider_ref,
+          display_name: provider.provider_name || provider.provider_ref,
+          description: provider.endpoint_url || '第三方服务商',
+          category: 'provider',
+          type: 'api_tool',
+          metadata: {
+            provider_ref: provider.provider_ref,
+            endpoint_url: provider.endpoint_url,
+            auth_type: provider.auth_type,
+            quality_tier: provider.quality_tier,
+            cost_per_1k_tokens: provider.cost_per_1k_tokens
+          }
+        }));
+    } catch (error) {
+      console.warn('加载Provider积木失败:', error);
+      return [];
+    }
+  };
+
+  const mergeTools = (featureTools: ToolFeature[], providerTools: ToolFeature[]) => {
+    const merged: ToolFeature[] = [...featureTools];
+    const existingKeys = new Set(featureTools.map((item) => item.feature_key));
+    for (const providerTool of providerTools) {
+      if (!existingKeys.has(providerTool.feature_key)) {
+        merged.push(providerTool);
+      }
+    }
+    return merged;
   };
 
   useEffect(() => {
@@ -125,8 +185,17 @@ export default function ToolboxPanel({ onAddNode }: ToolboxPanelProps) {
                 avatar={getIcon(item.category)}
                 title={
                   <Space>
-                    <span style={{ fontSize: '13px' }}>{item.name}</span>
-                    {item.type === 'api_tool' && <Tag color="purple" style={{marginRight:0, transform:'scale(0.8)'}}>AI生成</Tag>}
+                    <span style={{ fontSize: '13px' }}>{item.display_name || item.name}</span>
+                    {item.category === 'provider' && (
+                      <Tag color="geekblue" style={{ marginRight: 0, transform: 'scale(0.8)' }}>
+                        服务商
+                      </Tag>
+                    )}
+                    {item.type === 'api_tool' && (
+                      <Tag color="purple" style={{ marginRight: 0, transform: 'scale(0.8)' }}>
+                        AI生成
+                      </Tag>
+                    )}
                   </Space>
                 }
                 description={

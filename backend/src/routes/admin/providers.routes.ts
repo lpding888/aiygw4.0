@@ -37,48 +37,58 @@ const providerRateLimit = rateLimit({
   }
 });
 
-// 验证规则
+// 验证规则（匹配ProviderEndpointInput接口）
 const createProviderValidation = [
-  body('name')
+  body('provider_ref')
     .notEmpty()
-    .withMessage('供应商名称不能为空')
+    .withMessage('Provider引用ID不能为空')
+    .matches(/^[a-zA-Z0-9_-]+$/)
+    .withMessage('Provider引用ID只能包含字母、数字、下划线和短横线'),
+  body('provider_name')
+    .notEmpty()
+    .withMessage('Provider名称不能为空')
     .isLength({ max: 100 })
-    .withMessage('供应商名称最多100个字符'),
-  body('type')
+    .withMessage('Provider名称最多100个字符'),
+  body('endpoint_url')
     .notEmpty()
-    .withMessage('供应商类型不能为空')
-    .isIn(['ai', 'image', 'video', 'text'])
-    .withMessage('无效的供应商类型'),
-  body('baseUrl').notEmpty().withMessage('基础URL不能为空').isURL().withMessage('基础URL格式无效'),
-  body('apiKey').notEmpty().withMessage('API密钥不能为空'),
-  body('handlerKey').notEmpty().withMessage('处理密钥不能为空'),
+    .withMessage('API端点URL不能为空')
+    .isURL()
+    .withMessage('API端点URL格式无效'),
+  body('credentials')
+    .notEmpty()
+    .withMessage('凭证不能为空')
+    .isObject()
+    .withMessage('凭证必须是对象'),
+  body('auth_type')
+    .notEmpty()
+    .withMessage('认证类型不能为空')
+    .isIn(['api_key', 'bearer', 'basic', 'oauth2'])
+    .withMessage('无效的认证类型'),
+  body('quality_tier').optional().isIn(['low', 'medium', 'high']).withMessage('无效的质量档位'),
   body('weight').optional().isInt({ min: 1, max: 100 }).withMessage('权重必须是1-100之间的整数'),
-  body('timeoutMs')
+  body('cost_per_1k_tokens')
     .optional()
-    .isInt({ min: 1000, max: 300000 })
-    .withMessage('超时时间必须是1000-300000毫秒之间'),
-  body('maxRetries')
-    .optional()
-    .isInt({ min: 0, max: 10 })
-    .withMessage('最大重试次数必须是0-10之间'),
-  body('description').optional().isLength({ max: 500 }).withMessage('描述最多500个字符')
+    .isFloat({ min: 0 })
+    .withMessage('成本必须是非负数'),
+  body('enabled').optional().isBoolean().withMessage('enabled必须是布尔值')
 ];
 
 const updateProviderValidation = [
-  param('id').notEmpty().withMessage('供应商ID不能为空'),
-  body('name').optional().isLength({ max: 100 }).withMessage('供应商名称最多100个字符'),
-  body('type').optional().isIn(['ai', 'image', 'video', 'text']).withMessage('无效的供应商类型'),
-  body('baseUrl').optional().isURL().withMessage('基础URL格式无效'),
+  param('id').notEmpty().withMessage('Provider引用ID不能为空'),
+  body('provider_name').optional().isLength({ max: 100 }).withMessage('Provider名称最多100个字符'),
+  body('endpoint_url').optional().isURL().withMessage('API端点URL格式无效'),
+  body('credentials').optional().isObject().withMessage('凭证必须是对象'),
+  body('auth_type')
+    .optional()
+    .isIn(['api_key', 'bearer', 'basic', 'oauth2'])
+    .withMessage('无效的认证类型'),
+  body('quality_tier').optional().isIn(['low', 'medium', 'high']).withMessage('无效的质量档位'),
   body('weight').optional().isInt({ min: 1, max: 100 }).withMessage('权重必须是1-100之间的整数'),
-  body('timeoutMs')
+  body('cost_per_1k_tokens')
     .optional()
-    .isInt({ min: 1000, max: 300000 })
-    .withMessage('超时时间必须是1000-300000毫秒之间'),
-  body('maxRetries')
-    .optional()
-    .isInt({ min: 0, max: 10 })
-    .withMessage('最大重试次数必须是0-10之间'),
-  body('description').optional().isLength({ max: 500 }).withMessage('描述最多500个字符')
+    .isFloat({ min: 0 })
+    .withMessage('成本必须是非负数'),
+  body('enabled').optional().isBoolean().withMessage('enabled必须是布尔值')
 ];
 
 const testConnectionValidation = [param('id').notEmpty().withMessage('供应商ID不能为空')];

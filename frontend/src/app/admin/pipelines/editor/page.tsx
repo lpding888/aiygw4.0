@@ -21,7 +21,8 @@ import {
   SyncOutlined,
   HistoryOutlined,
   ExperimentOutlined, // Added ExperimentOutlined for simulation button
-  ToolOutlined // Added ToolOutlined for PostProcess node
+  ToolOutlined, // Added ToolOutlined for PostProcess node
+  DeleteOutlined
 } from '@ant-design/icons';
 import {
   ReactFlow,
@@ -42,12 +43,14 @@ import '@xyflow/react/dist/style.css';
 import { nodeTypes } from '@/components/flow/NodeTypes';
 import NodeConfigDrawer from '@/components/flow/NodeConfigDrawer';
 import ValidationPanel, { ValidationResult } from '@/components/flow/ValidationPanel';
+
 import { usePipelineCollaboration } from '@/hooks/usePipelineCollaboration';
 import CollaborationPresence from '@/components/collaboration/CollaborationPresence';
 import { adminPipelines } from '@/lib/services/adminPipelines';
 import { PipelineSchema, PipelineDTO, PipelineEdge, PipelineNode } from '@/lib/types/pipeline';
 import { validatePipelineSchema } from '@/lib/validators';
 import { validatePipelineTopology } from '@/lib/utils/pipelineTopology';
+import PipelineBlockSidebar from '@/components/admin/FeatureWizard/PipelineBlockSidebar';
 import api from '@/lib/api';
 import SimulationPanel from '@/components/flow/SimulationPanel';
 
@@ -108,6 +111,7 @@ function PipelineEditor() {
   const [simulationDrawerVisible, setSimulationDrawerVisible] = useState(false); // New state for simulation drawer
   const [simulationResult, setSimulationResult] = useState<any>(null); // New state for simulation results
   const [simulationLoading, setSimulationLoading] = useState(false); // New state for simulation loading
+  const [reactFlowInstance, setReactFlowInstance] = useState<any>(null); // Ensure this is present
 
   // Pipeline状态
   const [currentPipeline, setCurrentPipeline] = useState<PipelineDTO | null>(null);
@@ -126,7 +130,7 @@ function PipelineEditor() {
   const [validationDrawerVisible, setValidationDrawerVisible] = useState(false);
 
   const [form] = Form.useForm();
-  const reactFlowInstance = useReactFlow();
+  // const reactFlowInstance = useReactFlow(); // This is replaced by local state and onInit
 
   // 协同编辑状态
   const collaboration = usePipelineCollaboration({
@@ -230,106 +234,52 @@ function PipelineEditor() {
     return vars;
   }, [selectedNode, nodes]);
 
-  /**
-   * 添加Provider节点
-   */
-  const addProviderNode = () => {
-    const id = `provider-${Date.now()}`;
-    const newNode = {
-      id,
-      type: 'provider',
-      position: { x: Math.random() * 400, y: Math.random() * 300 },
-      data: { label: '新Provider', providerRef: '' },
-    };
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
 
-    // 使用协作编辑添加节点
-    collaboration.addNode(id, newNode.data);
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
 
-    // 本地状态更新（立即响应）
-    setNodes((nds) => [...nds, newNode]);
-  };
+      const type = event.dataTransfer.getData('application/reactflow');
 
-  /**
-   * 添加条件节点
-   */
-  const addConditionNode = () => {
-    const id = `condition-${Date.now()}`;
-    const newNode = {
-      id,
-      type: 'condition',
-      position: { x: Math.random() * 400, y: Math.random() * 300 },
-      data: { label: '新条件', condition: '' },
-    };
+      if (typeof type === 'undefined' || !type) {
+        return;
+      }
 
-    collaboration.addNode(id, newNode.data);
-    setNodes((nds) => [...nds, newNode]);
-  };
+      const blockData = JSON.parse(type);
 
-  /**
-   * 添加后处理节点
-   */
-  const addPostProcessNode = () => {
-    const id = `postprocess-${Date.now()}`;
-    const newNode = {
-      id,
-      type: 'postProcess',
-      position: { x: Math.random() * 400, y: Math.random() * 300 },
-      data: { label: '新后处理', processor: '' },
-    };
+      // Check if reactFlowInstance is initialized
+      if (!reactFlowInstance) return;
 
-    collaboration.addNode(id, newNode.data);
-    setNodes((nds) => [...nds, newNode]);
-  };
+      const position = reactFlowInstance.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
 
-  /**
-   * 添加结束节点
-   */
-  const addEndNode = () => {
-    const id = `end-${Date.now()}`;
-    const newNode = {
-      id,
-      type: 'end',
-      position: { x: Math.random() * 400, y: Math.random() * 300 },
-      data: { label: '结束' },
-    };
+      const id = `${blockData.type}-${Date.now()}`;
+      const newNode: Node = {
+        id,
+        type: blockData.type,
+        position,
+        data: {
+          label: blockData.label,
+          providerRef: blockData.providerRef,
+          ...blockData.defaultConfig
+        },
+      };
 
-    collaboration.addNode(id, newNode.data);
-    setNodes((nds) => [...nds, newNode]);
-  };
+      // Support collaboration if enabled
+      if (collaboration && collaboration.addNode) {
+        collaboration.addNode(id, newNode.data);
+      }
 
-  /**
-   * 添加FORK节点 (CMS-206)
-   * 艹！分叉执行流到多个并行分支！
-   */
-  const addForkNode = () => {
-    const id = `fork-${Date.now()}`;
-    const newNode = {
-      id,
-      type: 'fork',
-      position: { x: Math.random() * 400, y: Math.random() * 300 },
-      data: { label: 'FORK', branches: 2 },
-    };
-
-    collaboration.addNode(id, newNode.data);
-    setNodes((nds) => [...nds, newNode]);
-  };
-
-  /**
-   * 添加JOIN节点 (CMS-206)
-   * 艹！汇合多个并行分支！
-   */
-  const addJoinNode = () => {
-    const id = `join-${Date.now()}`;
-    const newNode = {
-      id,
-      type: 'join',
-      position: { x: Math.random() * 400, y: Math.random() * 300 },
-      data: { label: 'JOIN', strategy: 'ALL' },
-    };
-
-    collaboration.addNode(id, newNode.data);
-    setNodes((nds) => [...nds, newNode]);
-  };
+      setNodes((nds) => nds.concat(newNode));
+    },
+    [reactFlowInstance, setNodes, collaboration]
+  );
 
   /**
    * 加载Pipeline列表
@@ -742,188 +692,171 @@ function PipelineEditor() {
   }, [nodes, edges, pipelineName]);
 
   return (
-    <div style={{ padding: '24px' }}>
-      <Row gutter={16}>
-        <Col span={18}>
-          <Card
-            title={
-              <Space>
-                <BranchesOutlined style={{ fontSize: '20px' }} />
-                <span style={{ fontSize: '18px', fontWeight: 600 }}>Pipeline协同编辑器</span>
-                <Tag color={currentPipeline ? 'green' : 'default'}>
-                  {pipelineName}
+    <div style={{ padding: '24px', height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
+      <Card
+        title={
+          <Space>
+            <BranchesOutlined style={{ fontSize: '20px' }} />
+            <span style={{ fontSize: '18px', fontWeight: 600 }}>Pipeline协同编辑器</span>
+            <Tag color={currentPipeline ? 'green' : 'default'}>
+              {pipelineName}
+            </Tag>
+            {currentPipeline && (
+              <Tag color="blue">ID: {currentPipeline.pipeline_id}</Tag>
+            )}
+            {collaboration.enabled ? (
+              collaboration.state.isConnected ? (
+                <Tag color="green" icon={<SyncOutlined spin />}>
+                  协作中
                 </Tag>
-                {currentPipeline && (
-                  <Tag color="blue">ID: {currentPipeline.pipeline_id}</Tag>
-                )}
-                {collaboration.enabled ? (
-                  collaboration.state.isConnected ? (
-                    <Tag color="green" icon={<SyncOutlined spin />}>
-                      协作中
-                    </Tag>
-                  ) : (
-                    <Tag color="warning">等待协作连接</Tag>
-                  )
-                ) : (
-                  <Tag color="default">协作已停用</Tag>
-                )}
-              </Space>
-            }
-            extra={
-              <Space>
-                <Button icon={<FileAddOutlined />} onClick={handleNewPipeline}>
-                  新建
-                </Button>
-                <Button
-                  icon={<FolderOpenOutlined />}
-                  onClick={() => {
-                    loadPipelineList();
-                    setLoadModalVisible(true);
+              ) : (
+                <Tag color="warning">等待协作连接</Tag>
+              )
+            ) : (
+              <Tag color="default">协作已停用</Tag>
+            )}
+          </Space>
+        }
+        extra={
+          <Space>
+            <Button icon={<FileAddOutlined />} onClick={handleNewPipeline}>
+              新建
+            </Button>
+            <Button
+              icon={<FolderOpenOutlined />}
+              onClick={() => {
+                loadPipelineList();
+                setLoadModalVisible(true);
+              }}
+            >
+              打开
+            </Button>
+            <Button icon={<CloudUploadOutlined />} onClick={handleImportJSON}>
+              导入JSON
+            </Button>
+            <Button icon={<CodeOutlined />} onClick={() => setJsonDrawerVisible(true)}>
+              查看JSON
+            </Button>
+            <Button icon={<ExperimentOutlined />} onClick={() => setSimulationDrawerVisible(true)}>
+              实时预览
+            </Button>
+            <Button
+              icon={<CheckCircleOutlined />}
+              onClick={handleValidate}
+              loading={validating}
+              type={validationResult?.valid ? 'default' : 'dashed'}
+            >
+              {validating ? '校验中' : '校验'}
+            </Button>
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => {
+                if (selectedNode) {
+                  setNodes((nds) => nds.filter((n) => n.id !== selectedNode.id));
+                  setEdges((eds) => eds.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id));
+                  setSelectedNode(null);
+                  setConfigDrawerOpen(false);
+                } else {
+                  // If no node selected, try to delete selected edges (React Flow handles selection state internally, but we can't easily access it without useOnSelectionChange or similar. 
+                  // For now, let's just delete the selected node if any. 
+                  // Actually, let's use the built-in delete functionality via keyboard, but provide a button for it.
+                  // Since we don't track selected edge in state easily here without more hooks, let's just focus on the selectedNode state we DO have.
+                  message.info('请先选择一个节点');
+                }
+              }}
+            >
+              删除选中
+            </Button>
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              onClick={handleSave}
+              loading={saving}
+            >
+              {currentPipeline ? '保存' : '另存为'}
+            </Button>
+          </Space>
+        }
+        bodyStyle={{ padding: 0, height: 'calc(100vh - 140px)', display: 'flex' }} // Flex layout for body
+        style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+      >
+        {/* Sidebar */}
+        <PipelineBlockSidebar />
+
+        {/* Canvas Area */}
+        <div style={{ flex: 1, position: 'relative' }} onDrop={onDrop} onDragOver={onDragOver}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onNodeClick={onNodeClick}
+            onInit={setReactFlowInstance}
+            onNodeDragStop={(event, node) => {
+              // 更新协作光标位置
+              if (collaboration.enabled) {
+                collaboration.updateCursor({
+                  nodeId: node.id,
+                  x: node.position.x,
+                  y: node.position.y
+                });
+              }
+            }}
+            onPaneClick={(event) => {
+              // 清除协作光标
+              if (collaboration.enabled) {
+                collaboration.clearCursor();
+              }
+            }}
+            nodeTypes={nodeTypes}
+            fitView
+            style={{ background: '#F5F5F7' }}
+          >
+            <Controls />
+            <MiniMap />
+            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#E0E0E0" />
+            {/* Display other users' collaboration cursors */}
+            {collaboration.enabled &&
+              collaboration.getUserCursors().map((user) => (
+                <div
+                  key={user.id}
+                  style={{
+                    position: 'absolute',
+                    left: user.cursor?.x || 0,
+                    top: user.cursor?.y || 0,
+                    pointerEvents: 'none',
+                    zIndex: 1000,
+                    transition: 'all 0.2s ease'
                   }}
                 >
-                  打开
-                </Button>
-                <Button icon={<CloudUploadOutlined />} onClick={handleImportJSON}>
-                  导入JSON
-                </Button>
-                <Button.Group>
-                  <Button icon={<PlusOutlined />} onClick={addProviderNode} title="调用AI大模型处理任务">
-                    AI模型
-                  </Button>
-                  <Button icon={<BranchesOutlined />} onClick={addConditionNode} title="根据结果判断走哪条路">
-                    条件判断
-                  </Button>
-                  <Button icon={<ToolOutlined />} onClick={addPostProcessNode} title="对AI结果进行格式化或提取">
-                    结果处理
-                  </Button>
-                  <Button icon={<BranchesOutlined rotate={90} />} onClick={addForkNode} title="同时执行多个任务">
-                    并行分支
-                  </Button>
-                  <Button icon={<BranchesOutlined rotate={270} />} onClick={addJoinNode} title="等待所有任务完成">
-                    汇合
-                  </Button>
-                  <Button icon={<CheckCircleOutlined />} onClick={addEndNode} title="流程结束并输出结果">
-                    结束输出
-                  </Button>
-                </Button.Group>
-                <Button icon={<CodeOutlined />} onClick={() => setJsonDrawerVisible(true)}>
-                  查看JSON
-                </Button>
-                <Button icon={<ExperimentOutlined />} onClick={() => setSimulationDrawerVisible(true)}>
-                  实时预览
-                </Button>
-                <Button
-                  icon={<CheckCircleOutlined />}
-                  onClick={handleValidate}
-                  loading={validating}
-                  type={validationResult?.valid ? 'default' : 'dashed'}
-                >
-                  {validating ? '校验中' : '校验'}
-                </Button>
-                <Button
-                  type="primary"
-                  icon={<SaveOutlined />}
-                  onClick={handleSave}
-                  loading={saving}
-                >
-                  {currentPipeline ? '保存' : '另存为'}
-                </Button>
-              </Space>
-            }
-          >
-            {/* 流程画布 */}
-            <div style={{ height: '700px', border: '1px solid #d9d9d9', borderRadius: '8px', position: 'relative' }}>
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                onNodeClick={onNodeClick}
-                onNodeDragStop={(event, node) => {
-                  // 更新协作光标位置
-                  if (collaboration.enabled) {
-                    collaboration.updateCursor({
-                      nodeId: node.id,
-                      x: node.position.x,
-                      y: node.position.y
-                    });
-                  }
-                }}
-                onPaneClick={(event) => {
-                  // 清除协作光标
-                  if (collaboration.enabled) {
-                    collaboration.clearCursor();
-                  }
-                }}
-                nodeTypes={nodeTypes}
-                fitView
-              >
-                {/* <Controls /> */}  {/* 已隐藏控制面板 */}
-                <MiniMap />
-                <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
-              </ReactFlow>
-
-              {/* 显示其他用户的协作光标 */}
-              {collaboration.enabled &&
-                collaboration.getUserCursors().map((user) => (
                   <div
-                    key={user.id}
                     style={{
-                      position: 'absolute',
-                      left: user.cursor?.x || 0,
-                      top: user.cursor?.y || 0,
-                      pointerEvents: 'none',
-                      zIndex: 1000,
-                      transition: 'all 0.2s ease'
+                      padding: '2px 6px',
+                      backgroundColor: user.color,
+                      color: 'white',
+                      borderRadius: 4,
+                      fontSize: 11,
+                      fontWeight: 'bold',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                      animation: 'pulse 1.5s infinite'
                     }}
                   >
-                    <div
-                      style={{
-                        padding: '2px 6px',
-                        backgroundColor: user.color,
-                        color: 'white',
-                        borderRadius: 4,
-                        fontSize: 11,
-                        fontWeight: 'bold',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                        animation: 'pulse 1.5s infinite'
-                      }}
-                    >
-                      {user.name}
-                      {user.cursor?.nodeId && (
-                        <div style={{ fontSize: 9, opacity: 0.8 }}>
-                          编辑: {user.cursor.nodeId}
-                        </div>
-                      )}
-                    </div>
+                    {user.name}
+                    {user.cursor?.nodeId && (
+                      <div style={{ fontSize: 9, opacity: 0.8 }}>
+                        编辑: {user.cursor.nodeId}
+                      </div>
+                    )}
                   </div>
-                ))}
-            </div>
-          </Card>
-        </Col>
+                </div>
+              ))}
+          </ReactFlow>
 
-        <Col span={6}>
-          {/* 协作编辑面板 */}
-          {collaboration.enabled ? (
-            <CollaborationPresence
-              onlineUsers={collaboration.state.onlineUsers}
-              currentUser={collaboration.state.currentUser}
-              isConnected={collaboration.state.isConnected}
-              snapshots={collaboration.getSnapshots()}
-              onCreateSnapshot={(description) => collaboration.createSnapshot(description)}
-              onRollback={(snapshotId) => collaboration.rollbackToSnapshot(snapshotId)}
-            />
-          ) : (
-            <Alert
-              type="info"
-              showIcon
-              message="协作功能未启用"
-              description="后端协作服务未启动，或环境变量 NEXT_PUBLIC_PIPELINE_COLLAB 未设置为 true。单人编辑仍可使用，实时协作与快照功能暂不可用。"
-            />
-          )}
-        </Col>
-      </Row>
+          {/* Node Config Drawer/Panel could go here or stay as Drawer */}
+        </div>
+      </Card>
 
       {/* 节点配置侧边栏 */}
       <NodeConfigDrawer
@@ -988,7 +921,7 @@ function PipelineEditor() {
         </Form>
       </Modal>
 
-      {/* 打开Pipeline Modal */}
+
       <Modal
         title={<Space><FolderOpenOutlined /> 打开Pipeline</Space>}
         open={loadModalVisible}

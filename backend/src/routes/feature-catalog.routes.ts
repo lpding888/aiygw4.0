@@ -20,7 +20,8 @@ const queryValidationRules = [
       'file_management',
       'user_management',
       'payment',
-      'integration'
+      'integration',
+      'provider'
     ])
     .withMessage('分类必须是有效的值'),
   query('type')

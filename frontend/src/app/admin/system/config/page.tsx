@@ -99,6 +99,33 @@ export default function SystemConfigPage() {
                         ai_guide_model: 'gpt-3.5-turbo',
                     }}
                 >
+                    <div style={{ marginBottom: 24, padding: 16, background: '#f0f5ff', border: '1px solid #adc6ff', borderRadius: 8 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <h4 style={{ margin: '0 0 8px 0', color: '#1d39c4' }}>系统初始化</h4>
+                                <p style={{ margin: 0, color: '#595959' }}>
+                                    如果是首次部署，请点击此按钮初始化系统数据（包括 RunningHub、DeepSeek 等积木配置）。
+                                </p>
+                            </div>
+                            <Button
+                                type="primary"
+                                danger
+                                onClick={async () => {
+                                    try {
+                                        const res: any = await api.admin.initializeSystem();
+                                        if (res.data.success) {
+                                            message.success(res.data.message);
+                                        }
+                                    } catch (e: any) {
+                                        message.error('初始化失败: ' + (e.message || '未知错误'));
+                                    }
+                                }}
+                            >
+                                一键初始化系统
+                            </Button>
+                        </div>
+                    </div>
+
                     <Tabs
                         items={[
                             {

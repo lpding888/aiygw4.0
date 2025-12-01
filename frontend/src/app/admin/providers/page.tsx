@@ -110,6 +110,7 @@ export default function ProvidersPage() {
   const [drawerMode, setDrawerMode] = useState<'create' | 'edit'>('create');
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [form] = Form.useForm();
+  const authType = Form.useWatch('auth_type', form);
 
   // API Key Modal状态（艹！快速更新API Key专用）
   const [apiKeyModalVisible, setApiKeyModalVisible] = useState(false);
@@ -489,7 +490,7 @@ export default function ProvidersPage() {
    * 艹！根据认证类型动态显示不同的输入框！
    */
   const renderCredentialFields = () => {
-    const authType = form.getFieldValue('auth_type');
+    // const authType = form.getFieldValue('auth_type'); // 使用 useWatch 获取的 authType
     if (!authType) return null;
 
     const fields = CREDENTIALS_FIELDS_MAP[authType] || [];
@@ -530,7 +531,7 @@ export default function ProvidersPage() {
       if (response.data.success) {
         const config = response.data.data;
         message.success('解析成功！已自动填充表单');
-        
+
         // 关闭解析弹窗，打开创建弹窗
         setParserVisible(false);
         handleCreate();
@@ -545,7 +546,7 @@ export default function ProvidersPage() {
             auth_type: 'api_key', // 默认假设，后续可以让AI判断
             // 如果有高级字段，这里也可以填充
           });
-          
+
           // 如果解析结果包含 request_template 等动态字段，也应该填充
           // 但目前的表单还没有这些字段，这是下一步"前端界面升级"的后半部分
         }, 100);
@@ -946,6 +947,9 @@ export default function ProvidersPage() {
         onCancel={() => setParserVisible(false)}
         footer={null}
         width={600}
+        centered
+        style={{ top: 20 }}
+        bodyStyle={{ maxHeight: '80vh', overflowY: 'auto' }}
       >
         <Alert
           message="粘贴官方文档示例，AI帮您自动配置"
@@ -954,21 +958,34 @@ export default function ProvidersPage() {
           showIcon
           style={{ marginBottom: 16 }}
         />
-        
+
         <Input.TextArea
           rows={8}
           placeholder={`例如：\ncurl https://api.openai.com/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer $OPENAI_API_KEY" \\\n  -d '{\n    "model": "gpt-4",\n    "messages": [{"role": "user", "content": "Hello!"}]\n  }'`}
           value={exampleCode}
           onChange={(e) => setExampleCode(e.target.value)}
-          style={{ fontFamily: 'monospace', fontSize: '12px', marginBottom: 16 }}
+          style={{ fontFamily: 'monospace', fontSize: '12px', marginBottom: 8 }}
         />
+
+        <div style={{ marginBottom: 16, display: 'flex', gap: 8 }}>
+          <Button
+            size="small"
+            type="dashed"
+            onClick={() => setExampleCode(`curl https://www.runninghub.cn/task/openapi/create \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -d '{}'`)}
+          >
+            试一试 RunningHub 模板
+          </Button>
+        </div>
 
         <div style={{ textAlign: 'right' }}>
           <Button onClick={() => setParserVisible(false)} style={{ marginRight: 8 }}>
             取消
           </Button>
-          <Button 
-            type="primary" 
+          <Button
+            type="primary"
             icon={isParsing ? <Spin indicator={<ApiOutlined spin />} /> : <BulbOutlined />}
             onClick={handleParseExample}
             loading={isParsing}

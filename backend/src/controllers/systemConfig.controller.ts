@@ -4,6 +4,7 @@ import systemConfigService, {
   type ConfigType
 } from '../services/systemConfig.service.js';
 import logger from '../utils/logger.js';
+import { db } from '../config/database.js';
 
 interface GetValueQuery {
   defaultValue?: unknown;
@@ -348,6 +349,29 @@ class SystemConfigController {
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       logger.error(`[SystemConfigController] 导入配置失败: ${err.message}`, error);
+      next(error);
+    }
+  }
+
+  async init(_req: Request, res: Response, next: NextFunction) {
+    try {
+      logger.info('[SystemConfigController] 开始初始化系统数据...');
+      
+      // 运行 Seeds
+      const [seeds] = await db.seed.run();
+      
+      logger.info('[SystemConfigController] 系统初始化完成', { seeds });
+      
+      res.json({ 
+        success: true, 
+        message: '系统初始化成功', 
+        data: { 
+          executedSeeds: seeds 
+        } 
+      });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`[SystemConfigController] 系统初始化失败: ${err.message}`, error);
       next(error);
     }
   }

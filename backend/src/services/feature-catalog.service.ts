@@ -96,6 +96,24 @@ type FeatureListResult = {
   offset: number;
 };
 
+type ProviderEndpointRecord = {
+  provider_ref: string; // 主键
+  provider_name: string;
+  endpoint_url: string;
+  credentials_encrypted: string;
+  auth_type: string;
+  created_at?: Date | string | null;
+  updated_at?: Date | string | null;
+};
+
+type ProviderFilterOptions = {
+  category?: string;
+  type?: string;
+  isPublic?: boolean;
+  is_active?: boolean;
+  search?: string;
+};
+
 const SORT_FIELD_MAP: Record<string, string> = {
   name: 'display_name',
   released_at: 'created_at'
@@ -159,6 +177,110 @@ class FeatureCatalogService {
     };
   }
 
+  private mapProviderToFeature(provider: ProviderEndpointRecord): FeatureDefinitionRecord {
+    const featureKey = `provider_${provider.provider_ref}`;
+    return {
+      id: `provider:${provider.provider_ref}`,
+      feature_id: featureKey,
+      feature_key: featureKey,
+      name: provider.provider_name,
+      display_name: provider.provider_name,
+      description: `Provider: ${provider.provider_name}`,
+      category: 'provider',
+      type: 'api_tool',
+      plan_required: 'basic',
+      is_enabled: true,
+      is_active: true,
+      is_public: true,
+      access_scope: 'public',
+      icon: provider.auth_type?.toLowerCase().includes('image') ? 'camera' : 'robot',
+      version: '1.0.0',
+      created_at: provider.created_at ?? new Date(),
+      updated_at: provider.updated_at ?? new Date(),
+      metadata: {
+        provider_ref: provider.provider_ref,
+        auth_type: provider.auth_type,
+        endpoint_url: provider.endpoint_url
+      }
+    };
+  }
+
+  private providerMatchesFilters(
+    feature: FeatureDefinitionRecord,
+    filters: ProviderFilterOptions
+  ): boolean {
+    const { category, type, isPublic, is_active, search } = filters;
+
+    if (category && feature.category !== category) {
+      return false;
+    }
+
+    if (type && feature.plan_required !== type) {
+      return false;
+    }
+
+    if (typeof isPublic === 'boolean') {
+      const isFeaturePublic = feature.access_scope !== 'whitelist';
+      if (isPublic !== isFeaturePublic) {
+        return false;
+      }
+    }
+
+    if (typeof is_active === 'boolean') {
+      if (Boolean(feature.is_enabled) !== is_active) {
+        return false;
+      }
+    }
+
+    if (search) {
+      const normalized = search.toLowerCase();
+      const searchTargets = [
+        feature.display_name,
+        feature.name,
+        feature.description,
+        feature.feature_key,
+        feature.metadata?.provider_ref,
+        feature.metadata?.provider_type
+      ]
+        .filter(Boolean)
+        .map((value) => String(value).toLowerCase());
+
+      if (!searchTargets.some((target) => target.includes(normalized))) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private async fetchEnabledProviders(): Promise<ProviderEndpointRecord[]> {
+    // 注意：provider_endpoints 表没有 enabled 字段，返回所有记录
+    return db('provider_endpoints').select(
+      'provider_ref',
+      'provider_name',
+      'endpoint_url',
+      'credentials_encrypted',
+      'auth_type',
+      'created_at',
+      'updated_at'
+    );
+  }
+
+  private async findProviderFeature(featureKey: string): Promise<FeatureDefinitionRecord | null> {
+    if (!featureKey.startsWith('provider_')) {
+      return null;
+    }
+
+    const providerRef = featureKey.replace(/^provider_/, '');
+    const provider = await db('provider_endpoints').where('provider_ref', providerRef).first();
+
+    if (!provider) {
+      return null;
+    }
+
+    return this.mapProviderToFeature(provider);
+  }
+
   /**
    * 初始化功能目录服务
    */
@@ -196,7 +318,12 @@ class FeatureCatalogService {
         .orderBy('category', 'asc')
         .orderBy('display_name', 'asc');
 
+      // Load Providers as Features
+      const providers = await this.fetchEnabledProviders();
+
       this.featureDefinitions.clear();
+
+      // Process standard features
       for (const feature of features) {
         const normalizedFeature = this.normalizeFeatureRecord(feature);
         this.featureDefinitions.set(normalizedFeature.feature_key, {
@@ -206,8 +333,18 @@ class FeatureCatalogService {
         });
       }
 
+      // Process providers as features
+      for (const provider of providers) {
+        const virtualFeature = this.mapProviderToFeature(provider);
+        this.featureDefinitions.set(virtualFeature.feature_key, {
+          ...virtualFeature,
+          configurations: new Map(),
+          permissions: new Map()
+        });
+      }
+
       this.lastCacheUpdate = Date.now();
-      logger.info(`[FeatureCatalogService] Loaded ${features.length} feature definitions`);
+      logger.info(`[FeatureCatalogService] Loaded ${features.length} feature definitions and ${providers.length} providers`);
     } catch (error) {
       logger.error('[FeatureCatalogService] Failed to load feature definitions:', error);
       throw error;
@@ -264,6 +401,7 @@ class FeatureCatalogService {
 
     try {
       const trimmedSearch = search?.trim();
+      const normalizedSearch = trimmedSearch?.toLowerCase();
       let query = db('feature_definitions').whereNull('deleted_at');
 
       // 应用过滤条件
@@ -298,21 +436,66 @@ class FeatureCatalogService {
         });
       }
 
-      const totalRow = await query.clone().count<{ count: number }>('id as count').first();
-      const total = Number(totalRow?.count ?? 0);
+      const databaseFeatures = await query
+        .clone()
+        .orderBy('category', 'asc')
+        .orderBy('display_name', 'asc');
+
+      const normalizedFeatures = databaseFeatures.map((feature) =>
+        this.normalizeFeatureRecord(feature)
+      );
+
+      const providers = await this.fetchEnabledProviders();
+      const providerFeatures = providers
+        .map((provider) => this.mapProviderToFeature(provider))
+        .filter((providerFeature) =>
+          this.providerMatchesFilters(providerFeature, {
+            category,
+            type,
+            isPublic,
+            is_active,
+            search: normalizedSearch
+          })
+        );
+
+      const combinedFeatures = [...normalizedFeatures, ...providerFeatures];
 
       // 应用排序
       const sortField = this.resolveSortField(sortBy);
+      const sortDirection = sortOrder === 'desc' ? -1 : 1;
+      combinedFeatures.sort((a, b) => {
+        const valueA = a?.[sortField];
+        const valueB = b?.[sortField];
 
-      const features = await query
-        .clone()
-        .orderBy(sortField, sortOrder === 'desc' ? 'desc' : 'asc')
-        .limit(safeLimit)
-        .offset(safeOffset);
+        if (valueA == null && valueB == null) {
+          return 0;
+        }
+        if (valueA == null) {
+          return sortOrder === 'desc' ? 1 : -1;
+        }
+        if (valueB == null) {
+          return sortOrder === 'desc' ? -1 : 1;
+        }
+        if (valueA === valueB) {
+          return 0;
+        }
+        return valueA > valueB ? sortDirection : -sortDirection;
+      });
+
+      const total = combinedFeatures.length;
+      const paginatedFeatures = combinedFeatures.slice(safeOffset, safeOffset + safeLimit);
 
       // 为每个功能添加配置和权限信息
       const featuresWithDetails = await Promise.all(
-        features.map(async (feature) => {
+        paginatedFeatures.map(async (feature) => {
+          if (feature.category === 'provider') {
+            return {
+              ...feature,
+              configurations: [],
+              permissions: []
+            };
+          }
+
           const [configurations, permissions] = await Promise.all([
             this.getFeatureConfigurations(feature.id),
             this.getFeaturePermissions(feature.id)
@@ -357,13 +540,28 @@ class FeatureCatalogService {
         .first();
 
       if (!feature) {
-        return null;
+        const providerFeature = await this.findProviderFeature(featureKey);
+        if (!providerFeature) {
+          return null;
+        }
+
+        this.featureDefinitions.set(featureKey, {
+          ...providerFeature,
+          configurations: new Map(),
+          permissions: new Map()
+        });
+
+        return providerFeature;
       }
 
       const normalizedFeature = this.normalizeFeatureRecord(feature);
 
       // 添加到内存缓存
-      this.featureDefinitions.set(featureKey, normalizedFeature);
+      this.featureDefinitions.set(featureKey, {
+        ...normalizedFeature,
+        configurations: new Map(),
+        permissions: new Map()
+      });
 
       return normalizedFeature;
     } catch (error) {
