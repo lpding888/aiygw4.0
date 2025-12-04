@@ -51,7 +51,7 @@ import {
   ThunderboltOutlined
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import api from '@/lib/api';
 import { startSSE } from '@/lib/api/sse';
 import { MSWInitializer } from '@/components/MSWInitializer';
 
@@ -93,7 +93,7 @@ export default function ModelManagement() {
   const { data: modelsData, isLoading, refetch } = useQuery({
     queryKey: ['ai-models'],
     queryFn: async () => {
-      const response = await api.get('/ai/models');
+      const response = await api.client.get('/ai/models');
       return response.data;
     },
   });

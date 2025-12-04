@@ -23,7 +23,9 @@ async function checkDbStatus() {
     const columns = await db.raw('DESCRIBE provider_endpoints');
     console.log('字段列表：');
     columns[0].forEach((col: any) => {
-      console.log(`- ${col.Field} (${col.Type}) ${col.Null === 'YES' ? 'NULL' : 'NOT NULL'} ${col.Key ? `[${col.Key}]` : ''}`);
+      console.log(
+        `- ${col.Field} (${col.Type}) ${col.Null === 'YES' ? 'NULL' : 'NOT NULL'} ${col.Key ? `[${col.Key}]` : ''}`
+      );
     });
 
     // 3. 检查是否有 provider_ref 字段

@@ -34,15 +34,6 @@ export function middleware(request: NextRequest) {
   }
 
   const response = NextResponse.next();
-
-  // 设置安全Cookie属性
-  response.cookies.set('auth-storage', request.cookies.get('auth-storage')?.value || '', {
-    httpOnly: false, // zustand需要客户端访问
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict', // 防止CSRF攻击
-    path: '/',
-  });
-
   const realPathname = pathname;
 
   // 保护 /admin/* 路径
@@ -50,15 +41,23 @@ export function middleware(request: NextRequest) {
     // 从cookie获取用户信息（zustand persist会自动存储到cookie）
     const authStorage = request.cookies.get('auth-storage');
 
-    if (!authStorage) {
-      // 没有登录，跳转到登录页
+    // 检查cookie是否存在且有值
+    if (!authStorage || !authStorage.value || authStorage.value.trim() === '') {
+      // 没有登录或cookie为空，跳转到登录页
       const loginUrl = new URL('/login', request.url);
       return NextResponse.redirect(loginUrl);
     }
 
     try {
       // 解析存储的认证信息
-      const authData = JSON.parse(decodeURIComponent(authStorage.value));
+      const decodedValue = decodeURIComponent(authStorage.value);
+
+      // 验证是否为有效JSON
+      if (!decodedValue || decodedValue === '{}' || decodedValue === '') {
+        throw new Error('Cookie值为空或无效');
+      }
+
+      const authData = JSON.parse(decodedValue);
       const user = authData?.state?.user;
 
       // 检查用户是否存在且角色为admin
@@ -69,13 +68,18 @@ export function middleware(request: NextRequest) {
         return NextResponse.redirect(workspaceUrl);
       }
 
-      // 验证通过，返回 i18n 处理后的响应
+      // 验证通过，返回响应
       return response;
     } catch (error) {
-      // cookie解析失败，可能被篡改，跳转登录页
+      // cookie解析失败，可能被篡改或损坏，清除cookie并跳转登录页
       console.error('Cookie解析失败:', error);
       const loginUrl = new URL('/login', request.url);
-      return NextResponse.redirect(loginUrl);
+      const redirectResponse = NextResponse.redirect(loginUrl);
+
+      // 清除损坏的cookie
+      redirectResponse.cookies.delete('auth-storage');
+
+      return redirectResponse;
     }
   }
 

@@ -119,7 +119,13 @@ const SORT_FIELD_MAP: Record<string, string> = {
   released_at: 'created_at'
 };
 
-const FALLBACK_SORT_FIELDS = new Set(['display_name', 'category', 'plan_required', 'created_at', 'updated_at']);
+const FALLBACK_SORT_FIELDS = new Set([
+  'display_name',
+  'category',
+  'plan_required',
+  'created_at',
+  'updated_at'
+]);
 
 class FeatureCatalogService {
   private initialized: boolean;
@@ -172,8 +178,7 @@ class FeatureCatalogService {
       display_name: normalizedName,
       name: feature.name ?? normalizedName,
       is_enabled: normalizedIsEnabled,
-      is_active:
-        typeof feature.is_active === 'boolean' ? feature.is_active : normalizedIsEnabled
+      is_active: typeof feature.is_active === 'boolean' ? feature.is_active : normalizedIsEnabled
     };
   }
 
@@ -344,7 +349,9 @@ class FeatureCatalogService {
       }
 
       this.lastCacheUpdate = Date.now();
-      logger.info(`[FeatureCatalogService] Loaded ${features.length} feature definitions and ${providers.length} providers`);
+      logger.info(
+        `[FeatureCatalogService] Loaded ${features.length} feature definitions and ${providers.length} providers`
+      );
     } catch (error) {
       logger.error('[FeatureCatalogService] Failed to load feature definitions:', error);
       throw error;

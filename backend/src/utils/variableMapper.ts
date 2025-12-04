@@ -3,7 +3,7 @@ import logger from './logger.js';
 /**
  * VariableMapper (变量映射器)
  * 核心作用：让 Pipeline 的步骤之间可以传递数据。
- * 
+ *
  * 语法说明：
  * - 纯变量引用： "{{step1.output.url}}" -> 返回原始类型（可能是对象、数组或字符串）
  * - 字符串嵌入： "提示词是: {{step1.output.text}}" -> 返回替换后的字符串
@@ -75,7 +75,7 @@ export class VariableMapper {
    */
   private static getValueByPath(obj: any, path: string): unknown {
     if (!obj) return undefined;
-    
+
     const parts = path.split('.');
     let current = obj;
 

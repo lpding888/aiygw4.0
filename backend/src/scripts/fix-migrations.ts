@@ -20,9 +20,7 @@ async function fixMigrations() {
     ];
 
     for (const migrationName of missingMigrations) {
-      const deleted = await db('knex_migrations')
-        .where('name', migrationName)
-        .del();
+      const deleted = await db('knex_migrations').where('name', migrationName).del();
 
       if (deleted > 0) {
         logger.info(`已删除损坏的迁移记录: ${migrationName}`);

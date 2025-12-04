@@ -31,7 +31,6 @@ const fixDeepSeek = async () => {
     );
     // @ts-ignore
     console.log('RunningHub updated:', result2.info);
-
   } catch (error) {
     console.error('Error updating providers:', error);
   } finally {

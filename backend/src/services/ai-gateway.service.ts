@@ -139,7 +139,7 @@ class AIGatewayService {
 
       logger.info(
         `[AIGateway] Chat请求: provider=${provider.provider_ref} ` +
-        `model=${request.model} stream=${request.stream || false}`
+          `model=${request.model} stream=${request.stream || false}`
       );
 
       // 获取适配器
@@ -162,7 +162,7 @@ class AIGatewayService {
 
       logger.info(
         `[AIGateway] Chat响应成功: provider=${provider.provider_ref} ` +
-        `tokens=${adaptedResponse.usage?.total_tokens || 'N/A'}`
+          `tokens=${adaptedResponse.usage?.total_tokens || 'N/A'}`
       );
 
       return adaptedResponse;
@@ -279,17 +279,26 @@ class AIGatewayService {
     // 2. 根据模型名称过滤Provider
     // 如果请求的是特定模型（如 deepseek-chat），则优先选择对应的Provider
     if (model.toLowerCase().includes('deepseek')) {
-      const deepseekProviders = providers.filter(p => p.provider_name.toLowerCase().includes('deepseek'));
+      const deepseekProviders = providers.filter((p) =>
+        p.provider_name.toLowerCase().includes('deepseek')
+      );
       if (deepseekProviders.length > 0) {
         providers = deepseekProviders;
       }
     } else if (model.toLowerCase().includes('gpt') || model.toLowerCase().includes('openai')) {
-      const openaiProviders = providers.filter(p => p.provider_name.toLowerCase().includes('openai'));
+      const openaiProviders = providers.filter((p) =>
+        p.provider_name.toLowerCase().includes('openai')
+      );
       if (openaiProviders.length > 0) {
         providers = openaiProviders;
       }
-    } else if (model.toLowerCase().includes('claude') || model.toLowerCase().includes('anthropic')) {
-      const anthropicProviders = providers.filter(p => p.provider_name.toLowerCase().includes('anthropic'));
+    } else if (
+      model.toLowerCase().includes('claude') ||
+      model.toLowerCase().includes('anthropic')
+    ) {
+      const anthropicProviders = providers.filter((p) =>
+        p.provider_name.toLowerCase().includes('anthropic')
+      );
       if (anthropicProviders.length > 0) {
         providers = anthropicProviders;
       }

@@ -401,12 +401,42 @@ class AdminController {
    * 获取所有功能卡片（包括禁用的,但不包括软删除的）
    * GET /api/admin/features
    */
-  async getFeatures(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getFeatures(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      // 添加分页参数支持
+      const limit = Math.min(Number.parseInt(req.query.limit as string) || 50, 200);
+      const offset = Math.max(Number.parseInt(req.query.offset as string) || 0, 0);
+
+      // 只查询必要字段，提升性能
       const features = await db('feature_definitions')
         .whereNull('deleted_at')
-        .select('*')
-        .orderBy('created_at', 'desc');
+        .select(
+          'id',
+          'feature_id',
+          'feature_key',
+          'name',
+          'display_name',
+          'description',
+          'category',
+          'type',
+          'icon',
+          'is_enabled',
+          'metadata',
+          'allowed_accounts',
+          'created_at',
+          'updated_at'
+        )
+        .orderBy('created_at', 'desc')
+        .limit(limit)
+        .offset(offset);
+
+      // 获取总数
+      const totalResult = await db('feature_definitions')
+        .whereNull('deleted_at')
+        .count('* as count')
+        .first();
+
+      const total = Number.parseInt(totalResult?.count as string) || 0;
 
       // 反序列化 allowed_accounts 为数组
       features.forEach((f) => {
@@ -424,12 +454,11 @@ class AdminController {
         data: {
           features,
           pagination: {
-            total: features.length,
-            limit: features.length,
-            offset: 0
+            total,
+            limit,
+            offset
           }
-        },
-        features
+        }
       });
     } catch (error) {
       logAndNext(next, error, '[AdminController] 获取功能列表失败');

@@ -93,7 +93,7 @@ class PipelineEngine {
       logger.info(`[PipelineEngine] 创建${steps.length}个步骤记录 taskId=${taskId}`);
 
       let previousOutput: Record<string, unknown> = inputData;
-      
+
       // 初始化上下文，用于变量映射
       const context: Record<string, unknown> = {
         input: inputData,
@@ -112,8 +112,8 @@ class PipelineEngine {
         };
 
         // 1. 解析参数：使用 VariableMapper 将 step.params 中的 {{变量}} 替换为真实值
-        const mappedParams = step.params 
-          ? VariableMapper.map(step.params, context) as Record<string, unknown>
+        const mappedParams = step.params
+          ? (VariableMapper.map(step.params, context) as Record<string, unknown>)
           : {};
 
         // 2. 合并输入：为了兼容旧逻辑，我们将 上一步输出 和 映射后的参数 合并
@@ -133,7 +133,7 @@ class PipelineEngine {
 
         // 3. 更新上下文和previousOutput
         previousOutput = stepResult.output ?? {};
-        
+
         // 将当前步骤结果存入 context.steps，供后续步骤引用
         // 例如后续步骤可以使用 {{steps.0.resultUrls}} 来获取第一步的结果
         if (!Array.isArray(context.steps)) {

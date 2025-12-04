@@ -58,7 +58,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DataTablePro } from '@/components/base/DataTablePro';
 import type { DataTableColumn } from '@/components/base/DataTablePro';
-import { api } from '@/lib/api/client';
+import api from '@/lib/api';
 import { MSWInitializer } from '@/components/MSWInitializer';
 
 const { Title, Text, Paragraph } = Typography;
@@ -118,7 +118,7 @@ export default function PromptsPage() {
   const { data: promptsData, isLoading, refetch } = useQuery({
     queryKey: ['prompts'],
     queryFn: async () => {
-      const response = await api.get('/admin/prompts');
+      const response = await api.client.get('/admin/prompts');
       return response.data;
     },
   });
@@ -127,7 +127,7 @@ export default function PromptsPage() {
   const { data: statsData } = useQuery({
     queryKey: ['prompt-stats'],
     queryFn: async () => {
-      const response = await api.get('/admin/prompts/stats');
+      const response = await api.client.get('/admin/prompts/stats');
       return response.data;
     },
   });
@@ -135,7 +135,7 @@ export default function PromptsPage() {
   // 预览Prompt
   const previewMutation = useMutation({
     mutationFn: async ({ promptId, variables }: { promptId: string; variables?: Record<string, any> }) => {
-      const response = await api.post(`/admin/prompts/${promptId}/render`, { variables });
+      const response = await api.client.post(`/admin/prompts/${promptId}/render`, { variables });
       return response.data;
     },
     onSuccess: (data: PreviewResult) => {
@@ -150,7 +150,7 @@ export default function PromptsPage() {
   // 获取Prompt版本
   const getVersionsMutation = useMutation({
     mutationFn: async (promptId: string) => {
-      const response = await api.get(`/admin/prompts/${promptId}/versions`);
+      const response = await api.client.get(`/admin/prompts/${promptId}/versions`);
       return response.data;
     },
     onSuccess: (data) => {
@@ -162,7 +162,7 @@ export default function PromptsPage() {
   // 创建Prompt
   const createMutation = useMutation({
     mutationFn: async (data: Partial<Prompt>) => {
-      const response = await api.post('/admin/prompts', data);
+      const response = await api.client.post('/admin/prompts', data);
       return response.data;
     },
     onSuccess: () => {
@@ -179,7 +179,7 @@ export default function PromptsPage() {
   // 更新Prompt
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<Prompt> }) => {
-      const response = await api.put(`/admin/prompts/${id}`, data);
+      const response = await api.client.put(`/admin/prompts/${id}`, data);
       return response.data;
     },
     onSuccess: () => {
@@ -197,7 +197,7 @@ export default function PromptsPage() {
   // 删除Prompt
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      return api.delete(`/admin/prompts/${id}`);
+      return api.client.delete(`/admin/prompts/${id}`);
     },
     onSuccess: () => {
       message.success('Prompt删除成功');

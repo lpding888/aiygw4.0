@@ -10,6 +10,8 @@ import { db as knex } from '../db/index.js';
 import aiGateway from './ai-gateway.service.js';
 import logger from '../utils/logger.js';
 import kmsService from './kms.service.js';
+import AppError from '../utils/AppError.js';
+import { ERROR_CODES } from '../config/error-codes.js';
 
 interface ProviderConfig {
   id: string;
@@ -350,7 +352,9 @@ class ProviderManagementService {
   /**
    * 智能解析Provider示例
    */
-  async parseProviderExample(example: string): Promise<Partial<ProviderConfig> & { request_template?: string, header_template?: string }> {
+  async parseProviderExample(
+    example: string
+  ): Promise<Partial<ProviderConfig> & { request_template?: string; header_template?: string }> {
     try {
       const systemPrompt = `你是一个API集成专家。你的任务是解析用户提供的cURL命令或API请求示例(JSON)，并提取出集成所需的配置信息。
       
@@ -374,7 +378,7 @@ class ProviderManagementService {
           { role: 'user', content: example }
         ],
         temperature: 0.1 //以此降低幻觉，提高准确性
-      }, 'deepseek-chat');
+      });
 
       let content = response.choices[0]?.message?.content || '{}';
       // 清理Markdown代码块标记
@@ -390,7 +394,6 @@ class ProviderManagementService {
         // 扩展字段，虽然ProviderConfig接口没定义，但Controller可以直接透传
         ...parsed
       };
-
     } catch (error: any) {
       logger.warn('智能解析API示例失败，尝试使用正则解析:', error);
 
@@ -399,7 +402,14 @@ class ProviderManagementService {
         return this.parseWithRegex(example);
       } catch (regexError) {
         logger.error('正则解析也失败了:', regexError);
-        throw new Error(`解析失败: ${error.message}`);
+        throw AppError.custom(
+          ERROR_CODES.INVALID_PARAMETERS,
+          `解析失败: ${error.message || '无法识别的示例格式'}`,
+          {
+            originalError: error.message,
+            regexError: regexError instanceof Error ? regexError.message : String(regexError)
+          }
+        );
       }
     }
   }

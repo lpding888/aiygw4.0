@@ -42,8 +42,9 @@ export default function DashboardPage() {
 
   const fetchStats = async () => {
     try {
-      const res = await api.get('/admin/overview');
-      if (res.data?.success) {
+      const res = await api.admin.getOverview();
+      // res是AxiosResponse<APIResponse>，需要访问res.data.data
+      if (res.data.success) {
         setStats(res.data.data);
       }
     } catch (error) {
@@ -87,12 +88,12 @@ export default function DashboardPage() {
           <Card bordered={false} hoverable style={{ background: 'linear-gradient(135deg, #fff 0%, #f6ffed 100%)' }}>
             <Statistic
               title={<Space><RocketOutlined /> 总任务数</Space>}
-              value={stats?.taskStats.totalTasks}
+              value={stats?.taskStats?.totalTasks}
               valueStyle={{ color: '#52c41a', fontWeight: 'bold' }}
               suffix={<Tag color="green">今日 +{stats?.todayStats.newTasks}</Tag>}
             />
             <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
-              成功率: {stats?.taskStats.successRate}
+              成功率: {stats?.taskStats?.successRate}
             </div>
           </Card>
         </Col>
@@ -114,9 +115,9 @@ export default function DashboardPage() {
           <Card bordered={false} hoverable style={{ background: 'linear-gradient(135deg, #fff 0%, #fff1f0 100%)' }}>
             <Statistic
               title={<Space><ThunderboltOutlined /> 正在处理</Space>}
-              value={stats?.taskStats.processingTasks}
+              value={stats?.taskStats?.processingTasks}
               valueStyle={{ color: '#f5222d', fontWeight: 'bold' }}
-              suffix={stats?.taskStats.processingTasks > 0 && <Spin size="small" style={{ marginLeft: 8 }} />}
+              suffix={(stats?.taskStats?.processingTasks || 0) > 0 && <Spin size="small" style={{ marginLeft: 8 }} />}
             />
             <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
               实时算力负载监控中

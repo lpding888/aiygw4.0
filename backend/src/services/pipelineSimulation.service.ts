@@ -6,8 +6,8 @@ const mockAiGateway = {
   chat: async (model: string, messages: { role: string; content: string }[]): Promise<string> => {
     logger.info(`[PipelineSimulation] Mock AI Chat for ${model}: ${JSON.stringify(messages)}`);
     // Simulate some processing time
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const userMessage = messages.find(m => m.role === 'user')?.content || '';
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const userMessage = messages.find((m) => m.role === 'user')?.content || '';
     if (userMessage.includes('hello') || userMessage.includes('你好')) {
       return 'Mocked response: Hello there! How can I help you with your pipeline simulation?';
     }
@@ -18,7 +18,7 @@ const mockAiGateway = {
   },
   imageGeneration: async (prompt: string, imageUrl?: string): Promise<string> => {
     logger.info(`[PipelineSimulation] Mock Image Gen: Prompt: "${prompt}", Image: "${imageUrl}"`);
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     return 'https://mock-image-gen.com/generated_image_url.png'; // Placeholder image URL
   }
 };
@@ -139,15 +139,19 @@ class PipelineSimulationService {
             const finalPrompt = resolveVariables(promptTemplate, context);
             nodeInput.prompt = finalPrompt;
 
-            const aiResponse = await mockAiGateway.chat(providerRef, [{ role: 'user', content: finalPrompt }]);
+            const aiResponse = await mockAiGateway.chat(providerRef, [
+              { role: 'user', content: finalPrompt }
+            ]);
             nodeOutput.result = aiResponse;
             setNodeOutput(context, node.id, aiResponse);
-
           } else if (aiTaskType === 'image_generation') {
             const promptTemplate = node.data.prompt || 'Generate image from {{initial_text_input}}';
             const finalPrompt = resolveVariables(promptTemplate, context);
-            const imageUrl = resolveVariables(node.data.imageUrl || '{{initial_image_url}}', context); // Use image URL from context
-            
+            const imageUrl = resolveVariables(
+              node.data.imageUrl || '{{initial_image_url}}',
+              context
+            ); // Use image URL from context
+
             nodeInput.prompt = finalPrompt;
             nodeInput.imageUrl = imageUrl;
 
@@ -155,7 +159,6 @@ class PipelineSimulationService {
             nodeOutput.result = generatedImageUrl;
             setNodeOutput(context, node.id, generatedImageUrl);
           }
-
         } else if (node.type === 'condition') {
           const conditionExpressionTemplate = node.data.condition || 'true';
           const finalConditionExpression = resolveVariables(conditionExpressionTemplate, context);
@@ -166,10 +169,15 @@ class PipelineSimulationService {
           let conditionResult: boolean;
           try {
             // Create a function to safely evaluate the expression with context
-            const evaluateFunction = new Function('context', `with (context) { return ${finalConditionExpression}; }`);
+            const evaluateFunction = new Function(
+              'context',
+              `with (context) { return ${finalConditionExpression}; }`
+            );
             conditionResult = !!evaluateFunction(context);
           } catch (e: any) {
-            logger.warn(`[PipelineSimulation] Failed to evaluate condition "${finalConditionExpression}": ${e.message}`);
+            logger.warn(
+              `[PipelineSimulation] Failed to evaluate condition "${finalConditionExpression}": ${e.message}`
+            );
             conditionResult = false; // Default to false on error
             nodeError = `Condition evaluation failed: ${e.message}`;
             nodeStatus = 'failed';
@@ -177,56 +185,59 @@ class PipelineSimulationService {
           }
           nodeOutput.result = conditionResult;
           setNodeOutput(context, node.id, conditionResult);
-
         } else if (node.type === 'postProcess') {
           const processor = node.data.processor || 'noop';
           const inputTemplate = node.data.input || '{{last_node.output}}'; // Placeholder for configurable input
           const inputToProcess = resolveVariables(inputTemplate, context);
-          
+
           nodeInput.processor = processor;
           nodeInput.input = inputToProcess;
-          
+
           // Mock processing
           let processedResult = `Processed "${inputToProcess}" with ${processor}`;
           if (processor === 'enhance') {
-              processedResult = `Enhanced version of: "${inputToProcess}"`;
+            processedResult = `Enhanced version of: "${inputToProcess}"`;
           } else if (processor === 'json') {
-              try { processedResult = JSON.parse(inputToProcess); } catch { processedResult = { error: "Invalid JSON", original: inputToProcess }; }
+            try {
+              processedResult = JSON.parse(inputToProcess);
+            } catch {
+              processedResult = { error: 'Invalid JSON', original: inputToProcess };
+            }
           }
           nodeOutput.result = processedResult;
           setNodeOutput(context, node.id, processedResult);
-
         } else if (node.type === 'fork') {
-            // Fork nodes simply pass all current context to their outgoing edges
-            // In this linear simulation, it's a no-op for explicit processing, just continues the flow.
-            nodeOutput.message = 'Context passed to parallel branches.';
-            setNodeOutput(context, node.id, { ...context });
-
+          // Fork nodes simply pass all current context to their outgoing edges
+          // In this linear simulation, it's a no-op for explicit processing, just continues the flow.
+          nodeOutput.message = 'Context passed to parallel branches.';
+          setNodeOutput(context, node.id, { ...context });
         } else if (node.type === 'join') {
-            // Join nodes wait for all incoming branches.
-            // In this linear simulation, all required inputs from upstream nodes
-            // are already in the context. We might aggregate specific results here.
-            // For now, it's a passthrough or simple aggregation.
-            nodeOutput.message = 'Joined inputs from parallel branches.';
-            // Example: Collect outputs from specific upstream nodes if data.collect_outputs is defined
-            if (node.data.collect_outputs && Array.isArray(node.data.collect_outputs)) {
-                const collected: Record<string, any> = {};
-                for (const key of node.data.collect_outputs) {
-                    collected[key] = context[key];
-                }
-                nodeOutput.collected = collected;
-                setNodeOutput(context, node.id, collected);
-            } else {
-                setNodeOutput(context, node.id, { ...context });
+          // Join nodes wait for all incoming branches.
+          // In this linear simulation, all required inputs from upstream nodes
+          // are already in the context. We might aggregate specific results here.
+          // For now, it's a passthrough or simple aggregation.
+          nodeOutput.message = 'Joined inputs from parallel branches.';
+          // Example: Collect outputs from specific upstream nodes if data.collect_outputs is defined
+          if (node.data.collect_outputs && Array.isArray(node.data.collect_outputs)) {
+            const collected: Record<string, any> = {};
+            for (const key of node.data.collect_outputs) {
+              collected[key] = context[key];
             }
-
+            nodeOutput.collected = collected;
+            setNodeOutput(context, node.id, collected);
+          } else {
+            setNodeOutput(context, node.id, { ...context });
+          }
         } else if (node.type === 'end') {
-            const outputKey = node.data.outputKey || 'final_result';
-            const finalValue = resolveVariables(node.data.returnValue || '{{last_node.output}}', context); // Allow configuring what to return
-            nodeInput.outputKey = outputKey;
-            nodeOutput[outputKey] = finalValue;
-            context.final_output = finalValue; // Store final output
-            setNodeOutput(context, node.id, finalValue);
+          const outputKey = node.data.outputKey || 'final_result';
+          const finalValue = resolveVariables(
+            node.data.returnValue || '{{last_node.output}}',
+            context
+          ); // Allow configuring what to return
+          nodeInput.outputKey = outputKey;
+          nodeOutput[outputKey] = finalValue;
+          context.final_output = finalValue; // Store final output
+          setNodeOutput(context, node.id, finalValue);
         }
         // Add more node types as needed
       } catch (err: any) {
@@ -245,7 +256,7 @@ class PipelineSimulationService {
         output: nodeOutput,
         error: nodeError,
         duration: Number(endTime - startTime) / 1_000_000, // Convert to ms
-        timestamp: new Date().toISOString(),
+        timestamp: new Date().toISOString()
       });
 
       // Update in-degrees of neighbors
@@ -259,13 +270,16 @@ class PipelineSimulationService {
 
     // Determine final output
     const finalOutput = context.final_output || {}; // Placeholder for actual final output
-    const message = overallStatus === 'success' ? 'Pipeline simulation completed successfully.' : 'Pipeline simulation failed.';
+    const message =
+      overallStatus === 'success'
+        ? 'Pipeline simulation completed successfully.'
+        : 'Pipeline simulation failed.';
 
     return {
       results,
       finalOutput,
       overallStatus,
-      message,
+      message
     };
   }
 }

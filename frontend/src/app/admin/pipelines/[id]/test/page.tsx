@@ -27,7 +27,7 @@ import {
   SyncOutlined,
   ArrowLeftOutlined,
 } from '@ant-design/icons';
-import { apiClient } from '@/shared/api/client';
+import api from '@/lib/api';
 
 /**
  * 步骤日志类型
@@ -85,7 +85,7 @@ export default function PipelineTestPage() {
       setTestResult(null);
 
       // 调用后端测试接口
-      const response = await apiClient.post(`/admin/pipelines/${pipelineId}/test`, {
+      const response = await api.client.post(`/admin/pipelines/${pipelineId}/test`, {
         mode,
         inputData: {
           // 艹，这里可以让用户输入测试数据，现在先用默认的

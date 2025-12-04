@@ -51,7 +51,6 @@ export default function CustomEdge({
           <button
             onClick={onEdgeClick}
             style={{
-              background: 'transparent',
               border: 'none',
               cursor: 'pointer',
               fontSize: '16px',

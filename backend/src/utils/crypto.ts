@@ -240,26 +240,56 @@ export function decryptFields(
 
   for (const field of sensitiveFields) {
     if (obj[field] !== undefined && obj[field] !== null) {
-      try {
-        // 解析JSON并解密
-        const encryptedData: EncryptedData =
-          typeof obj[field] === 'string'
-            ? JSON.parse(obj[field] as string)
-            : (obj[field] as EncryptedData);
+      const fieldValue = obj[field] as string;
 
-        result[field] = decrypt(encryptedData);
-
-        // 尝试解析为JSON对象（如果原始数据是对象）
+      // 检测格式：先尝试判断是否为有效JSON
+      if (typeof fieldValue === 'string') {
+        // 尝试解析为JSON并解密
         try {
-          result[field] = JSON.parse(result[field] as string);
-        } catch {
-          // 不是JSON，保持字符串
+          const encryptedData: EncryptedData = JSON.parse(fieldValue);
+
+          // 检查是否包含新格式必需字段
+          if (!encryptedData.ciphertext || !encryptedData.iv || !encryptedData.authTag) {
+            // 缺少必需字段，判定为旧格式
+            console.warn(
+              `[CRYPTO] ⚠️ 字段"${field}"使用旧加密格式，无法解密！请在管理页面重新保存该记录。`
+            );
+            result[field] = null;
+            continue;
+          }
+
+          // 新格式：解密
+          result[field] = decrypt(encryptedData);
+
+          // 尝试解析为JSON对象（如果原始数据是对象）
+          try {
+            result[field] = JSON.parse(result[field] as string);
+          } catch {
+            // 不是JSON，保持字符串
+          }
+        } catch (error: unknown) {
+          // JSON解析失败，判定为旧格式
+          console.warn(
+            `[CRYPTO] ⚠️ 字段"${field}"使用旧加密格式，无法解密！请在管理页面重新保存该记录。`
+          );
+          result[field] = null;
         }
-      } catch (error: unknown) {
-        const err = error instanceof Error ? error : new Error(String(error));
-        console.error(`[CRYPTO] 解密字段"${field}"失败: ${err.message}`);
-        // 保留加密数据（不要丢失）
-        result[field] = obj[field];
+      } else {
+        // 已经是对象格式
+        try {
+          const encryptedData = fieldValue as EncryptedData;
+          result[field] = decrypt(encryptedData);
+
+          try {
+            result[field] = JSON.parse(result[field] as string);
+          } catch {
+            // 不是JSON，保持字符串
+          }
+        } catch (error: unknown) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          console.error(`[CRYPTO] 解密字段"${field}"失败: ${err.message}`);
+          result[field] = obj[field];
+        }
       }
     }
   }

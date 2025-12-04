@@ -30,11 +30,10 @@ class ToolGeneratorController {
         data: feature,
         message: 'AI 工具积木生成成功！'
       });
-
     } catch (error) {
       const err = error as Error;
       logger.error(`[ToolGenerator] 生成失败: ${err.message}`, error);
-      
+
       res.status(500).json({
         success: false,
         error: {

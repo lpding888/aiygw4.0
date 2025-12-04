@@ -154,7 +154,7 @@ export const ValidationPanel: React.FC<ValidationPanelProps> = ({
         )
       }
       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-      bodyStyle={{ flex: 1, overflow: 'auto' }}
+      styles={{ body: { flex: 1, overflow: 'auto' } }}
     >
       {/* 总结信息 */}
       {summary && (

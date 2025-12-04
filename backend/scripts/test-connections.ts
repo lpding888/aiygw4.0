@@ -15,7 +15,7 @@ const checkConnections = async () => {
   const redisPassword = process.env.REDIS_PASSWORD;
 
   console.log(`Redis 配置: ${redisHost}:${redisPort}`);
-  
+
   const redis = new Redis({
     host: redisHost,
     port: redisPort,
@@ -63,7 +63,7 @@ const checkConnections = async () => {
   } catch (error) {
     console.error('❌ MySQL 连接失败:', error.message);
   }
-  
+
   console.log('\n--- 检查结束 ---');
 };
 

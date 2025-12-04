@@ -280,15 +280,13 @@ export class ProviderHealthService {
 
       if (existing) {
         // 更新现有记录 (使用实际表字段)
-        await db('provider_health')
-          .where('provider_ref', providerId)
-          .update({
-            status,
-            avg_latency_ms: responseTime,
-            last_check_at: now,
-            last_error: errorMessage,
-            updated_at: now
-          });
+        await db('provider_health').where('provider_ref', providerId).update({
+          status,
+          avg_latency_ms: responseTime,
+          last_check_at: now,
+          last_error: errorMessage,
+          updated_at: now
+        });
       } else {
         // 创建新记录 (使用实际表字段)
         await db('provider_health').insert({

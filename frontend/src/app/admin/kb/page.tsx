@@ -50,7 +50,7 @@ import {
   BarChartOutlined
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import api from '@/lib/api';
 import { MSWInitializer } from '@/components/MSWInitializer';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -112,7 +112,7 @@ export default function KnowledgeBasePage() {
       if (queryParams.search) params.append('search', queryParams.search);
       if (queryParams.status) params.append('status', queryParams.status);
 
-      const response = await api.get(`/admin/kb/documents?${params.toString()}`);
+      const response = await api.client.get(`/admin/kb/documents?${params.toString()}`);
       return response.data;
     },
   });
@@ -121,7 +121,7 @@ export default function KnowledgeBasePage() {
   const { data: statsData } = useQuery({
     queryKey: ['kb-stats'],
     queryFn: async () => {
-      const response = await api.get('/admin/kb/stats');
+      const response = await api.client.get('/admin/kb/stats');
       return response.data;
     },
     refetchInterval: 30000, // 30秒刷新一次
@@ -130,7 +130,7 @@ export default function KnowledgeBasePage() {
   // 删除单个文档
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      return api.delete(`/admin/kb/documents/${id}`);
+      return api.client.delete(`/admin/kb/documents/${id}`);
     },
     onSuccess: () => {
       message.success('文档删除成功');
@@ -145,7 +145,7 @@ export default function KnowledgeBasePage() {
   // 批量删除文档
   const batchDeleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
-      return api.post('/admin/kb/documents/batch-delete', { ids });
+      return api.client.post('/admin/kb/documents/batch-delete', { ids });
     },
     onSuccess: (data) => {
       const { deleted } = data.data;

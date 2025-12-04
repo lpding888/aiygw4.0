@@ -44,8 +44,6 @@ import { nodeTypes } from '@/components/flow/NodeTypes';
 import NodeConfigDrawer from '@/components/flow/NodeConfigDrawer';
 import ValidationPanel, { ValidationResult } from '@/components/flow/ValidationPanel';
 
-import { usePipelineCollaboration } from '@/hooks/usePipelineCollaboration';
-import CollaborationPresence from '@/components/collaboration/CollaborationPresence';
 import { adminPipelines } from '@/lib/services/adminPipelines';
 import { PipelineSchema, PipelineDTO, PipelineEdge, PipelineNode } from '@/lib/types/pipeline';
 import { validatePipelineSchema } from '@/lib/validators';
@@ -132,15 +130,6 @@ function PipelineEditor() {
   const [form] = Form.useForm();
   // const reactFlowInstance = useReactFlow(); // This is replaced by local state and onInit
 
-  // 协同编辑状态
-  const collaboration = usePipelineCollaboration({
-    pipelineId: currentPipeline?.pipeline_id || 'default',
-    userId: `user_${Math.random().toString(36).substr(2, 9)}`,
-    userName: '当前用户',
-    serverUrl: 'ws://localhost:1234', // 这里应该是实际的WebSocket服务器地址
-    autoConnect: !!currentPipeline?.pipeline_id
-  });
-
   /**
    * 连线回调
    */
@@ -148,19 +137,10 @@ function PipelineEditor() {
     (params: Connection) => {
       const edgeId = `edge-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-      // 使用协作编辑添加边
-      collaboration.addEdge(edgeId, {
-        source: params.source,
-        target: params.target,
-        sourceHandle: params.sourceHandle,
-        targetHandle: params.targetHandle,
-        data: {} // 可选的边数据
-      });
-
       // 本地状态更新（立即响应）
       setEdges((eds) => addEdge({ ...params, id: edgeId }, eds));
     },
-    [collaboration, setEdges]
+    [setEdges]
   );
 
   /**
@@ -171,14 +151,7 @@ function PipelineEditor() {
     console.log('[点击节点]', node);
     setSelectedNode(node);
     setConfigDrawerOpen(true);
-
-    // 更新协作光标
-    collaboration.updateCursor({
-      nodeId: node.id,
-      x: node.position.x,
-      y: node.position.y
-    });
-  }, [collaboration]);
+  }, []);
 
   /**
    * 保存节点配置
@@ -186,9 +159,6 @@ function PipelineEditor() {
    */
   const handleSaveNodeConfig = useCallback(
     (nodeId: string, newData: any) => {
-      // 使用协作编辑更新节点
-      collaboration.updateNode(nodeId, newData);
-
       // 本地状态更新（立即响应）
       setNodes((nds) =>
         nds.map((node) => {
@@ -205,7 +175,7 @@ function PipelineEditor() {
         })
       );
     },
-    [collaboration, setNodes]
+    [setNodes]
   );
 
   /**
@@ -271,14 +241,9 @@ function PipelineEditor() {
         },
       };
 
-      // Support collaboration if enabled
-      if (collaboration && collaboration.addNode) {
-        collaboration.addNode(id, newNode.data);
-      }
-
       setNodes((nds) => nds.concat(newNode));
     },
-    [reactFlowInstance, setNodes, collaboration]
+    [reactFlowInstance, setNodes]
   );
 
   /**
@@ -704,17 +669,6 @@ function PipelineEditor() {
             {currentPipeline && (
               <Tag color="blue">ID: {currentPipeline.pipeline_id}</Tag>
             )}
-            {collaboration.enabled ? (
-              collaboration.state.isConnected ? (
-                <Tag color="green" icon={<SyncOutlined spin />}>
-                  协作中
-                </Tag>
-              ) : (
-                <Tag color="warning">等待协作连接</Tag>
-              )
-            ) : (
-              <Tag color="default">协作已停用</Tag>
-            )}
           </Space>
         }
         extra={
@@ -778,7 +732,7 @@ function PipelineEditor() {
             </Button>
           </Space>
         }
-        bodyStyle={{ padding: 0, height: 'calc(100vh - 140px)', display: 'flex' }} // Flex layout for body
+        styles={{ body: { padding: 0, height: 'calc(100vh - 140px)', display: 'flex' } }} // Flex layout for body
         style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
       >
         {/* Sidebar */}
@@ -794,21 +748,8 @@ function PipelineEditor() {
             onConnect={onConnect}
             onNodeClick={onNodeClick}
             onInit={setReactFlowInstance}
-            onNodeDragStop={(event, node) => {
-              // 更新协作光标位置
-              if (collaboration.enabled) {
-                collaboration.updateCursor({
-                  nodeId: node.id,
-                  x: node.position.x,
-                  y: node.position.y
-                });
-              }
-            }}
             onPaneClick={(event) => {
-              // 清除协作光标
-              if (collaboration.enabled) {
-                collaboration.clearCursor();
-              }
+              // 点击画布空白处
             }}
             nodeTypes={nodeTypes}
             fitView
@@ -817,41 +758,6 @@ function PipelineEditor() {
             <Controls />
             <MiniMap />
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#E0E0E0" />
-            {/* Display other users' collaboration cursors */}
-            {collaboration.enabled &&
-              collaboration.getUserCursors().map((user) => (
-                <div
-                  key={user.id}
-                  style={{
-                    position: 'absolute',
-                    left: user.cursor?.x || 0,
-                    top: user.cursor?.y || 0,
-                    pointerEvents: 'none',
-                    zIndex: 1000,
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: '2px 6px',
-                      backgroundColor: user.color,
-                      color: 'white',
-                      borderRadius: 4,
-                      fontSize: 11,
-                      fontWeight: 'bold',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                      animation: 'pulse 1.5s infinite'
-                    }}
-                  >
-                    {user.name}
-                    {user.cursor?.nodeId && (
-                      <div style={{ fontSize: 9, opacity: 0.8 }}>
-                        编辑: {user.cursor.nodeId}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
           </ReactFlow>
 
           {/* Node Config Drawer/Panel could go here or stay as Drawer */}
@@ -983,7 +889,7 @@ function PipelineEditor() {
         width={450}
         open={validationDrawerVisible}
         onClose={() => setValidationDrawerVisible(false)}
-        bodyStyle={{ padding: '16px' }}
+        styles={{ body: { padding: '16px' } }}
       >
         <ValidationPanel
           validation={validationResult}

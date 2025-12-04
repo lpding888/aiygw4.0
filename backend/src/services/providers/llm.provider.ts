@@ -54,8 +54,8 @@ class LlmProvider {
   private async loadConfig(): Promise<void> {
     // 从系统配置里读 API Key 和 URL
     // 这里的 key 设计为 llm_provider_{ref}_api_key，支持多个 LLM 供应商
-    const configKeyPrefix = `llm_${this.providerRef}`; 
-    
+    const configKeyPrefix = `llm_${this.providerRef}`;
+
     const key = await systemConfigService.get(`${configKeyPrefix}_api_key`);
     const url = await systemConfigService.get(`${configKeyPrefix}_api_url`);
 
@@ -70,12 +70,12 @@ class LlmProvider {
   }
 
   async execute(input: LlmInput, taskId: string): Promise<LlmResult> {
-    const { 
-      systemPrompt = 'You are a helpful assistant.', 
-      userPrompt, 
+    const {
+      systemPrompt = 'You are a helpful assistant.',
+      userPrompt,
       model = 'gpt-3.5-turbo',
       temperature = 0.7,
-      responseFormat 
+      responseFormat
     } = input;
 
     if (!userPrompt) {
@@ -104,16 +104,12 @@ class LlmProvider {
         requestBody.response_format = { type: 'json_object' };
       }
 
-      const response = await this.httpClient.post<OpenAIChatResponse>(
-        this.apiUrl,
-        requestBody,
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json'
-          }
+      const response = await this.httpClient.post<OpenAIChatResponse>(this.apiUrl, requestBody, {
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json'
         }
-      );
+      });
 
       const content = response?.choices?.[0]?.message?.content || '';
       const usage = {
@@ -125,7 +121,7 @@ class LlmProvider {
       logger.info(`[LlmProvider] 调用成功 taskId=${taskId} tokens=${usage.totalTokens}`);
 
       let parsed: Record<string, unknown> | undefined;
-      
+
       // 尝试解析 JSON
       if (responseFormat === 'json_object' || content.trim().startsWith('{')) {
         try {
@@ -140,7 +136,6 @@ class LlmProvider {
         parsed,
         usage
       };
-
     } catch (error) {
       const err = error as Error;
       logger.error(`[LlmProvider] 执行失败 taskId=${taskId}`, error);

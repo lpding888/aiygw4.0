@@ -13,7 +13,7 @@ const inspectTable = async () => {
     port: parseInt(process.env.DB_PORT || '3306'),
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME || 'ai_photo',
+    database: process.env.DB_NAME || 'ai_photo'
   });
 
   try {

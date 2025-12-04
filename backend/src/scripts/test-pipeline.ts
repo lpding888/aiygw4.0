@@ -39,7 +39,7 @@ async function runTest() {
     ];
 
     logger.info('1. 正在插入测试配置数据...');
-    
+
     // 插入 Pipeline Schema
     await db('pipeline_schemas').insert({
       pipeline_id: testPipelineId,
@@ -67,7 +67,7 @@ async function runTest() {
     // 2. 模拟创建一个任务
     const taskId = 'task_test_' + Date.now();
     logger.info(`2. 正在创建模拟任务 taskId=${taskId}...`);
-    
+
     await db('tasks').insert({
       id: taskId,
       user_id: 'system_test',
@@ -81,7 +81,7 @@ async function runTest() {
     // 3. 准备输入数据
     // 假设用户上传了一张图，key 是 "test-image.jpg"
     const inputData = {
-      imageKey: 'test-image.jpg', 
+      imageKey: 'test-image.jpg',
       prompt: 'Cool guy'
     };
 
@@ -92,15 +92,15 @@ async function runTest() {
     // 4. 调用引擎
     // 注意：为了不真的扣费和调 API (省钱)，我们这里只验证 "变量映射" 是否成功
     // 我们通过 hack 这里的 VariableMapper 来验证
-    
+
     const context = { input: inputData, steps: [] };
     const mappedParams = VariableMapper.map(pipelineSteps[0].params, context);
-    
+
     logger.info('4. 验证变量映射结果:');
     console.log(JSON.stringify(mappedParams, null, 2));
 
     const resultNodeInfo = (mappedParams as any).nodeInfoList.find((n: any) => n.nodeId === '74');
-    
+
     if (resultNodeInfo.fieldValue === 'test-image.jpg') {
       logger.info('✅ 测试通过！变量 {{input.imageKey}} 成功被替换成了 "test-image.jpg"');
     } else {
@@ -112,7 +112,6 @@ async function runTest() {
     await db('feature_definitions').where('feature_id', testFeatureId).del();
     await db('pipeline_schemas').where('pipeline_id', testPipelineId).del();
     logger.info('5. 测试数据清理完毕');
-
   } catch (error) {
     logger.error('测试过程发生错误:', error);
   } finally {

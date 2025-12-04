@@ -49,13 +49,15 @@ const NodeShell = ({
     setNodes((nodes) => nodes.filter((n) => n.id !== nodeId));
   };
 
-  const menu = (
-    <Menu>
-      <Menu.Item key="delete" icon={<DeleteOutlined />} danger onClick={handleDelete}>
-        删除节点
-      </Menu.Item>
-    </Menu>
-  );
+  const menuItems = [
+    {
+      key: 'delete',
+      icon: <DeleteOutlined />,
+      danger: true,
+      label: '删除节点',
+      onClick: handleDelete
+    }
+  ];
 
   return (
     <div style={{ position: 'relative' }}>
@@ -81,7 +83,7 @@ const NodeShell = ({
           transition: 'all 0.2s',
           borderTop: `4px solid ${color}`
         }}
-        bodyStyle={{ padding: '12px' }}
+        styles={{ body: { padding: '12px' } }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -104,7 +106,7 @@ const NodeShell = ({
             </div>
           </div>
 
-          <Dropdown overlay={menu} trigger={['click']}>
+          <Dropdown menu={{ items: menuItems }} trigger={['click']}>
             <MoreOutlined style={{ fontSize: 16, color: '#999', cursor: 'pointer' }} />
           </Dropdown>
         </div>
@@ -157,13 +159,13 @@ export function ProviderNode({ id, data, selected }: NodeProps) {
     <NodeShell
       nodeId={id}
       selected={selected}
-      title={data.label || 'AI 模型'}
+      title={(data.label as string) || 'AI 模型'}
       icon={icon}
       color={color}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={data.providerRef}>
-          {data.providerRef || '未配置'}
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={(data.providerRef as string) || undefined}>
+          {(data.providerRef as string) || '未配置'}
         </span>
         {paramsCount > 0 && <span style={{ color }}>{paramsCount} 参数</span>}
       </div>
@@ -188,7 +190,7 @@ export function ConditionNode({ id, data, selected }: NodeProps) {
         }}
       >
         <BranchesOutlined style={{ fontSize: 20, color: '#52c41a', marginBottom: 4 }} />
-        <div style={{ fontWeight: 600 }}>{data.label || '条件判断'}</div>
+        <div style={{ fontWeight: 600 }}>{(data.label as string) || '条件判断'}</div>
       </Card>
 
       {/* 两个输出口：True 和 False */}
@@ -206,11 +208,11 @@ export function PostProcessNode({ id, data, selected }: NodeProps) {
     <NodeShell
       nodeId={id}
       selected={selected}
-      title={data.label || '后处理'}
+      title={(data.label as string) || '后处理'}
       icon={<ToolOutlined />}
       color="#fa8c16"
     >
-      处理逻辑: {data.processor || '无'}
+      处理逻辑: {(data.processor as string) || '无'}
     </NodeShell>
   );
 }
@@ -220,11 +222,11 @@ export function EndNode({ id, data, selected }: NodeProps) {
     <NodeShell
       nodeId={id}
       selected={selected}
-      title={data.label || '流程结束'}
+      title={(data.label as string) || '流程结束'}
       icon={<CheckCircleOutlined />}
       color="#722ed1"
     >
-      输出变量: {data.outputKey || 'final_result'}
+      输出变量: {(data.outputKey as string) || 'final_result'}
     </NodeShell>
   );
 }

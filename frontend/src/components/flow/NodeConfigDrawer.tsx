@@ -58,11 +58,11 @@ export default function NodeConfigDrawer({
   useEffect(() => {
     if (node && open) {
       // 将 node.data.params 里的值填入表单
-      const initialValues = {
+      const initialValues: any = {
         label: node.data.label,
-        ...node.data.params // 动态积木的参数通常存在 params 里
+        ...(node.data.params || {}) // 动态积木的参数通常存在 params 里
       };
-      
+
       // 兼容旧逻辑
       if (node.type === 'condition') initialValues.condition = node.data.condition;
       if (node.type === 'postProcess') initialValues.processor = node.data.processor;
@@ -227,7 +227,7 @@ export default function NodeConfigDrawer({
       title={
         <Space>
           {getNodeIcon(node?.type)}
-          <span>{node?.data?.label || '节点配置'}</span>
+          <span>{(node?.data?.label as string) || '节点配置'}</span>
           <Tag>{node?.type}</Tag>
         </Space>
       }

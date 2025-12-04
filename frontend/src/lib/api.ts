@@ -401,7 +401,15 @@ class APIClient {
     getFailedTasks: (params: any) =>
       this.client.get<APIResponse>('/admin/failed-tasks', { params }),
 
-    getFeatures: (params?: { search?: string; enabled?: boolean; category?: string; limit?: number; offset?: number }) =>
+    getFeatures: (params?: {
+      search?: string;
+      enabled?: boolean;
+      category?: string;
+      limit?: number;
+      offset?: number;
+      sort_by?: string;
+      sort_order?: 'asc' | 'desc';
+    }) =>
       this.client.get<APIResponse>('/admin/features', { params }),
 
     getFeatureByKey: (featureKey: string) =>

@@ -63,7 +63,7 @@ class RunninghubWorkflowProvider {
    */
   private async getApiKey(): Promise<string> {
     if (this.apiKey) return this.apiKey;
-    
+
     const key = await systemConfigService.get('runninghub_api_key');
     if (!key || typeof key !== 'string') {
       throw new Error('RunningHub API Key 未配置');
@@ -84,7 +84,9 @@ class RunninghubWorkflowProvider {
 
     try {
       const apiKey = await this.getApiKey();
-      logger.info(`[RunningHub] 开始创建任务 taskId=${taskId} workflowId=${workflowId}`, { nodeInfoList });
+      logger.info(`[RunningHub] 开始创建任务 taskId=${taskId} workflowId=${workflowId}`, {
+        nodeInfoList
+      });
 
       // 1. 创建任务
       const createRes = await this.httpClient.post<RunningHubResponse<CreateTaskResponse>>(
@@ -105,7 +107,6 @@ class RunninghubWorkflowProvider {
 
       // 2. 轮询等待结果 (暂时使用轮询，后续可升级为 Callback)
       return await this.pollTaskStatus(rhTaskId, apiKey, timeout);
-
     } catch (error) {
       const err = error as Error;
       logger.error(`[RunningHub] 执行异常 taskId=${taskId} error=${err.message}`, error);
@@ -117,8 +118,8 @@ class RunninghubWorkflowProvider {
    * 轮询任务状态
    */
   private async pollTaskStatus(
-    rhTaskId: string, 
-    apiKey: string, 
+    rhTaskId: string,
+    apiKey: string,
     timeoutMs: number
   ): Promise<RunningHubWorkflowResult> {
     const startTime = Date.now();
@@ -144,7 +145,7 @@ class RunninghubWorkflowProvider {
           `${this.apiUrl}/outputs`,
           { taskId: rhTaskId, apiKey }
         );
-        
+
         return {
           taskId: rhTaskId,
           status: 'success',
@@ -157,7 +158,7 @@ class RunninghubWorkflowProvider {
       }
 
       // 继续等待
-      await new Promise(resolve => setTimeout(resolve, interval));
+      await new Promise((resolve) => setTimeout(resolve, interval));
     }
 
     throw new Error(`任务等待超时 (${timeoutMs}ms)`);

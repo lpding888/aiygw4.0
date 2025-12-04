@@ -21,8 +21,11 @@ class TenantsController {
       }
 
       // 从数据库获取用户真实信息，用于生成工作区名称
-      const user = await db('users').where('id', userId).select('phone', 'nickname', 'created_at').first();
-      
+      const user = await db('users')
+        .where('id', userId)
+        .select('phone', 'nickname', 'created_at')
+        .first();
+
       if (!user) {
         res.status(404).json({ success: false, error: { code: 4040, message: '用户不存在' } });
         return;
@@ -38,8 +41,8 @@ class TenantsController {
         id: `tenant_${userId}`,
         name: workspaceName,
         type: 'personal', // 目前仅支持个人类型
-        role: 'owner',    // 用户对自己工作区拥有最高权限
-        avatar: user.avatar || '', 
+        role: 'owner', // 用户对自己工作区拥有最高权限
+        avatar: user.avatar || '',
         member_count: 1,
         created_at: user.created_at || new Date().toISOString()
       };
@@ -66,12 +69,17 @@ class TenantsController {
       // 验证权限：目前只允许访问自己的个人工作区
       const expectedTenantId = `tenant_${userId}`;
       if (tenantId !== expectedTenantId) {
-        res.status(403).json({ success: false, error: { code: 4030, message: '无权访问此工作区' } });
+        res
+          .status(403)
+          .json({ success: false, error: { code: 4030, message: '无权访问此工作区' } });
         return;
       }
 
-      const user = await db('users').where('id', userId).select('phone', 'nickname', 'created_at', 'avatar').first();
-      
+      const user = await db('users')
+        .where('id', userId)
+        .select('phone', 'nickname', 'created_at', 'avatar')
+        .first();
+
       if (!user) {
         res.status(404).json({ success: false, error: { code: 4040, message: '用户不存在' } });
         return;

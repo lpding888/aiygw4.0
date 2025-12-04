@@ -18,6 +18,7 @@ interface PoolConnection {
 
 const poolConfig = {
   ...config.pool,
+  propagateCreateError: false,
   afterCreate: (conn: PoolConnection, done: (err: Error | null, conn?: PoolConnection) => void) => {
     // 健康检查: 执行SELECT 1确保连接可用
     conn.query('SELECT 1', (err: Error | null) => {

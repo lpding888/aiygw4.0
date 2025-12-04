@@ -78,10 +78,7 @@ export class RedisManager {
     enableReadyCheck: true
   };
 
-  private createClient(
-    label: keyof ManagedClients,
-    overrides: Partial<RedisOptions> = {}
-  ): Redis {
+  private createClient(label: keyof ManagedClients, overrides: Partial<RedisOptions> = {}): Redis {
     const client = new Redis(this.redisUrl, {
       ...this.baseOptions,
       ...overrides

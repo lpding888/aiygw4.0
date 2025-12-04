@@ -61,7 +61,7 @@ class ImageProcessProvider {
       }
 
       // 简单拼接，实际生产可能需要处理 URL 已有 query 的情况
-      const finalUrl = imageUrl.includes('?') 
+      const finalUrl = imageUrl.includes('?')
         ? `${imageUrl}${processParams.replace('?', '&')}`
         : `${imageUrl}${processParams}`;
 

@@ -103,7 +103,7 @@ export const PlanCard: React.FC<PlanCardProps> = ({ plan, onPurchase, loading = 
           borderColor: is_current ? color : undefined,
           borderWidth: is_current ? 2 : 1,
         }}
-        bodyStyle={{ padding: 24 }}
+        styles={{ body: { padding: 24 } }}
       >
         {/* 套餐图标和名称 */}
         <div style={{ textAlign: 'center', marginBottom: 24 }}>

@@ -42,16 +42,10 @@ router.post(
 );
 
 // AI 自动导入工具 (AI 读文档)
-router.post(
-  '/tools/generate',
-  authenticate,
-  requireAdmin,
-  toolGeneratorController.generate
-);
+router.post('/tools/generate', authenticate, requireAdmin, toolGeneratorController.generate);
 
 // 素材库管理（管理员查看所有用户素材）
 router.get('/assets', authenticate, requireAdmin, assetController.getAllAssets);
-
 
 // 分销代理管理
 router.get('/distributors', authenticate, requireAdmin, adminController.getDistributors);

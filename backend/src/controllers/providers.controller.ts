@@ -4,9 +4,11 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import axios, { AxiosError, AxiosResponse } from 'axios';
 import * as providerRepo from '../repositories/providerEndpoints.repo.js';
 import type { ProviderEndpointInput } from '../repositories/providerEndpoints.repo.js';
 import providerRegistryService from '../services/provider-registry.service.js';
+import { decrypt, type EncryptedData } from '../utils/crypto.js';
 
 /**
  * 审计日志条目类型
@@ -19,6 +21,286 @@ interface AuditLogEntry {
 }
 
 const getUserIdOrNull = (req: Request): string | null => req.user?.id ?? null;
+
+interface ProviderTestConfig {
+  endpointUrl: string;
+  authType: string;
+  credentials: Record<string, string>;
+  providerName?: string;
+}
+
+interface ProviderModelInfo {
+  id: string;
+  object?: string;
+  owned_by?: string;
+  [key: string]: unknown;
+}
+
+interface ProviderTestResult {
+  healthy: boolean;
+  message: string;
+  latency: number;
+  statusCode?: number;
+  models?: ProviderModelInfo[];
+}
+
+const MODEL_PROVIDERS = ['openai', 'deepseek', 'anthropic', 'claude', 'qwen', 'moonshot'];
+
+const buildModelProbeUrl = (endpointUrl: string): string | null => {
+  try {
+    const parsed = new URL(endpointUrl);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    let baseSegments: string[] = [];
+
+    if (segments.length === 0) {
+      baseSegments = ['v1'];
+    } else {
+      const versionIndex = segments.findIndex((seg) => /^v\d+/i.test(seg));
+      if (versionIndex >= 0) {
+        baseSegments = segments.slice(0, versionIndex + 1);
+      } else {
+        baseSegments = segments;
+      }
+    }
+
+    // 如果最后一段已经是models，则直接使用
+    if (baseSegments[baseSegments.length - 1] === 'models') {
+      return parsed.toString();
+    }
+
+    const modelPath = [...baseSegments, 'models'].join('/');
+    return `${parsed.origin}/${modelPath}`;
+  } catch {
+    return null;
+  }
+};
+
+const normaliseCredentials = (raw: unknown): Record<string, string> => {
+  if (!raw) return {};
+  if (typeof raw === 'string') {
+    return { api_key: raw };
+  }
+  if (typeof raw === 'object') {
+    const record = raw as Record<string, unknown>;
+    const normalized: Record<string, string> = {};
+    if (typeof record.api_key === 'string') {
+      normalized.api_key = record.api_key;
+    }
+    if (typeof record.apiKey === 'string') {
+      normalized.api_key = record.apiKey;
+    }
+    if (typeof record.token === 'string') {
+      normalized.token = record.token;
+    }
+    if (typeof record.access_token === 'string') {
+      normalized.token = record.access_token;
+    }
+    if (typeof record.username === 'string') {
+      normalized.username = record.username;
+    }
+    if (typeof record.password === 'string') {
+      normalized.password = record.password;
+    }
+    return normalized;
+  }
+  return {};
+};
+
+async function decryptCredentials(encrypted: unknown): Promise<Record<string, string>> {
+  if (!encrypted) return {};
+
+  if (typeof encrypted === 'object' && encrypted !== null && 'api_key' in encrypted) {
+    return encrypted as Record<string, string>;
+  }
+
+  try {
+    const encryptedData: EncryptedData =
+      typeof encrypted === 'string'
+        ? (JSON.parse(encrypted) as EncryptedData)
+        : (encrypted as EncryptedData);
+
+    if (!encryptedData?.ciphertext) {
+      return {};
+    }
+
+    const decrypted = decrypt(encryptedData);
+    return normaliseCredentials(JSON.parse(decrypted));
+  } catch (error) {
+    console.error('[ProviderController] 解密凭证失败:', error);
+    return {};
+  }
+}
+
+const buildAuthHeaders = (authType: string, credentials: Record<string, string>) => {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+
+  if ((authType === 'api_key' || authType === 'apikey') && credentials.api_key) {
+    headers['Authorization'] = `Bearer ${credentials.api_key}`;
+    headers['api-key'] = credentials.api_key;
+    headers['X-API-Key'] = credentials.api_key;
+  } else if (authType === 'bearer' && credentials.token) {
+    headers['Authorization'] = `Bearer ${credentials.token}`;
+  } else if (authType === 'basic' && credentials.username && credentials.password) {
+    const auth = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
+    headers['Authorization'] = `Basic ${auth}`;
+  }
+
+  return headers;
+};
+
+const extractModelList = (payload: unknown): ProviderModelInfo[] => {
+  if (!payload) return [];
+  if (Array.isArray(payload)) {
+    return payload as ProviderModelInfo[];
+  }
+  if (typeof payload === 'object') {
+    const dataField = (payload as Record<string, unknown>).data;
+    if (Array.isArray(dataField)) {
+      return dataField as ProviderModelInfo[];
+    }
+    const modelsField = (payload as Record<string, unknown>).models;
+    if (Array.isArray(modelsField)) {
+      return modelsField as ProviderModelInfo[];
+    }
+  }
+  return [];
+};
+
+const describeAxiosError = (error: AxiosError): string => {
+  if (error.response) {
+    return `HTTP ${error.response.status}`;
+  }
+  if (error.code === 'ECONNABORTED') {
+    return '请求超时';
+  }
+  if (error.code === 'ECONNREFUSED') {
+    return '连接被拒绝';
+  }
+  return error.message;
+};
+
+async function performProviderTest(config: ProviderTestConfig): Promise<ProviderTestResult> {
+  const headers = buildAuthHeaders(config.authType, config.credentials);
+
+  if (
+    (config.authType === 'api_key' || config.authType === 'apikey') &&
+    !config.credentials.api_key
+  ) {
+    return { healthy: false, message: '缺少 API Key，无法测试连接', latency: 0, models: [] };
+  }
+  if (config.authType === 'bearer' && !config.credentials.token) {
+    return { healthy: false, message: '缺少 Bearer Token，无法测试连接', latency: 0, models: [] };
+  }
+
+  const urlCandidates: Array<{ url: string; purpose: 'models' | 'primary' }> = [];
+
+  const lowerName = config.providerName?.toLowerCase() ?? '';
+  const isKnownModelProvider =
+    MODEL_PROVIDERS.some((keyword) => lowerName.includes(keyword)) ||
+    MODEL_PROVIDERS.some((keyword) => config.endpointUrl.toLowerCase().includes(keyword));
+
+  const probeUrl = isKnownModelProvider ? buildModelProbeUrl(config.endpointUrl) : null;
+  if (probeUrl) {
+    urlCandidates.push({ url: probeUrl, purpose: 'models' });
+  }
+  urlCandidates.push({ url: config.endpointUrl, purpose: 'primary' });
+
+  let lastError: string | null = null;
+
+  const isJsonResponse = (headersObj: Record<string, unknown>): boolean => {
+    const headerValue =
+      (headersObj['content-type'] as string | undefined) ||
+      (headersObj['Content-Type'] as string | undefined) ||
+      '';
+    return headerValue.toLowerCase().includes('json');
+  };
+
+  for (const candidate of urlCandidates) {
+    try {
+      const start = Date.now();
+      const response: AxiosResponse = await axios.get(candidate.url, {
+        headers,
+        timeout: 7000,
+        validateStatus: (status) => status < 500
+      });
+      const latency = Date.now() - start;
+
+      const jsonResponse = isJsonResponse(response.headers);
+      const models = jsonResponse ? extractModelList(response.data) : [];
+
+      if (response.status >= 200 && response.status < 400 && jsonResponse) {
+        if (candidate.purpose === 'models' && models.length === 0) {
+          lastError = '响应成功但未返回模型列表';
+          continue;
+        }
+        return {
+          healthy: true,
+          message:
+            candidate.purpose === 'models'
+              ? `成功获取模型列表 (${response.status})`
+              : `连接成功 (${response.status})`,
+          latency,
+          statusCode: response.status,
+          models
+        };
+      }
+
+      if (!jsonResponse) {
+        lastError = '响应不是JSON格式，可能需要有效凭证';
+        continue;
+      }
+
+      lastError = `连接异常 (HTTP ${response.status})`;
+    } catch (error) {
+      const err = error as AxiosError;
+      lastError = describeAxiosError(err);
+    }
+  }
+
+  // GET失败后尝试POST
+  try {
+    const start = Date.now();
+    const response = await axios.post(
+      config.endpointUrl,
+      {},
+      {
+        headers,
+        timeout: 7000,
+        validateStatus: (status) => status < 500
+      }
+    );
+    const latency = Date.now() - start;
+
+    const jsonResponse = isJsonResponse(response.headers);
+    const models = jsonResponse ? extractModelList(response.data) : [];
+
+    if (response.status >= 200 && response.status < 400 && jsonResponse) {
+      return {
+        healthy: true,
+        message: `连接成功 (${response.status})`,
+        latency,
+        statusCode: response.status,
+        models
+      };
+    }
+
+    lastError = jsonResponse
+      ? `连接异常 (HTTP ${response.status})`
+      : '响应不是JSON格式，可能需要有效凭证';
+  } catch (error) {
+    const err = error as AxiosError;
+    lastError = describeAxiosError(err);
+  }
+
+  return {
+    healthy: false,
+    message: lastError ?? '连接失败',
+    latency: 0,
+    models: []
+  };
+}
 
 /**
  * Provider管理控制器
@@ -250,6 +532,43 @@ export class ProvidersController {
   }
 
   /**
+   * 校验未保存的Provider配置
+   * POST /admin/providers/test-config
+   */
+  async testProviderConfig(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { endpoint_url, auth_type, credentials, provider_name } = req.body as {
+        endpoint_url: string;
+        auth_type: string;
+        credentials: Record<string, string>;
+        provider_name?: string;
+      };
+
+      const testResult = await performProviderTest({
+        endpointUrl: endpoint_url,
+        authType: auth_type,
+        credentials: credentials ?? {},
+        providerName: provider_name
+      });
+
+      res.json({
+        success: true,
+        data: {
+          healthy: testResult.healthy,
+          message: testResult.message,
+          latency: testResult.latency,
+          models: testResult.models ?? [],
+          tested_at: new Date().toISOString()
+        }
+      });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error(`[ProvidersController] 即时测试失败: ${err.message}`);
+      next(err);
+    }
+  }
+
+  /**
    * 测试Provider连接
    * POST /admin/providers/:provider_ref/test-connection
    */
@@ -271,24 +590,43 @@ export class ProvidersController {
         return;
       }
 
-      // 艹，这里应该调用对应Provider的healthCheck方法
-      // 但现在先简单返回成功（后续集成时再完善）
-      const healthy = true;
-      const message = 'Provider连接正常';
+      const creds = await decryptCredentials(provider.credentials_encrypted);
+      const testResult = await performProviderTest({
+        endpointUrl: provider.endpoint_url,
+        authType: provider.auth_type,
+        credentials: creds,
+        providerName: provider.provider_name
+      });
+
+      if (testResult.models && testResult.models.length > 0) {
+        try {
+          await providerRepo.updateProviderEndpoint(provider_ref, {
+            model_catalog: testResult.models
+          });
+        } catch (updateError) {
+          console.warn('[ProvidersController] 更新模型列表失败', updateError);
+        }
+      }
 
       // 记录审计日志
       await this.recordAuditLog({
         action: 'TEST_CONNECTION',
         provider_ref,
         user_id: getUserIdOrNull(req),
-        details: { healthy, message }
+        details: {
+          healthy: testResult.healthy,
+          message: testResult.message,
+          latency: testResult.latency
+        }
       });
 
       res.json({
         success: true,
         data: {
-          healthy,
-          message,
+          healthy: testResult.healthy,
+          message: testResult.message,
+          latency: testResult.latency,
+          models: testResult.models ?? [],
           tested_at: new Date().toISOString()
         }
       });
@@ -441,6 +779,10 @@ export class ProvidersController {
       if (!validAuthTypes.includes(input.auth_type)) {
         return `auth_type必须是以下之一: ${validAuthTypes.join(', ')}`;
       }
+    }
+
+    if (input.default_model && input.default_model.length > 200) {
+      return 'default_model长度不能超过200字符';
     }
 
     return null;

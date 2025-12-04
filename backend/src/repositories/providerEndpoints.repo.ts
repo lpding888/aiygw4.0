@@ -24,6 +24,9 @@ export interface ProviderEndpoint {
   timeout_ms?: number | null;
   max_retries?: number | null;
   enabled?: boolean;
+  default_model?: string | null;
+  model_catalog?: unknown;
+  config?: unknown;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -37,6 +40,10 @@ export interface ProviderEndpointInput {
   endpoint_url: string;
   credentials: unknown; // 明文凭证（会被自动加密）
   auth_type: string;
+  default_model?: string | null;
+  model_catalog?: unknown;
+  config?: unknown;
+  enabled?: boolean;
 }
 
 /**
@@ -44,6 +51,7 @@ export interface ProviderEndpointInput {
  * 艹，只有这些字段会被加密！
  */
 const SENSITIVE_FIELDS = ['credentials_encrypted'];
+const PROVIDER_TABLE = 'provider_endpoints';
 
 /**
  * 内存缓存（短时缓存解密后的凭证，减少解密开销）
@@ -56,6 +64,39 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 const CACHE_TTL = 5 * 60 * 1000; // 5分钟
+
+const parseJsonField = (value: unknown): unknown => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'object') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return trimmed;
+    }
+  }
+  return value;
+};
+
+const serializeJsonField = (value: unknown): string | null => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
+};
 
 /**
  * 从缓存中获取Provider端点
@@ -91,6 +132,7 @@ function setCache(providerRef: string, data: ProviderEndpoint): void {
 }
 
 function toProviderEndpoint(row: Record<string, unknown>): ProviderEndpoint {
+  const rawEnabled = row.enabled as boolean | number | null | undefined;
   return {
     provider_ref: String(row.provider_ref ?? ''),
     provider_name: String(row.provider_name ?? ''),
@@ -101,7 +143,10 @@ function toProviderEndpoint(row: Record<string, unknown>): ProviderEndpoint {
     weight: (row.weight as number | null | undefined) ?? null,
     timeout_ms: (row.timeout_ms as number | null | undefined) ?? null,
     max_retries: (row.max_retries as number | null | undefined) ?? null,
-    enabled: Boolean(row.enabled),
+    enabled: rawEnabled === null || rawEnabled === undefined ? true : Boolean(rawEnabled),
+    default_model: (row.default_model as string | null | undefined) ?? null,
+    model_catalog: parseJsonField(row.model_catalog),
+    config: parseJsonField(row.config),
     created_at: row.created_at as Date | undefined,
     updated_at: row.updated_at as Date | undefined
   };
@@ -132,16 +177,29 @@ export async function createProviderEndpoint(
   // 艹，加密凭证字段
   const encrypted = encryptFields({ credentials_encrypted: credentials }, SENSITIVE_FIELDS);
 
-  // 插入数据库
-  await db('provider_endpoints').insert({
+  const insertData: Record<string, unknown> = {
     provider_ref,
     provider_name,
     endpoint_url,
     credentials_encrypted: encrypted.credentials_encrypted,
     auth_type,
+    enabled: input.enabled ?? true,
     created_at: db.fn.now(),
     updated_at: db.fn.now()
-  });
+  };
+
+  if (input.default_model !== undefined) {
+    insertData.default_model = input.default_model ?? null;
+  }
+  if (input.model_catalog !== undefined) {
+    insertData.model_catalog = serializeJsonField(input.model_catalog);
+  }
+  if (input.config !== undefined) {
+    insertData.config = serializeJsonField(input.config);
+  }
+
+  // 插入数据库
+  await db('provider_endpoints').insert(insertData);
 
   console.log(`[REPO] Provider端点创建成功: ${provider_ref}`);
 
@@ -254,6 +312,18 @@ export async function updateProviderEndpoint(
   }
   if (updates.auth_type !== undefined) {
     updateData.auth_type = updates.auth_type;
+  }
+  if (updates.enabled !== undefined) {
+    updateData.enabled = updates.enabled;
+  }
+  if (updates.default_model !== undefined) {
+    updateData.default_model = updates.default_model ?? null;
+  }
+  if (updates.model_catalog !== undefined) {
+    updateData.model_catalog = serializeJsonField(updates.model_catalog);
+  }
+  if (updates.config !== undefined) {
+    updateData.config = serializeJsonField(updates.config);
   }
 
   // 处理敏感字段（加密）

@@ -356,18 +356,18 @@ class SystemConfigController {
   async init(_req: Request, res: Response, next: NextFunction) {
     try {
       logger.info('[SystemConfigController] 开始初始化系统数据...');
-      
+
       // 运行 Seeds
       const [seeds] = await db.seed.run();
-      
+
       logger.info('[SystemConfigController] 系统初始化完成', { seeds });
-      
-      res.json({ 
-        success: true, 
-        message: '系统初始化成功', 
-        data: { 
-          executedSeeds: seeds 
-        } 
+
+      res.json({
+        success: true,
+        message: '系统初始化成功',
+        data: {
+          executedSeeds: seeds
+        }
       });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
