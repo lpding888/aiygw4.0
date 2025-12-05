@@ -5,7 +5,7 @@ import logger from '../utils/logger.js';
 import encryptionUtils from '../utils/encryption.js';
 import { aiGateway } from '../services/ai-gateway.service.js';
 import pipelineSimulationService from '../services/pipelineSimulation.service.js'; // Import new simulation service
-import type { PipelineSchema } from '../engine/pipeline-types.js';
+import type { SimulationPipeline } from '../services/pipelineSimulation.service.js';
 
 type CountValue = string | number | bigint | null | undefined;
 
@@ -909,7 +909,7 @@ ${context || '无'}
 
       // Call the simulation service
       const simulationReport = await pipelineSimulationService.simulatePipeline(
-        pipeline as PipelineSchema, // Type assertion
+        pipeline as SimulationPipeline,
         initialInputs || {}
       );
 

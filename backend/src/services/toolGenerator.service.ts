@@ -1,14 +1,30 @@
 import { db } from '../config/database.js';
 import logger from '../utils/logger.js';
-import providerRegistryService from './provider-registry.service.js';
+import DeepSeekProvider, {
+  type DeepSeekProviderInput,
+  type DeepSeekProviderResult
+} from './providers/deepseek.provider.js';
 import { nanoid } from 'nanoid';
 import * as providerRepo from '../repositories/providerEndpoints.repo.js';
+import aiHelperService from './aiHelper.service.js';
+
+export class ToolGeneratorError extends Error {
+  statusCode: number;
+
+  constructor(message: string, statusCode = 400) {
+    super(message);
+    this.name = 'ToolGeneratorError';
+    this.statusCode = statusCode;
+  }
+}
 
 /**
  * ToolGeneratorService (AI 学习机服务)
  * 核心功能：利用 LLM (DeepSeek) 阅读 API 文档，自动生成 GenericHttpProvider 配置
  */
 class ToolGeneratorService {
+  private readonly llmProvider = new DeepSeekProvider();
+
   /**
    * 智能解析文档并生成积木
    * @param docText - 用户粘贴的 API 文档内容 (curl命令、接口说明等)
@@ -54,26 +70,46 @@ class ToolGeneratorService {
 }
 
 重要指令：
-1. **智能识别异步任务**：如果文档提到 "返回任务ID"、"异步处理"、"Webhook" 或 "查询状态"，请务必生成 `polling` 配置块。这是最核心的要求！
-2. **变量提取**：将文档中的 api key、prompt、url 等参数提取为 `variables`，并在 url/headers/body 中用 `{{varName}}` 占位。
+1. **智能识别异步任务**：如果文档提到 "返回任务ID"、"异步处理"、"Webhook" 或 "查询状态"，请务必生成 \`polling\` 配置块。这是最核心的要求！
+2. **变量提取**：将文档中的 api key、prompt、url 等参数提取为 \`variables\`，并在 url/headers/body 中用 \`{{varName}}\` 占位。
 3. **严格 JSON 格式**：请直接返回 JSON 字符串，**严禁**使用 Markdown 代码块（例如 \`\`\`json ... \`\`\`），也不要包含任何解释性文字。`;
 
     const userPrompt = `请解析以下 API 文档，生成积木配置：\n\n${docText}`;
 
     // 2. 调用 DeepSeek (通过统一注册服务)
-    // 使用 providerRegistryService 调用 'llm_deepseek'
-    // OpenAIProvider 的 execute 方法返回 { text: string, ... }
-    const input: any = { systemPrompt, prompt: userPrompt, model: 'deepseek-chat', temperature: 0.1 };
+    const aiConfig = await aiHelperService.getRuntimeConfig();
+    if (!aiConfig.enabled) {
+      throw new ToolGeneratorError('AI助手未启用，请先在系统配置中开启 AI 助手功能');
+    }
+
+    if (!aiConfig.apiKey) {
+      throw new ToolGeneratorError('AI助手未配置 API Key，请在“AI助手配置”中填写后重试');
+    }
+
+    const preferredModel = aiConfig.defaultModel ?? 'deepseek-chat';
+    const input: DeepSeekProviderInput = {
+      systemPrompt,
+      prompt: userPrompt,
+      model: preferredModel,
+      temperature: 0.1,
+      apiKey: aiConfig.apiKey
+    };
     const taskId = 'tool_gen_' + Date.now();
 
-    const result = await providerRegistryService.execute(
-      'llm_deepseek',
-      'execute',
-      [input, taskId]
-    );
+    let llmResult: DeepSeekProviderResult;
+    try {
+      llmResult = await this.llmProvider.execute(input, taskId);
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[ToolGenerator] 调用 LLM 失败', {
+        taskId,
+        error: err.message
+      });
+      throw err;
+    }
 
     let toolConfig;
-    const content = result.text; // OpenAIProvider 返回的是 text 字段
+    const content = llmResult?.text;
 
     // 尝试解析 JSON
     if (content) {
@@ -92,7 +128,7 @@ class ToolGeneratorService {
     }
 
     if (!toolConfig) {
-      throw new Error('AI 解析失败，未能生成有效的 JSON 配置。请检查日志中的原始内容。');
+      throw new ToolGeneratorError('AI 解析失败，未能生成有效的 JSON 配置。请检查输入文档是否为标准 API 示例。', 422);
     }
 
     logger.info('[ToolGenerator] AI 解析成功:', toolConfig);

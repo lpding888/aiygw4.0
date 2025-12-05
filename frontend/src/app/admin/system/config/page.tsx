@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, Form, Input, InputNumber, Switch, Button, Tabs, message, Spin, Divider, Alert } from 'antd';
-import { SaveOutlined, RobotOutlined, GlobalOutlined, SafetyOutlined } from '@ant-design/icons';
+import { Card, Form, Input, InputNumber, Switch, Button, Tabs, message, Spin, Divider } from 'antd';
+import { SaveOutlined, GlobalOutlined, SafetyOutlined } from '@ant-design/icons';
 import { api } from '@/lib/api';
+import AiHelperConfigSection from '@/components/admin/SystemConfig/AiHelperConfigSection';
 
 const { TextArea } = Input;
 
@@ -36,8 +37,6 @@ export default function SystemConfigPage() {
                 form.setFieldsValue({
                     site_name: 'AI照 - 智能图像处理平台',
                     site_description: '专业的电商图片AI处理工具',
-                    ai_guide_enabled: true,
-                    ai_guide_model: 'gpt-3.5-turbo',
                     free_quota_daily: 5,
                 });
             }
@@ -95,8 +94,8 @@ export default function SystemConfigPage() {
                     layout="vertical"
                     onFinish={handleSave}
                     initialValues={{
-                        ai_guide_enabled: true,
-                        ai_guide_model: 'gpt-3.5-turbo',
+                        site_name: 'AI照',
+                        free_quota_daily: 5,
                     }}
                 >
                     <div style={{ marginBottom: 24, padding: 16, background: '#f0f5ff', border: '1px solid #adc6ff', borderRadius: 8 }}>
@@ -154,44 +153,6 @@ export default function SystemConfigPage() {
                                 ),
                             },
                             {
-                                key: 'ai',
-                                label: (
-                                    <span>
-                                        <RobotOutlined /> AI助手配置
-                                    </span>
-                                ),
-                                children: (
-                                    <div style={{ paddingTop: 16 }}>
-                                        <Alert
-                                            message="AI助手功能"
-                                            description="配置用于表单设计器智能指导的AI模型。建议使用通义千问或ChatGPT。"
-                                            type="info"
-                                            showIcon
-                                            style={{ marginBottom: 24 }}
-                                        />
-                                        <Form.Item label="启用AI助手" name="ai_guide_enabled" valuePropName="checked">
-                                            <Switch />
-                                        </Form.Item>
-                                        <Form.Item label="API地址 (Base URL)" name="ai_guide_api_url">
-                                            <Input placeholder="例如：https://api.openai.com/v1" />
-                                        </Form.Item>
-                                        <Form.Item label="API Key" name="ai_guide_api_key">
-                                            <Input.Password placeholder="sk-..." />
-                                        </Form.Item>
-                                        <Form.Item label="模型名称" name="ai_guide_model">
-                                            <Input placeholder="例如：gpt-3.5-turbo 或 qwen-turbo" />
-                                        </Form.Item>
-                                        <Form.Item label="系统提示词 (System Prompt)" name="ai_guide_system_prompt">
-                                            <TextArea
-                                                rows={5}
-                                                placeholder="你是一个专业的表单设计助手..."
-                                                defaultValue="你是一个专业的Formio表单设计专家。请根据用户的自然语言描述，生成对应的JSON Schema配置。请直接返回JSON，不要包含多余的解释。"
-                                            />
-                                        </Form.Item>
-                                    </div>
-                                ),
-                            },
-                            {
                                 key: 'security',
                                 label: (
                                     <span>
@@ -220,6 +181,7 @@ export default function SystemConfigPage() {
                     />
                 </Form>
             </Card>
+            <AiHelperConfigSection />
         </div>
     );
 }

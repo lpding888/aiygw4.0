@@ -12,9 +12,10 @@ const serializeError = (error: unknown): Record<string, unknown> => {
       details.stack = error.stack;
     }
 
+    const extendedError = error as Error & Record<string, unknown>;
     for (const key of Object.getOwnPropertyNames(error)) {
       if (!['name', 'message', 'stack'].includes(key)) {
-        details[key] = (error as Record<string, unknown>)[key];
+        details[key] = extendedError[key];
       }
     }
 

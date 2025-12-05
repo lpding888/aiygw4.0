@@ -14,7 +14,7 @@ import {
     RobotOutlined,
     SearchOutlined
 } from '@ant-design/icons';
-import { api } from '@/lib/api';
+import { api, type APIResponse } from '@/lib/api';
 
 const { Text } = Typography;
 const { Panel } = Collapse;
@@ -345,13 +345,14 @@ export default function PipelineBlockSidebar() {
         }
         setGenerating(true);
         try {
-            const res = await api.client.post('/admin/tools/generate', {
+            const res = await api.client.post<APIResponse>('/admin/tools/generate', {
                 docText: docText,
                 category: 'custom_tool'
             });
 
-            if (res.data?.success) {
-                message.success(`成功学会新技能: ${res.data.data.name}`);
+            if (res?.success) {
+                const feature = res.data as { name?: string };
+                message.success(`成功学会新技能: ${feature?.name ?? '新工具'}`);
                 setAiModalVisible(false);
                 setDocText('');
                 // 重新加载积木列表

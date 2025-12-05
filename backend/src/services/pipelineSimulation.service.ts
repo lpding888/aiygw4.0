@@ -1,4 +1,3 @@
-import type { PipelineSchema, PipelineNode, PipelineEdge } from '../engine/pipeline-types.js';
 import logger from '../utils/logger.js';
 
 // Mock AI Gateway for simulation
@@ -28,6 +27,23 @@ const mockAiGateway = {
  * Supports {{variable_name}} and {{node_id.output.key}}
  */
 type SimulationContext = Record<string, any>;
+
+export interface SimulationNode {
+  id: string;
+  type?: string;
+  data: Record<string, any>;
+}
+
+export interface SimulationEdge {
+  id?: string;
+  source: string;
+  target: string;
+}
+
+export interface SimulationPipeline {
+  nodes: SimulationNode[];
+  edges: SimulationEdge[];
+}
 
 const resolveVariables = (template: string, context: SimulationContext): string => {
   return template.replace(/{{(.*?)}}/g, (match, p1) => {
@@ -65,14 +81,14 @@ interface SimulationResult {
 
 interface SimulationReport {
   results: SimulationResult[];
-  finalOutput: Record<string, any>;
+  finalOutput: unknown;
   overallStatus: 'success' | 'failed';
   message: string;
 }
 
 class PipelineSimulationService {
   async simulatePipeline(
-    pipeline: PipelineSchema,
+    pipeline: SimulationPipeline,
     initialInputs: Record<string, any>
   ): Promise<SimulationReport> {
     const { nodes, edges } = pipeline;
@@ -82,7 +98,7 @@ class PipelineSimulationService {
     // Basic topological sort (Kahn's algorithm)
     const inDegree = new Map<string, number>();
     const graph = new Map<string, string[]>();
-    const nodeMap = new Map<string, PipelineNode>();
+    const nodeMap = new Map<string, SimulationNode>();
 
     for (const node of nodes) {
       inDegree.set(node.id, 0);
@@ -117,7 +133,7 @@ class PipelineSimulationService {
       const startTime = process.hrtime.bigint();
 
       let nodeStatus: 'success' | 'failed' | 'skipped' = 'success';
-      let nodeOutput: Record<string, any> = {};
+      const nodeOutput: Record<string, any> = {};
       let nodeError: string | undefined;
       const nodeInput: Record<string, any> = {};
 
@@ -194,7 +210,7 @@ class PipelineSimulationService {
           nodeInput.input = inputToProcess;
 
           // Mock processing
-          let processedResult = `Processed "${inputToProcess}" with ${processor}`;
+          let processedResult: unknown = `Processed "${inputToProcess}" with ${processor}`;
           if (processor === 'enhance') {
             processedResult = `Enhanced version of: "${inputToProcess}"`;
           } else if (processor === 'json') {
@@ -269,7 +285,7 @@ class PipelineSimulationService {
     }
 
     // Determine final output
-    const finalOutput = context.final_output || {}; // Placeholder for actual final output
+    const finalOutput = context.final_output ?? {};
     const message =
       overallStatus === 'success'
         ? 'Pipeline simulation completed successfully.'

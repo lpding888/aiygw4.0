@@ -56,6 +56,7 @@ const routeDefinitions: RouteDefinition[] = [
     mountPath: '/api/admin/pipeline-execution',
     modulePath: './routes/pipelineExecution.routes.js'
   },
+  { mountPath: '/api/admin/ai-helper', modulePath: './routes/admin/ai-helper.routes.js' },
   { mountPath: '/api/admin/mcp-endpoints', modulePath: './routes/mcpEndpoints.routes.js' },
   { mountPath: '/api/buildingai', modulePath: './routes/buildingai-adaptor.routes.js' },
   { mountPath: '/api/membership', modulePath: './routes/membership.routes.js' },

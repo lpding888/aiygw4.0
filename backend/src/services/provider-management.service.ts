@@ -226,10 +226,16 @@ class ProviderManagementService {
       // 删除相关的密钥
       const provider = await this.getProvider(providerId);
       if (provider) {
-        await Promise.all([
-          kmsService.delete(provider.apiKeyId),
-          kmsService.delete(provider.handlerKeyId)
-        ]);
+        const deleteTasks: Array<Promise<unknown>> = [];
+        if (provider.apiKeyId) {
+          deleteTasks.push(kmsService.deleteKey(provider.apiKeyId, { force: true }));
+        }
+        if (provider.handlerKeyId) {
+          deleteTasks.push(kmsService.deleteKey(provider.handlerKeyId, { force: true }));
+        }
+        if (deleteTasks.length > 0) {
+          await Promise.all(deleteTasks);
+        }
       }
 
       // 软删除供应商配置

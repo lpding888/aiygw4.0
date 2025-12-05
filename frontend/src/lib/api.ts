@@ -503,6 +503,22 @@ class APIClient {
       this.client.post<APIResponse>('/admin/system/init'),
   };
 
+  adminAiHelper = {
+    getConfig: () => this.client.get<APIResponse>('/admin/ai-helper/config'),
+    saveConfig: (data: {
+      enabled?: boolean;
+      apiUrl?: string | null;
+      apiKey?: string;
+      defaultModel?: string | null;
+      allowedModels?: string[];
+      systemPrompt?: string | null;
+      resetApiKey?: boolean;
+    }) => this.client.post<APIResponse>('/admin/ai-helper/config', data),
+    testConnection: (data?: { apiUrl?: string; apiKey?: string }) =>
+      this.client.post<APIResponse>('/admin/ai-helper/test', data),
+    getModels: () => this.client.get<APIResponse>('/admin/ai-helper/models'),
+  };
+
   // 素材库相关
   assets = {
     getAll: (params?: { userId?: string; type?: string }) =>

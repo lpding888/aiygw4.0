@@ -4,7 +4,13 @@ import logger from '../utils/logger.js';
 import cacheService from './cache.service.js'; // P1-010: 使用Redis缓存
 import secretManager from '../utils/secret-manager.js';
 
-export type ConfigPrimitive = string | number | boolean | Record<string, unknown> | null;
+export type ConfigPrimitive =
+  | string
+  | number
+  | boolean
+  | Record<string, unknown>
+  | unknown[]
+  | null;
 export type ConfigType = 'string' | 'number' | 'boolean' | 'json' | 'secret';
 
 type SystemConfigRow = {

@@ -5,6 +5,7 @@ import aiModelService from './aiModel.service.js';
 import OpenAIProvider from './providers/openai.provider.js';
 import ClaudeProvider from './providers/claude.provider.js';
 import QwenProvider from './providers/qwen.provider.js';
+import DeepSeekProvider from './providers/deepseek.provider.js';
 import { db } from '../config/database.js';
 
 type ProviderConfig = Parameters<typeof providerWrapperService.registerProvider>[2];
@@ -88,7 +89,13 @@ class ProviderRegistryService {
       cache: { ttl: 600, enabled: true }
     });
 
-    logger.info('[ProviderRegistry] 内置Providers已注册: imageProcess, aiModel');
+    this.registerProvider(
+      'llm_deepseek',
+      new DeepSeekProvider() as unknown as ProviderInstance,
+      this.externalProviderConfig
+    );
+
+    logger.info('[ProviderRegistry] 内置Providers已注册: imageProcess, aiModel, llm_deepseek');
   }
 
   /**
@@ -178,6 +185,9 @@ class ProviderRegistryService {
       case 'tongyi':
       case 'dashscope':
         return new QwenProvider() as unknown as ProviderInstance;
+
+      case 'deepseek':
+        return new DeepSeekProvider() as unknown as ProviderInstance;
 
       default:
         return null;

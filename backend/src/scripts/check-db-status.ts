@@ -34,10 +34,13 @@ async function checkDbStatus() {
 
     // 4. 检查表中数据
     console.log('\n=== 3. provider_endpoints 数据统计 ===');
-    const count = await db('provider_endpoints').count('* as total').first();
-    console.log(`表中共有 ${count?.total || 0} 条数据`);
+    const count = await db('provider_endpoints')
+      .count<{ total: number | string }>('id as total')
+      .first();
+    const totalRows = Number(count?.total ?? 0);
+    console.log(`表中共有 ${totalRows} 条数据`);
 
-    if (count && count.total > 0) {
+    if (totalRows > 0) {
       const sample = await db('provider_endpoints').select('*').limit(3);
       console.log('\n前3条数据样本：');
       sample.forEach((row, i) => {

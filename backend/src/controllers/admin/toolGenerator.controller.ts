@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import logger from '../../utils/logger.js';
-import toolGeneratorService from '../../services/toolGenerator.service.js';
+import toolGeneratorService, {
+  ToolGeneratorError
+} from '../../services/toolGenerator.service.js';
 
 class ToolGeneratorController {
   /**
@@ -33,6 +35,17 @@ class ToolGeneratorController {
     } catch (error) {
       const err = error as Error;
       logger.error(`[ToolGenerator] 生成失败: ${err.message}`, error);
+
+      if (error instanceof ToolGeneratorError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: {
+            code: 'GENERATION_VALIDATION_FAILED',
+            message: err.message
+          }
+        });
+        return;
+      }
 
       res.status(500).json({
         success: false,
