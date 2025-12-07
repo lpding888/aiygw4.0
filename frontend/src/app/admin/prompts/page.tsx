@@ -118,7 +118,7 @@ export default function PromptsPage() {
   const { data: promptsData, isLoading, refetch } = useQuery({
     queryKey: ['prompts'],
     queryFn: async () => {
-      const response = await api.client.get('/admin/prompts');
+      const response = await api.adminPromptTemplates.list();
       return response.data;
     },
   });
@@ -127,7 +127,7 @@ export default function PromptsPage() {
   const { data: statsData } = useQuery({
     queryKey: ['prompt-stats'],
     queryFn: async () => {
-      const response = await api.client.get('/admin/prompts/stats');
+      const response = await api.adminPromptTemplates.getStats();
       return response.data;
     },
   });
@@ -135,11 +135,11 @@ export default function PromptsPage() {
   // 预览Prompt
   const previewMutation = useMutation({
     mutationFn: async ({ promptId, variables }: { promptId: string; variables?: Record<string, any> }) => {
-      const response = await api.client.post(`/admin/prompts/${promptId}/render`, { variables });
+      const response = await api.client.post(`/admin/prompt-templates/${promptId}/preview`, { variables });
       return response.data;
     },
-    onSuccess: (data: PreviewResult) => {
-      setPreviewResult(data);
+    onSuccess: (data: any) => {
+      setPreviewResult(data.data);
       setPreviewModalVisible(true);
     },
     onError: (error: any) => {
@@ -150,7 +150,7 @@ export default function PromptsPage() {
   // 获取Prompt版本
   const getVersionsMutation = useMutation({
     mutationFn: async (promptId: string) => {
-      const response = await api.client.get(`/admin/prompts/${promptId}/versions`);
+      const response = await api.adminPromptTemplates.getHistory(promptId);
       return response.data;
     },
     onSuccess: (data) => {
@@ -162,7 +162,7 @@ export default function PromptsPage() {
   // 创建Prompt
   const createMutation = useMutation({
     mutationFn: async (data: Partial<Prompt>) => {
-      const response = await api.client.post('/admin/prompts', data);
+      const response = await api.adminPromptTemplates.create(data);
       return response.data;
     },
     onSuccess: () => {
@@ -179,7 +179,7 @@ export default function PromptsPage() {
   // 更新Prompt
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<Prompt> }) => {
-      const response = await api.client.put(`/admin/prompts/${id}`, data);
+      const response = await api.adminPromptTemplates.update(id, data);
       return response.data;
     },
     onSuccess: () => {
@@ -197,7 +197,7 @@ export default function PromptsPage() {
   // 删除Prompt
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      return api.client.delete(`/admin/prompts/${id}`);
+      return api.adminPromptTemplates.delete(id);
     },
     onSuccess: () => {
       message.success('Prompt删除成功');
@@ -205,6 +205,19 @@ export default function PromptsPage() {
     },
     onError: (error: any) => {
       message.error(`删除失败: ${error.message}`);
+    },
+  });
+
+  // 刷新 Protocol 文档
+  const refreshProtocolMutation = useMutation({
+    mutationFn: async () => {
+      return api.adminPromptTemplates.refreshProtocol();
+    },
+    onSuccess: () => {
+      message.success('Protocol 文档已刷新，AI Architect 提示词已自动更新');
+    },
+    onError: (error: any) => {
+      message.error(`刷新失败: ${error.message}`);
     },
   });
 
@@ -491,6 +504,14 @@ export default function PromptsPage() {
             </div>
           </div>
           <Space>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={() => refreshProtocolMutation.mutate()}
+              loading={refreshProtocolMutation.isPending}
+              title="当修改 Protocol 添加新节点类型后，点击此按钮刷新 AI Architect 提示词"
+            >
+              刷新 Protocol
+            </Button>
             <Button
               type="primary"
               icon={<PlusOutlined />}
