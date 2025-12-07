@@ -139,34 +139,46 @@ export default function AuditLogsPage() {
     ];
 
     return (
-        <div style={{ padding: '24px' }}>
-            <h2 style={{ marginBottom: '24px', fontWeight: 600 }}>系统审计日志</h2>
+        <div className="p-6 md:p-8 max-w-[1600px] mx-auto animate-fade-up">
+            <div className="flex justify-between items-center mb-8">
+                <div>
+                    <h1 className="text-3xl font-bold text-gradient mb-2">系统审计日志</h1>
+                    <p className="text-gray-500">追踪用户行为与系统关键操作记录。</p>
+                </div>
+                <div className="flex gap-2">
+                    {/* Add export button or other actions here if needed */}
+                </div>
+            </div>
 
-            <FilterBar
-                filters={filterConfig}
-                onFilterChange={(key, value) => {
-                    tableData.filters.setFilter(key, value);
-                    tableData.pagination.reset();
-                }}
-                onReset={() => {
-                    tableData.filters.setFilters({ ...DEFAULT_FILTERS });
-                    tableData.pagination.reset();
-                }}
-            />
+            <div className="glass-card-strong p-6 mb-6">
+                <FilterBar
+                    filters={filterConfig}
+                    onFilterChange={(key, value) => {
+                        tableData.filters.setFilter(key, value);
+                        tableData.pagination.reset();
+                    }}
+                    onReset={() => {
+                        tableData.filters.setFilters({ ...DEFAULT_FILTERS });
+                        tableData.pagination.reset();
+                    }}
+                />
+            </div>
 
-            <DataTable
-                columns={columns}
-                dataSource={tableData.data}
-                loading={tableData.loading}
-                rowKey="id"
-                pagination={{
-                    page: tableData.pagination.page,
-                    pageSize: tableData.pagination.pageSize,
-                    total: tableData.pagination.total,
-                    onChange: tableData.pagination.goToPage,
-                }}
-                scroll={{ x: 1200 }}
-            />
+            <div className="glass-card-strong p-6">
+                <DataTable
+                    columns={columns}
+                    dataSource={tableData.data}
+                    loading={tableData.loading}
+                    rowKey="id"
+                    pagination={{
+                        page: tableData.pagination.page,
+                        pageSize: tableData.pagination.pageSize,
+                        total: tableData.pagination.total,
+                        onChange: tableData.pagination.goToPage,
+                    }}
+                    scroll={{ x: 1200 }}
+                />
+            </div>
         </div>
     );
 }

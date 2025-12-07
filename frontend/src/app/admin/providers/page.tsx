@@ -194,10 +194,10 @@ export default function ProvidersPage() {
       setHealthLoading(true);
       const response = await api.provider.getProviderHealth();
 
-      if (response?.success && response.data) {
+      if ((response as any)?.success && response.data) {
         setHealthData(response.data);
       } else {
-        message.warning(response?.message || '获取健康数据失败');
+        message.warning((response as any)?.message || '获取健康数据失败');
       }
     } catch (error: any) {
       console.error('[ProviderHealth] 加载失败:', error);
@@ -617,7 +617,7 @@ export default function ProvidersPage() {
       if (detectedModels.length > 0) {
         setModelOptions(detectedModels);
         if (!form.getFieldValue('default_model')) {
-          form.setFieldsValue({ default_model: detectedModels[0].id });
+          form.setFieldsValue({ default_model: detectedModels[0]?.id });
         }
       }
 
@@ -1063,9 +1063,8 @@ export default function ProvidersPage() {
                 type="success"
                 showIcon
                 message="密钥可用"
-                description={`${quickTestResult.message || ''}${
-                  quickTestResult.latency ? ` · 延迟 ${quickTestResult.latency}ms` : ''
-                }`}
+                description={`${quickTestResult.message || ''}${quickTestResult.latency ? ` · 延迟 ${quickTestResult.latency}ms` : ''
+                  }`}
               />
             )}
             {quickTestResult.status === 'error' && (

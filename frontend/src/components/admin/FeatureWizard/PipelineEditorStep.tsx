@@ -300,6 +300,41 @@ export default function PipelineEditorStep({
     [reactFlowInstance, setNodes]
   );
 
+  const [smartBuildModalVisible, setSmartBuildModalVisible] = useState(false);
+  const [smartBuildPrompt, setSmartBuildPrompt] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  /**
+   * 智能生成处理
+   */
+  const handleSmartBuild = async () => {
+    if (!smartBuildPrompt.trim()) {
+      message.warning('请输入您的需求');
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      // @ts-ignore
+      const response = await api.pipeline.generatePipeline(smartBuildPrompt);
+      if (response.data && response.data.nodes) {
+        setNodes(response.data.nodes);
+        setEdges(response.data.edges || []);
+        message.success('已为您生成流程草稿');
+        setSmartBuildModalVisible(false);
+        // 自动切换到“新建”模式以便编辑
+        setMode('new');
+        setSmartBuildPrompt('');
+      } else {
+        message.error('生成失败，请稍后重试');
+      }
+    } catch (error: any) {
+      message.error(`生成失败: ${error.message || '未知错误'}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   return (
     <div className="animate-fade-up">
       <div style={{ textAlign: 'center', marginBottom: 40 }}>
@@ -431,6 +466,19 @@ export default function PipelineEditorStep({
               >
                 测试执行
               </Button>
+              {/* Smart Build Button */}
+              <Button
+                icon={<RocketOutlined />} // Fallback icon if bulb is not available, or use BulbOutlined if imported
+                onClick={() => setSmartBuildModalVisible(true)}
+                className="btn-vision"
+                style={{
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  border: 'none',
+                  color: 'white'
+                }}
+              >
+                AI 智能生成
+              </Button>
             </Space>
             <Alert
               message="从左侧积木箱拖拽积木到画布，连线构建流程。点击节点配置参数。"
@@ -519,6 +567,58 @@ export default function PipelineEditorStep({
           下一步：预览发布
         </Button>
       </div>
+
+      {/* Smart Build Modal */}
+      <Modal
+        title={
+          <Space>
+            <RocketOutlined style={{ color: '#764ba2' }} />
+            <span>AI 智能编排</span>
+          </Space>
+        }
+        open={smartBuildModalVisible}
+        onCancel={() => setSmartBuildModalVisible(false)}
+        footer={null}
+        width={600}
+      >
+        <div style={{ textAlign: 'center', padding: '20px 0' }}>
+          <p style={{ fontSize: 16, marginBottom: 24, color: '#666' }}>
+            告诉我您想要什么样的流程，AI 架构师帮您生成草稿。
+          </p>
+          <div style={{ marginBottom: 24 }}>
+            <textarea
+              style={{
+                width: '100%',
+                height: 120,
+                padding: 12,
+                borderRadius: 8,
+                border: '1px solid #d9d9d9',
+                resize: 'none',
+                fontSize: 14
+              }}
+              placeholder="例如：先让用户上传一张模特图，然后用 RunningHub 生成 3 张不同风格的衣服展示图，最后打包发邮件给用户。"
+              value={smartBuildPrompt}
+              onChange={(e) => setSmartBuildPrompt(e.target.value)}
+            />
+          </div>
+          <Button
+            type="primary"
+            size="large"
+            icon={<RocketOutlined />}
+            loading={isGenerating}
+            onClick={handleSmartBuild}
+            style={{
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              border: 'none',
+              width: '100%',
+              height: 48,
+              fontSize: 16
+            }}
+          >
+            {isGenerating ? 'AI 正在思考架构...' : '开始生成'}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

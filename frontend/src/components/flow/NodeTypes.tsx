@@ -1,241 +1,201 @@
 'use client';
 
 /**
- * React Flow节点类型定义 (美化版)
+ * React Flow节点类型定义 (美化版 - n8n style)
  */
 
 import React from 'react';
-import { Handle, Position, NodeProps, useReactFlow } from '@xyflow/react';
+import { Position, NodeProps } from '@xyflow/react';
 import type { NodeTypes } from '@xyflow/react';
 import {
   ApiOutlined,
   BranchesOutlined,
   ToolOutlined,
   CheckCircleOutlined,
-  MoreOutlined,
-  DeleteOutlined,
-  SettingOutlined,
   ThunderboltOutlined,
   MailOutlined,
   CloudUploadOutlined,
-  FileImageOutlined
+  FileImageOutlined,
+  PlayCircleFilled
 } from '@ant-design/icons';
-import { Card, Typography, Dropdown, Menu, theme } from 'antd';
+import NodeCard from './NodeCard';
 import ForkNode from './nodes/ForkNode';
 import JoinNode from './nodes/JoinNode';
 
-const { Text } = Typography;
-
-// 通用节点外壳组件
-const NodeShell = ({
-  title,
-  icon,
-  color,
-  children,
-  nodeId,
-  selected
-}: {
-  title: React.ReactNode;
-  icon: React.ReactNode;
-  color: string;
-  children?: React.ReactNode;
-  nodeId: string;
-  selected?: boolean;
-}) => {
-  const { setNodes } = useReactFlow();
-  const { token } = theme.useToken();
-
-  const handleDelete = () => {
-    setNodes((nodes) => nodes.filter((n) => n.id !== nodeId));
-  };
-
-  const menuItems = [
-    {
-      key: 'delete',
-      icon: <DeleteOutlined />,
-      danger: true,
-      label: '删除节点',
-      onClick: handleDelete
-    }
-  ];
-
+export function StartNode({ id, data, selected }: NodeProps) {
   return (
-    <div style={{ position: 'relative' }}>
-      {/* 输入连接点 */}
-      <Handle
-        type="target"
-        position={Position.Top}
-        style={{
-          width: 10,
-          height: 10,
-          background: color,
-          border: '2px solid #fff'
-        }}
-      />
-
-      <Card
-        size="small"
-        bordered={false}
-        style={{
-          width: 220,
-          borderRadius: 12,
-          boxShadow: selected ? `0 0 0 2px ${color}, 0 8px 16px rgba(0,0,0,0.1)` : '0 4px 12px rgba(0,0,0,0.05)',
-          transition: 'all 0.2s',
-          borderTop: `4px solid ${color}`
-        }}
-        styles={{ body: { padding: '12px' } }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{
-              width: 32,
-              height: 32,
-              borderRadius: 8,
-              background: `${color}15`, // 浅色背景
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: color,
-              fontSize: 18
-            }}>
-              {icon}
-            </div>
-            <div>
-              <Text strong style={{ fontSize: 14, display: 'block', lineHeight: 1.2 }}>{title}</Text>
-              <Text type="secondary" style={{ fontSize: 10 }}>{nodeId.split('_')[0]}</Text>
-            </div>
-          </div>
-
-          <Dropdown menu={{ items: menuItems }} trigger={['click']}>
-            <MoreOutlined style={{ fontSize: 16, color: '#999', cursor: 'pointer' }} />
-          </Dropdown>
-        </div>
-
-        {children && (
-          <div style={{
-            background: '#f9f9f9',
-            borderRadius: 6,
-            padding: '8px',
-            fontSize: 12,
-            color: '#666'
-          }}>
-            {children}
-          </div>
-        )}
-      </Card>
-
-      {/* 输出连接点 */}
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        style={{
-          width: 10,
-          height: 10,
-          background: color,
-          border: '2px solid #fff'
-        }}
-      />
-    </div>
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="start"
+      label={(data.label as string) || '开始'}
+      status={data.status as any}
+      handles={[{ type: 'source', position: Position.Bottom }]}
+    />
   );
-};
+}
 
 export function ProviderNode({ id, data, selected }: NodeProps) {
   const paramsCount = data.schema ? (data.schema as any[]).length : 0;
+  const providerRef = data.providerRef as string;
 
-  // 根据providerRef决定图标和颜色
-  const getProviderStyle = (ref: string) => {
-    if (!ref) return { icon: <ApiOutlined />, color: '#1890ff' };
-    if (ref.includes('runninghub')) return { icon: <ThunderboltOutlined />, color: '#722ed1' }; // Purple for AI
-    if (ref.includes('deepseek') || ref.includes('llm')) return { icon: <ApiOutlined />, color: '#13c2c2' }; // Cyan for LLM
-    if (ref.includes('email') || ref.includes('notification')) return { icon: <MailOutlined />, color: '#52c41a' }; // Green for Notification
-    if (ref.includes('storage') || ref.includes('cos')) return { icon: <CloudUploadOutlined />, color: '#fa8c16' }; // Orange for Storage
-    if (ref.includes('image')) return { icon: <FileImageOutlined />, color: '#eb2f96' }; // Pink for Image
-    return { icon: <ApiOutlined />, color: '#1890ff' }; // Default Blue
+  // 根据providerRef决定图标
+  const getIcon = (ref: string) => {
+    if (!ref) return <ApiOutlined style={{ color: 'white' }} />;
+    if (ref.includes('runninghub')) return <ThunderboltOutlined style={{ color: 'white' }} />;
+    if (ref.includes('deepseek') || ref.includes('llm')) return <span style={{ fontSize: 14, fontWeight: 'bold', color: 'white' }}>AI</span>;
+    if (ref.includes('email') || ref.includes('notification')) return <MailOutlined style={{ color: 'white' }} />;
+    if (ref.includes('storage') || ref.includes('cos')) return <CloudUploadOutlined style={{ color: 'white' }} />;
+    if (ref.includes('image')) return <FileImageOutlined style={{ color: 'white' }} />;
+    return <ApiOutlined style={{ color: 'white' }} />;
   };
 
-  const { icon, color } = getProviderStyle(data.providerRef as string);
+  const stats: Record<string, string | number> = {};
+  if (providerRef) {
+    stats['Provider'] = providerRef.length > 20 ? providerRef.substring(0, 18) + '..' : providerRef;
+  }
+  if (paramsCount > 0) {
+    stats['Params'] = paramsCount;
+  }
 
   return (
-    <NodeShell
-      nodeId={id}
+    <NodeCard
+      id={id}
       selected={selected}
-      title={(data.label as string) || 'AI 模型'}
-      icon={icon}
-      color={color}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }} title={(data.providerRef as string) || undefined}>
-          {(data.providerRef as string) || '未配置'}
-        </span>
-        {paramsCount > 0 && <span style={{ color }}>{paramsCount} 参数</span>}
-      </div>
-    </NodeShell>
+      type="provider"
+      label={(data.label as string) || 'AI 模型'}
+      status={data.status as any}
+      icon={getIcon(providerRef)}
+      stats={stats}
+      handles={[
+        { type: 'target', position: Position.Top },
+        { type: 'source', position: Position.Bottom }
+      ]}
+    />
   );
 }
 
 export function ConditionNode({ id, data, selected }: NodeProps) {
   return (
-    <div style={{ position: 'relative' }}>
-      <Handle type="target" position={Position.Top} style={{ width: 10, height: 10, background: '#52c41a' }} />
-
-      <Card
-        size="small"
-        bordered={false}
-        style={{
-          width: 200,
-          borderRadius: 20, // 椭圆形状
-          border: selected ? '2px solid #52c41a' : '1px solid #d9d9d9',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-          textAlign: 'center'
-        }}
-      >
-        <BranchesOutlined style={{ fontSize: 20, color: '#52c41a', marginBottom: 4 }} />
-        <div style={{ fontWeight: 600 }}>{(data.label as string) || '条件判断'}</div>
-      </Card>
-
-      {/* 两个输出口：True 和 False */}
-      <div style={{ position: 'absolute', bottom: -10, left: '20%', fontSize: 10, color: '#52c41a' }}>是</div>
-      <Handle type="source" position={Position.Bottom} id="true" style={{ left: '30%', background: '#52c41a' }} />
-
-      <div style={{ position: 'absolute', bottom: -10, left: '60%', fontSize: 10, color: '#ff4d4f' }}>否</div>
-      <Handle type="source" position={Position.Bottom} id="false" style={{ left: '70%', background: '#ff4d4f' }} />
-    </div>
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="condition"
+      label={(data.label as string) || '条件判断'}
+      status={data.status as any}
+      handles={[
+        { type: 'target', position: Position.Top },
+        { type: 'source', position: Position.Bottom, id: 'true' }, // True path (Left/Center usually, but simpler to stack for now)
+        // For condition nodes, we often want custom handles. 
+        // NodeCard handles prop is flexible, but visual layout of text "True/False" needs to be inside or absolute.
+      ]}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 10px' }}>
+        <span style={{ color: '#52c41a', fontSize: 12 }}>True ↓</span>
+        <span style={{ color: '#ff4d4f', fontSize: 12 }}>False ↓</span>
+      </div>
+      {/* Custom handles for specific positioning if needed, overriding NodeCard's default strict list if we wanted, 
+             but here passing handles to NodeCard puts them in center. 
+             Let's use a custom implementation for handles here to match the text. */}
+      <div style={{ position: 'absolute', bottom: -6, left: '30%', width: 10, height: 10, background: '#52c41a', borderRadius: '50%' }} />
+      <div style={{ position: 'absolute', bottom: -6, left: '70%', width: 10, height: 10, background: '#ff4d4f', borderRadius: '50%' }} />
+    </NodeCard>
   );
 }
+// Overriding ConditionNode to match the exact Handle logic of NodeTypes which used custom positioning
+export function ConditionNodeFixed({ id, data, selected }: NodeProps) {
+  return (
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="condition"
+      label={(data.label as string) || '条件判断'}
+      status={data.status as any}
+      handles={[{ type: 'target', position: Position.Top }]} // Only input handle is standard
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+        <span style={{ color: '#52c41a', fontSize: 12, marginLeft: 10 }}>是</span>
+        <span style={{ color: '#ff4d4f', fontSize: 12, marginRight: 10 }}>否</span>
+      </div>
+      {/* Custom Output Handles */}
+      <div className="react-flow__handle react-flow__handle-bottom source" style={{ left: '30%', background: '#52c41a', bottom: -5, position: 'absolute', width: 8, height: 8, borderRadius: '50%' }} data-handleid="true"></div>
+      <div className="react-flow__handle react-flow__handle-bottom source" style={{ left: '70%', background: '#ff4d4f', bottom: -5, position: 'absolute', width: 8, height: 8, borderRadius: '50%' }} data-handleid="false"></div>
+    </NodeCard>
+  )
+}
+
 
 export function PostProcessNode({ id, data, selected }: NodeProps) {
   return (
-    <NodeShell
-      nodeId={id}
+    <NodeCard
+      id={id}
       selected={selected}
-      title={(data.label as string) || '后处理'}
-      icon={<ToolOutlined />}
-      color="#fa8c16"
-    >
-      处理逻辑: {(data.processor as string) || '无'}
-    </NodeShell>
+      type="postProcess"
+      label={(data.label as string) || '数据处理'}
+      status={data.status as any}
+      icon={<ToolOutlined style={{ color: 'white' }} />}
+      stats={{
+        'Processor': (data.processor as string) || 'None'
+      }}
+      handles={[
+        { type: 'target', position: Position.Top },
+        { type: 'source', position: Position.Bottom }
+      ]}
+    />
   );
 }
 
 export function EndNode({ id, data, selected }: NodeProps) {
   return (
-    <NodeShell
-      nodeId={id}
+    <NodeCard
+      id={id}
       selected={selected}
-      title={(data.label as string) || '流程结束'}
-      icon={<CheckCircleOutlined />}
-      color="#722ed1"
+      type="end"
+      label={(data.label as string) || '流程结束'}
+      status={data.status as any}
+      icon={<CheckCircleOutlined style={{ color: 'white' }} />}
+      handles={[
+        { type: 'target', position: Position.Top }
+      ]}
     >
-      输出变量: {(data.outputKey as string) || 'final_result'}
-    </NodeShell>
+      <div style={{ fontSize: 12, color: '#666' }}>
+        输出变量: <span style={{ fontFamily: 'monospace' }}>{(data.outputKey as string) || 'final_result'}</span>
+      </div>
+    </NodeCard>
+  );
+}
+
+export function AgentNode({ id, data, selected }: NodeProps) {
+  const toolCount = data.tools ? (data.tools as any[]).length : 0;
+  const goal = data.goal as string;
+
+  return (
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="agent"
+      label={(data.label as string) || '智能体 (Agent)'}
+      status={data.status as any}
+      icon={<ApiOutlined style={{ color: 'white' }} />}
+      stats={{
+        'Goal': goal ? (goal.length > 15 ? goal.substring(0, 15) + '...' : goal) : 'Pending',
+        'Tools': toolCount
+      }}
+      handles={[
+        { type: 'target', position: Position.Top },
+        { type: 'source', position: Position.Bottom }
+      ]}
+    />
   );
 }
 
 export const nodeTypes: NodeTypes = {
+  start: StartNode,
   provider: ProviderNode as any,
-  condition: ConditionNode as any,
+  condition: ConditionNodeFixed as any,
   postProcess: PostProcessNode as any,
   end: EndNode as any,
   fork: ForkNode,
   join: JoinNode,
+  agent: AgentNode as any,
 };

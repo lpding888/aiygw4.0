@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 /* ============================================
    Visionary Tech Theme (远见科技风 - 中文版)
@@ -42,7 +40,8 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
-  background: var(--bg-secondary); /* 默认使用浅灰背景，突出卡片 */
+  background: var(--bg-secondary);
+  /* 默认使用浅灰背景，突出卡片 */
   color: var(--text-primary);
   /* 中文优先字体栈 */
   font-family: "SF Pro Display", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -64,7 +63,8 @@ body {
 
 /* 1. 巨型排版 (Massive Typography) */
 .hero-title {
-  font-size: clamp(32px, 4vw, 48px); /* 调整为更适合管理后台的大小 */
+  font-size: clamp(32px, 4vw, 48px);
+  /* 调整为更适合管理后台的大小 */
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: -0.02em;
@@ -183,10 +183,14 @@ body {
 
 /* AI 打字动画 */
 @keyframes typing {
-  0%, 60%, 100% {
+
+  0%,
+  60%,
+  100% {
     transform: translateY(0);
     opacity: 0.4;
   }
+
   30% {
     transform: translateY(-6px);
     opacity: 1;
@@ -210,7 +214,8 @@ body {
    ============================================ */
 /* 按钮 */
 .ant-btn {
-  border-radius: 12px !important; /* 统一圆角 */
+  border-radius: 12px !important;
+  /* 统一圆角 */
   box-shadow: none !important;
   font-weight: 500 !important;
 }
@@ -271,18 +276,18 @@ body {
   background: transparent !important;
 }
 
-.ant-table-thead > tr > th {
+.ant-table-thead>tr>th {
   background: transparent !important;
   border-bottom: 1px solid var(--border-light) !important;
   color: var(--text-secondary) !important;
   font-weight: 500 !important;
 }
 
-.ant-table-tbody > tr > td {
+.ant-table-tbody>tr>td {
   border-bottom: 1px solid var(--border-light) !important;
 }
 
-.ant-table-tbody > tr:hover > td {
+.ant-table-tbody>tr:hover>td {
   background: rgba(0, 0, 0, 0.02) !important;
 }
 
@@ -314,4 +319,80 @@ body {
   border: none !important;
   padding: 2px 8px !important;
   font-weight: 500 !important;
+}
+
+/* ============================================
+   Visionary Additions (New)
+   ============================================ */
+
+/* 渐变文字 */
+.text-gradient {
+  background: linear-gradient(135deg, #1D1D1F 0%, #434343 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-primary {
+  background: linear-gradient(135deg, #0071E3 0%, #40A9FF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 弥散背景 */
+.mesh-bg {
+  background-color: #F5F5F7;
+  background-image:
+    radial-gradient(at 0% 0%, hsla(253, 16%, 7%, 0.03) 0px, transparent 50%),
+    radial-gradient(at 50% 0%, hsla(225, 39%, 30%, 0.03) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, hsla(339, 49%, 30%, 0.03) 0px, transparent 50%);
+}
+
+/* 玻璃卡片 (强) */
+.glass-card-strong {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04);
+  border-radius: 24px;
+}
+
+/* 状态点动画 */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+  position: relative;
+}
+
+.status-dot::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: 50%;
+  background: inherit;
+  opacity: 0.4;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+
+  70% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
 }

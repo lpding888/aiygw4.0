@@ -1,14 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Spin, List, Avatar, Typography, Tag } from 'antd';
-import { 
-  UserOutlined, 
-  RocketOutlined, 
-  DollarOutlined, 
+import { Card, Row, Col, Statistic, Spin, List, Typography, Tag, Space, Button, message } from 'antd';
+import {
+  UserOutlined,
+  RocketOutlined,
+  DollarOutlined,
   ThunderboltOutlined,
-  ArrowUpOutlined,
-  ClockCircleOutlined
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  ArrowRightOutlined,
+  ReloadOutlined
 } from '@ant-design/icons';
 import api from '@/lib/api';
 
@@ -36,19 +38,29 @@ interface DashboardStats {
   };
 }
 
+const DEFAULT_STATS: DashboardStats = {
+  userStats: { totalUsers: 0, memberUsers: 0, memberRate: '0%' },
+  taskStats: { totalTasks: 0, successTasks: 0, processingTasks: 0, successRate: '0%' },
+  orderStats: { totalOrders: 0, revenue: 0 },
+  todayStats: { newUsers: 0, newTasks: 0 }
+};
+
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [stats, setStats] = useState<DashboardStats>(DEFAULT_STATS);
 
   const fetchStats = async () => {
+    setLoading(true);
     try {
       const res = await api.admin.getOverview();
-      // res是AxiosResponse<APIResponse>，需要访问res.data.data
       if (res.data.success) {
         setStats(res.data.data);
+      } else {
+        message.warning('无法获取最新数据，显示默认值');
       }
     } catch (error) {
       console.error('获取统计数据失败', error);
+      message.error('网络连接失败');
     } finally {
       setLoading(false);
     }
@@ -58,141 +70,169 @@ export default function DashboardPage() {
     fetchStats();
   }, []);
 
-  if (loading) {
-    return <div style={{ textAlign: 'center', padding: 100 }}><Spin size="large" /></div>;
+  if (loading && !stats.userStats.totalUsers) { // Only show full spinner on initial load
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <Spin size="large" tip="系统数据加载中..." />
+      </div>
+    );
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ marginBottom: 24 }}>
-        <Title level={3}>👋 欢迎回来，管理员</Title>
-        <Text type="secondary">这里是您的 AI 工厂控制台，今日系统运行平稳。</Text>
+    <div className="p-6 md:p-8 max-w-[1600px] mx-auto animate-fade-up">
+      <div className="flex justify-between items-end mb-8">
+        <div>
+          <h1 className="text-4xl font-bold text-gradient mb-2">👋 欢迎回来，管理员</h1>
+          <p className="text-gray-500 text-lg">这里是您的 AI 工厂控制台，今日系统运行平稳。</p>
+        </div>
+        <Button icon={<ReloadOutlined />} onClick={fetchStats} loading={loading}>刷新数据</Button>
       </div>
 
-      {/* 核心指标卡片 */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} md={6}>
-          <Card bordered={false} hoverable style={{ background: 'linear-gradient(135deg, #fff 0%, #f0f5ff 100%)' }}>
-            <Statistic
-              title={<Space><UserOutlined /> 总用户数</Space>}
-              value={stats?.userStats.totalUsers}
-              valueStyle={{ color: '#1890ff', fontWeight: 'bold' }}
-              suffix={<Tag color="blue">今日 +{stats?.todayStats.newUsers}</Tag>}
-            />
-            <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
-              会员占比: {stats?.userStats.memberRate}
+      {/* 核心指标卡片 (Bento Grid) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {/* User Stats */}
+        <div className="glass-card-strong p-6 relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute right-[-20px] top-[-20px] w-32 h-32 bg-blue-500/10 rounded-full blur-3xl group-hover:bg-blue-500/20 transition-all"></div>
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-3 bg-blue-50 rounded-2xl text-blue-600">
+              <UserOutlined className="text-xl" />
             </div>
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={6}>
-          <Card bordered={false} hoverable style={{ background: 'linear-gradient(135deg, #fff 0%, #f6ffed 100%)' }}>
-            <Statistic
-              title={<Space><RocketOutlined /> 总任务数</Space>}
-              value={stats?.taskStats?.totalTasks}
-              valueStyle={{ color: '#52c41a', fontWeight: 'bold' }}
-              suffix={<Tag color="green">今日 +{stats?.todayStats.newTasks}</Tag>}
-            />
-            <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
-              成功率: {stats?.taskStats?.successRate}
-            </div>
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={6}>
-          <Card bordered={false} hoverable style={{ background: 'linear-gradient(135deg, #fff 0%, #fff7e6 100%)' }}>
-            <Statistic
-              title={<Space><DollarOutlined /> 总收入</Space>}
-              value={stats?.orderStats.revenue}
-              precision={2}
-              prefix="¥"
-              valueStyle={{ color: '#faad14', fontWeight: 'bold' }}
-            />
-            <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
-              总订单: {stats?.orderStats.totalOrders}
-            </div>
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={6}>
-          <Card bordered={false} hoverable style={{ background: 'linear-gradient(135deg, #fff 0%, #fff1f0 100%)' }}>
-            <Statistic
-              title={<Space><ThunderboltOutlined /> 正在处理</Space>}
-              value={stats?.taskStats?.processingTasks}
-              valueStyle={{ color: '#f5222d', fontWeight: 'bold' }}
-              suffix={(stats?.taskStats?.processingTasks || 0) > 0 && <Spin size="small" style={{ marginLeft: 8 }} />}
-            />
-            <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
-              实时算力负载监控中
-            </div>
-          </Card>
-        </Col>
-      </Row>
+            <Tag color="geekblue" className="border-0 bg-blue-50 text-blue-600 px-3 py-1 rounded-full">
+              今日 +{stats.todayStats.newUsers}
+            </Tag>
+          </div>
+          <div className="text-gray-500 text-sm font-medium mb-1">总用户数</div>
+          <div className="text-3xl font-bold text-gray-800 mb-2">{stats.userStats.totalUsers}</div>
+          <div className="text-xs text-gray-400">会员占比: {stats.userStats.memberRate}</div>
+        </div>
 
-      {/* 快捷入口与动态 */}
-      <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
+        {/* Task Stats */}
+        <div className="glass-card-strong p-6 relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute right-[-20px] top-[-20px] w-32 h-32 bg-green-500/10 rounded-full blur-3xl group-hover:bg-green-500/20 transition-all"></div>
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-3 bg-green-50 rounded-2xl text-green-600">
+              <RocketOutlined className="text-xl" />
+            </div>
+            <Tag color="success" className="border-0 bg-green-50 text-green-600 px-3 py-1 rounded-full">
+              今日 +{stats.todayStats.newTasks}
+            </Tag>
+          </div>
+          <div className="text-gray-500 text-sm font-medium mb-1">总任务数</div>
+          <div className="text-3xl font-bold text-gray-800 mb-2">{stats.taskStats.totalTasks}</div>
+          <div className="text-xs text-gray-400">成功率: {stats.taskStats.successRate}</div>
+        </div>
+
+        {/* Revenue Stats */}
+        <div className="glass-card-strong p-6 relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute right-[-20px] top-[-20px] w-32 h-32 bg-amber-500/10 rounded-full blur-3xl group-hover:bg-amber-500/20 transition-all"></div>
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-3 bg-amber-50 rounded-2xl text-amber-600">
+              <DollarOutlined className="text-xl" />
+            </div>
+            <div className="h-6"></div>
+          </div>
+          <div className="text-gray-500 text-sm font-medium mb-1">总收入</div>
+          <div className="text-3xl font-bold text-gray-800 mb-2">¥ {stats.orderStats.revenue.toFixed(2)}</div>
+          <div className="text-xs text-gray-400">总订单: {stats.orderStats.totalOrders}</div>
+        </div>
+
+        {/* Processing Stats */}
+        <div className="glass-card-strong p-6 relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute right-[-20px] top-[-20px] w-32 h-32 bg-red-500/10 rounded-full blur-3xl group-hover:bg-red-500/20 transition-all"></div>
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-3 bg-red-50 rounded-2xl text-red-600">
+              <ThunderboltOutlined className="text-xl" />
+            </div>
+            {(stats.taskStats.processingTasks) > 0 && (
+              <span className="flex h-3 w-3 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+              </span>
+            )}
+          </div>
+          <div className="text-gray-500 text-sm font-medium mb-1">正在处理任务</div>
+          <div className="text-3xl font-bold text-gray-800 mb-2">{stats.taskStats.processingTasks}</div>
+          <div className="text-xs text-gray-400">实时算力负载监控中</div>
+        </div>
+      </div>
+
+      <Row gutter={[24, 24]}>
         <Col xs={24} md={16}>
-          <Card title="🚀 快捷操作" bordered={false}>
-            <Row gutter={[16, 16]}>
-              <Col span={8}>
-                <Card 
-                  hoverable 
-                  size="small"
-                  style={{ textAlign: 'center', background: '#f9f9f9', cursor: 'pointer' }}
-                  onClick={() => window.location.href = '/admin/pipelines/editor'}
-                >
-                  <RocketOutlined style={{ fontSize: 24, color: '#1890ff', marginBottom: 8 }} />
-                  <div style={{ fontWeight: 500 }}>新建工作流</div>
-                </Card>
-              </Col>
-              <Col span={8}>
-                <Card 
-                  hoverable 
-                  size="small"
-                  style={{ textAlign: 'center', background: '#f9f9f9', cursor: 'pointer' }}
-                  onClick={() => window.location.href = '/admin/features/new'}
-                >
-                  <RocketOutlined style={{ fontSize: 24, color: '#722ed1', marginBottom: 8 }} />
-                  <div style={{ fontWeight: 500 }}>上架新应用</div>
-                </Card>
-              </Col>
-              <Col span={8}>
-                <Card 
-                  hoverable 
-                  size="small"
-                  style={{ textAlign: 'center', background: '#f9f9f9', cursor: 'pointer' }}
-                  onClick={() => window.location.href = '/admin/users'}
-                >
-                  <UserOutlined style={{ fontSize: 24, color: '#52c41a', marginBottom: 8 }} />
-                  <div style={{ fontWeight: 500 }}>用户管理</div>
-                </Card>
-              </Col>
-            </Row>
-          </Card>
+          <div className="glass-card-strong p-6 h-full">
+            <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+              <RocketOutlined /> 快捷操作
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div
+                className="p-4 rounded-xl bg-gray-50 border border-gray-100 hover:border-blue-200 hover:bg-blue-50/30 cursor-pointer transition-all group"
+                onClick={() => window.location.href = '/admin/pipelines/editor'}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-blue-100/50 rounded-lg text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                    <RocketOutlined />
+                  </div>
+                  <span className="font-semibold text-gray-700">新建工作流</span>
+                </div>
+                <p className="text-xs text-gray-400 pl-11">创建新的AI处理流程</p>
+              </div>
+
+              <div
+                className="p-4 rounded-xl bg-gray-50 border border-gray-100 hover:border-purple-200 hover:bg-purple-50/30 cursor-pointer transition-all group"
+                onClick={() => window.location.href = '/admin/features/new'}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-purple-100/50 rounded-lg text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                    <ThunderboltOutlined />
+                  </div>
+                  <span className="font-semibold text-gray-700">上架新应用</span>
+                </div>
+                <p className="text-xs text-gray-400 pl-11">发布新的AI功能应用</p>
+              </div>
+
+              <div
+                className="p-4 rounded-xl bg-gray-50 border border-gray-100 hover:border-green-200 hover:bg-green-50/30 cursor-pointer transition-all group"
+                onClick={() => window.location.href = '/admin/users'}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-green-100/50 rounded-lg text-green-600 group-hover:bg-green-600 group-hover:text-white transition-colors">
+                    <UserOutlined />
+                  </div>
+                  <span className="font-semibold text-gray-700">用户管理</span>
+                </div>
+                <p className="text-xs text-gray-400 pl-11">查看和管理注册用户</p>
+              </div>
+            </div>
+          </div>
         </Col>
-        
+
         <Col xs={24} md={8}>
-          <Card title="📢 系统状态" bordered={false}>
-             <List
-              size="small"
-              dataSource={[
+          <div className="glass-card-strong p-6 h-full">
+            <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+              <CheckCircleOutlined /> 系统状态
+            </h3>
+            <div className="space-y-4">
+              {[
                 { title: 'API 服务正常', status: 'success' },
                 { title: 'Redis 连接正常', status: 'success' },
                 { title: '数据库连接正常', status: 'success' },
                 { title: 'DeepSeek 大脑在线', status: 'processing' },
-              ]}
-              renderItem={item => (
-                <List.Item>
-                  <Space>
-                    {item.status === 'success' ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> : <ClockCircleOutlined style={{ color: '#1890ff' }} />}
-                    {item.title}
-                  </Space>
-                </List.Item>
-              )}
-            />
-          </Card>
+              ].map((item, index) => (
+
+                <div key={index} className="flex justify-between items-center p-3 rounded-xl bg-gray-50/50 border border-gray-100">
+                  <div className="flex items-center gap-3">
+                    {item.status === 'success' ?
+                      <CheckCircleOutlined className="text-green-500" /> :
+                      <ClockCircleOutlined className="text-blue-500 animate-spin-slow" />
+                    }
+                    <span className="font-medium text-gray-700">{item.title}</span>
+                  </div>
+                  <div className={`w-2 h-2 rounded-full ${item.status === 'success' ? 'bg-green-500' : 'bg-blue-500 animate-pulse'}`}></div>
+                </div>
+              ))}
+            </div>
+          </div>
         </Col>
       </Row>
     </div>
   );
 }
-
-import { Space } from 'antd';
-import { CheckCircleOutlined } from '@ant-design/icons';
