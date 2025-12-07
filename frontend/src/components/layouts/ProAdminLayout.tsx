@@ -18,7 +18,26 @@ import {
     FileTextOutlined,
     ThunderboltOutlined,
     ToolOutlined,
-    ShopOutlined
+    ShopOutlined,
+    ApiOutlined,
+    DatabaseOutlined,
+    ScheduleOutlined,
+    BgColorsOutlined,
+    LinkOutlined,
+    ExperimentOutlined,
+    CodeOutlined,
+    BarChartOutlined,
+    FunnelPlotOutlined,
+    MessageOutlined,
+    NotificationOutlined,
+    PictureOutlined,
+    SoundOutlined,
+    NodeIndexOutlined,
+    GiftOutlined,
+    HddOutlined,
+    BugOutlined,
+    KeyOutlined,
+    ReadOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '@/store/authStore';
 import { ADMIN_BRAND, getBreadcrumbItems, getMenuOpenKeys } from '@/config/admin';
@@ -57,21 +76,97 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
             icon: <DashboardOutlined />,
             label: '仪表盘',
         },
-        // 新增：AI 智能工厂 (核心入口)
+        // AI 智能工厂 (AI Factory)
         {
             key: 'ai-factory',
             icon: <ThunderboltOutlined />,
             label: 'AI 智能工厂',
             children: [
                 {
+                    key: '/admin/architect',
+                    icon: <ThunderboltOutlined />,
+                    label: 'AI Architect (智能生成)',
+                },
+                {
                     key: '/admin/pipelines/editor',
-                    icon: <RocketOutlined />, // 火箭图标，代表启动引擎
+                    icon: <RocketOutlined />,
                     label: '积木编排 (Pipeline)',
                 },
                 {
                     key: '/admin/providers',
-                    icon: <ToolOutlined />, // 工具图标
+                    icon: <ToolOutlined />,
                     label: '技能管理 (Providers)',
+                },
+                {
+                    key: '/admin/mcp',
+                    icon: <ApiOutlined />,
+                    label: 'MCP 服务 (Endpoints)',
+                },
+                {
+                    key: '/admin/prompts',
+                    icon: <FileTextOutlined />,
+                    label: '提示词 (Prompts)',
+                },
+                {
+                    key: '/admin/kb',
+                    icon: <DatabaseOutlined />,
+                    label: '知识库 (RAG)',
+                },
+                {
+                    key: '/admin/style-kits',
+                    icon: <BgColorsOutlined />,
+                    label: '风格包 (Style Kits)',
+                },
+            ],
+        },
+        // 数据洞察 (Data & Insights)
+        {
+            key: 'data-insights',
+            icon: <BarChartOutlined />,
+            label: '数据洞察',
+            children: [
+                {
+                    key: '/admin/analytics/funnel',
+                    icon: <FunnelPlotOutlined />,
+                    label: '转化漏斗',
+                },
+                {
+                    key: '/admin/feedback',
+                    icon: <MessageOutlined />,
+                    label: '用户反馈',
+                },
+            ],
+        },
+        // 运营中心 (Marketing & Ops)
+        {
+            key: 'marketing-ops',
+            icon: <NotificationOutlined />,
+            label: '运营中心',
+            children: [
+                {
+                    key: '/admin/invite-codes',
+                    icon: <GiftOutlined />,
+                    label: '邀请码管理',
+                },
+                {
+                    key: '/admin/experiments',
+                    icon: <ExperimentOutlined />,
+                    label: 'A/B 实验',
+                },
+                {
+                    key: '/admin/catalog',
+                    icon: <ShopOutlined />,
+                    label: '类目管理',
+                },
+                {
+                    key: '/admin/banners',
+                    icon: <PictureOutlined />,
+                    label: 'Banner 管理',
+                },
+                {
+                    key: '/admin/announcements',
+                    icon: <SoundOutlined />,
+                    label: '公告管理',
                 },
             ],
         },
@@ -118,28 +213,58 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
             label: '系统运维',
             children: [
                 {
+                    key: '/admin/system/circuit-breaker',
+                    icon: <ThunderboltOutlined />,
+                    label: '熔断器监控',
+                },
+                {
+                    key: '/admin/system/cache',
+                    icon: <HddOutlined />,
+                    label: '缓存管理',
+                },
+                {
                     key: '/admin/system/config',
                     label: '系统配置',
+                },
+                {
+                    key: '/admin/system/errors',
+                    icon: <BugOutlined />,
+                    label: '错误日志',
+                },
+                {
+                    key: '/admin/system/kms',
+                    icon: <KeyOutlined />,
+                    label: '密钥管理',
+                },
+                {
+                    key: '/admin/system/docs',
+                    icon: <ReadOutlined />,
+                    label: '接口文档',
+                },
+                {
+                    key: '/admin/rules',
+                    icon: <NodeIndexOutlined />,
+                    label: '规则引擎',
+                },
+                {
+                    key: '/admin/webhooks',
+                    icon: <LinkOutlined />,
+                    label: 'Webhooks',
                 },
                 {
                     key: '/admin/system/audit',
                     icon: <SafetyCertificateOutlined />,
                     label: '审计日志',
                 },
-            ],
-        },
-        {
-            key: 'content-ops',
-            icon: <FileTextOutlined />,
-            label: '内容运营',
-            children: [
                 {
-                    key: '/admin/announcements',
-                    label: '公告管理',
+                    key: '/admin/queues',
+                    icon: <ScheduleOutlined />,
+                    label: '消息队列',
                 },
                 {
-                    key: '/admin/banners',
-                    label: 'Banner管理',
+                    key: '/admin/template-tester',
+                    icon: <CodeOutlined />,
+                    label: '模板调试器',
                 },
             ],
         },
@@ -248,7 +373,7 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
                     }}
                 />
             </Sider>
-            <Layout style={{ background: 'var(--bg-secondary)' }}>
+            <Layout className="mesh-bg">
                 <Header style={{
                     padding: '0 24px',
                     background: 'rgba(255, 255, 255, 0.8)',

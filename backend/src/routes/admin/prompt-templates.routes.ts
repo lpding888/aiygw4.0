@@ -705,4 +705,129 @@ router.delete(
   }
 );
 
+// ============ AI Architect 专用端点 ============
+
+/**
+ * 刷新 Protocol 文档
+ * POST /api/admin/prompt-templates/ai-architect/refresh-protocol
+ */
+router.post(
+  '/ai-architect/refresh-protocol',
+  requirePermission({
+    resource: 'prompt_templates',
+    actions: ['update']
+  }),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await promptTemplateService.refreshProtocolDocumentation(req.user!.id);
+
+      logger.info('Protocol 文档已刷新', {
+        userId: req.user?.id,
+        ip: req.ip
+      });
+
+      res.json({
+        success: true,
+        message: 'Protocol 文档刷新成功，AI Architect 提示词已自动更新',
+        requestId: req.id
+      });
+    } catch (error) {
+      logger.error('刷新 Protocol 文档失败:', error);
+      next(error);
+    }
+  }
+);
+
+/**
+ * 获取 AI Architect 当前系统提示词（已渲染）
+ * GET /api/admin/prompt-templates/ai-architect/system-prompt
+ */
+router.get(
+  '/ai-architect/system-prompt',
+  requirePermission({
+    resource: 'prompt_templates',
+    actions: ['read']
+  }),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const systemPrompt = await promptTemplateService.getArchitectSystemPrompt();
+
+      res.json({
+        success: true,
+        data: {
+          content: systemPrompt,
+          length: systemPrompt.length,
+          timestamp: new Date().toISOString()
+        },
+        message: '已动态注入节点类型文档',
+        requestId: req.id
+      });
+    } catch (error) {
+      logger.error('获取 AI Architect 系统提示词失败:', error);
+      next(error);
+    }
+  }
+);
+
+/**
+ * 获取 AI Architect 修改提示词
+ * GET /api/admin/prompt-templates/ai-architect/modify-prompt
+ */
+router.get(
+  '/ai-architect/modify-prompt',
+  requirePermission({
+    resource: 'prompt_templates',
+    actions: ['read']
+  }),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const modifyPrompt = await promptTemplateService.getArchitectModifyPrompt();
+
+      res.json({
+        success: true,
+        data: {
+          content: modifyPrompt,
+          length: modifyPrompt.length
+        },
+        requestId: req.id
+      });
+    } catch (error) {
+      logger.error('获取 AI Architect 修改提示词失败:', error);
+      next(error);
+    }
+  }
+);
+
+/**
+ * 预览错误反馈模板
+ * POST /api/admin/prompt-templates/ai-architect/preview-error-feedback
+ */
+router.post(
+  '/ai-architect/preview-error-feedback',
+  requirePermission({
+    resource: 'prompt_templates',
+    actions: ['read']
+  }),
+  body('errorMessage').notEmpty().withMessage('错误信息不能为空'),
+  validate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { errorMessage } = req.body;
+      const feedback = await promptTemplateService.generateErrorFeedback(errorMessage);
+
+      res.json({
+        success: true,
+        data: {
+          content: feedback,
+          originalError: errorMessage
+        },
+        requestId: req.id
+      });
+    } catch (error) {
+      logger.error('预览错误反馈模板失败:', error);
+      next(error);
+    }
+  }
+);
+
 export default router;

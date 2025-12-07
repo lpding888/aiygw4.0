@@ -147,6 +147,27 @@ class APIClient {
     );
   }
 
+  // 通用请求方法 (Wrapper)
+  public get<T = any>(url: string, config?: AxiosRequestConfig): Promise<APIResponse<T>> {
+    return this.client.get(url, config);
+  }
+
+  public post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<APIResponse<T>> {
+    return this.client.post(url, data, config);
+  }
+
+  public put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<APIResponse<T>> {
+    return this.client.put(url, data, config);
+  }
+
+  public delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<APIResponse<T>> {
+    return this.client.delete(url, config);
+  }
+
+  public patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<APIResponse<T>> {
+    return this.client.patch(url, data, config);
+  }
+
   private async refresh(refreshToken: string): Promise<string> {
     try {
       const resp = await axios.post<RefreshResp>(
@@ -514,7 +535,7 @@ class APIClient {
       systemPrompt?: string | null;
       resetApiKey?: boolean;
     }) => this.client.post<APIResponse>('/admin/ai-helper/config', data),
-    testConnection: (data?: { apiUrl?: string; apiKey?: string }) =>
+    testConnection: (data?: { apiUrl?: string; apiKey?: string; type?: string; protocol?: string; baseUrl?: string; model?: string }) =>
       this.client.post<APIResponse>('/admin/ai-helper/test', data),
     getModels: () => this.client.get<APIResponse>('/admin/ai-helper/models'),
   };
@@ -603,6 +624,32 @@ class APIClient {
       this.client.get<APIResponse>('/admin/pipeline-executions/health'),
   };
 
+  // ============ MCP API ============
+  mcp = {
+    listEndpoints: (params?: { page?: number; limit?: number; enabled?: boolean; healthy?: boolean }) =>
+      this.client.get<APIResponse>('/admin/mcp/endpoints', { params }),
+
+    getEndpoint: (id: string) =>
+      this.client.get<APIResponse>(`/admin/mcp/endpoints/${id}`),
+
+    createEndpoint: (data: {
+      name: string;
+      endpointUrl: string;
+      apiKey?: string;
+      description?: string;
+      protocolVersion?: string;
+    }) => this.client.post<APIResponse>('/admin/mcp/endpoints', data),
+
+    updateEndpoint: (id: string, data: any) =>
+      this.client.put<APIResponse>(`/admin/mcp/endpoints/${id}`, data),
+
+    deleteEndpoint: (id: string) =>
+      this.client.delete<APIResponse>(`/admin/mcp/endpoints/${id}`),
+
+    testEndpoint: (id: string) =>
+      this.client.post<APIResponse>(`/admin/mcp/endpoints/${id}/test`),
+  };
+
   // ============ Provider相关API ============
   provider = {
     // 获取已注册的Provider列表
@@ -678,6 +725,71 @@ class APIClient {
         name: string;
       };
     }) => this.client.post<APIResponse>('/distribution/withdraw', data),
+  };
+
+  adminPromptTemplates = {
+    list: (params?: { page?: number; limit?: number; status?: string; category?: string; search?: string }) =>
+      this.client.get<APIResponse>('/admin/prompt-templates', { params }),
+
+    get: (id: string) =>
+      this.client.get<APIResponse>(`/admin/prompt-templates/${id}`),
+
+    create: (data: any) =>
+      this.client.post<APIResponse>('/admin/prompt-templates', data),
+
+    update: (id: string, data: any) =>
+      this.client.put<APIResponse>(`/admin/prompt-templates/${id}`, data),
+
+    delete: (id: string) =>
+      this.client.delete<APIResponse>(`/admin/prompt-templates/${id}`),
+
+    publish: (id: string) =>
+      this.client.post<APIResponse>(`/admin/prompt-templates/${id}/publish`),
+
+    getHistory: (id: string) =>
+      this.client.get<APIResponse>(`/admin/prompt-templates/${id}/history`),
+
+    rollback: (id: string, data: { targetVersion: number; reason?: string }) =>
+      this.client.post<APIResponse>(`/admin/prompt-templates/${id}/rollback`, data),
+
+    refreshProtocol: () =>
+      this.client.post<APIResponse>('/admin/prompt-templates/ai-architect/refresh-protocol'),
+
+    getStats: () =>
+      this.client.get<APIResponse>('/admin/prompt-templates/stats'),
+  };
+
+  // ============ AI Architect API ============
+  aiArchitect = {
+    // 生成新的 Pipeline
+    generate: (data: {
+      userRequest: string;
+      category?: string;
+      metadata?: Record<string, any>;
+    }) => this.client.post<APIResponse>('/admin/architect/generate', data),
+
+    // 修改现有 Pipeline
+    modify: (data: {
+      currentPipeline: {
+        version: string;
+        meta: { name: string; description: string };
+        nodes: any[];
+        edges: any[];
+      };
+      modificationRequest: string;
+    }) => this.client.post<APIResponse>('/admin/architect/modify', data),
+
+    // 获取系统提示词预览
+    getSystemPrompt: () =>
+      this.client.get<APIResponse>('/admin/prompt-templates/ai-architect/system-prompt'),
+
+    // 获取修改提示词
+    getModifyPrompt: () =>
+      this.client.get<APIResponse>('/admin/prompt-templates/ai-architect/modify-prompt'),
+
+    // 预览错误反馈
+    previewErrorFeedback: (errorMessage: string) =>
+      this.client.post<APIResponse>('/admin/prompt-templates/ai-architect/preview-error-feedback', { errorMessage }),
   };
 
   adminDistribution = {

@@ -36,6 +36,7 @@ export const BREADCRUMB_MAP: Record<string, string> = {
   '/admin/forms/builder': '表单设计器',
   '/admin/pipelines': '流程管理',
   '/admin/pipelines/editor': '流程编辑器',
+  '/admin/architect': 'AI Architect',
 
   // 用户中心
   '/admin/users': '用户管理',
