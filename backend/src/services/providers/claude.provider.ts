@@ -44,17 +44,17 @@ interface ClaudeResponse {
 
 type ClaudeMessageContent =
   | {
-      type: 'image';
-      source: {
-        type: 'url';
-        url: string;
-        media_type?: string;
-      };
-    }
-  | {
-      type: 'text';
-      text: string;
+    type: 'image';
+    source: {
+      type: 'url';
+      url: string;
+      media_type?: string;
     };
+  }
+  | {
+    type: 'text';
+    text: string;
+  };
 
 interface ClaudeRequestPayload {
   model: string;
@@ -68,11 +68,17 @@ interface ClaudeRequestPayload {
 }
 
 class ClaudeProvider {
+  private config?: { apiKey?: string; baseURL?: string };
+
   private httpClient = createHttpClient({
     serviceName: 'claude',
     timeoutMs: 60000,
     maxRetries: 2
   });
+
+  constructor(config?: { apiKey?: string; baseURL?: string }) {
+    this.config = config;
+  }
 
   async execute(input: ClaudeProviderInput, taskId: string): Promise<ClaudeProviderResult> {
     const {
@@ -91,13 +97,15 @@ class ClaudeProvider {
     }
 
     // 获取API Key
-    const claudeApiKey = apiKey || process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
+    const claudeApiKey = apiKey || this.config?.apiKey || process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
     if (!claudeApiKey) {
       throw new Error('未配置Claude API Key，请设置环境变量 ANTHROPIC_API_KEY 或在参数中传入');
     }
 
+    const baseURL = this.config?.baseURL || 'https://api.anthropic.com/v1/messages';
+
     try {
-      logger.info(`[ClaudeProvider] 开始调用Claude taskId=${taskId} model=${model}`);
+      logger.info(`[ClaudeProvider] 开始调用Claude taskId=${taskId} model=${model} baseURL=${baseURL}`);
 
       // 构建消息内容
       const messageContent: ClaudeMessageContent[] = [];
@@ -142,7 +150,7 @@ class ClaudeProvider {
 
       const response = await this.httpClient.request<ClaudeResponse>({
         method: 'POST',
-        url: 'https://api.anthropic.com/v1/messages',
+        url: baseURL,
         headers: {
           'x-api-key': claudeApiKey,
           'anthropic-version': '2023-06-01',

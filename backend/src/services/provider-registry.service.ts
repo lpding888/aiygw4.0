@@ -1,5 +1,6 @@
 import logger from '../utils/logger.js';
 import providerWrapperService, { type HealthCheckResponse } from './provider-wrapper.service.js';
+import mcpEndpointsService from './mcp-endpoints.service.js';
 import imageProcessService from './imageProcess.service.js';
 import aiModelService from './aiModel.service.js';
 import OpenAIProvider from './providers/openai.provider.js';
@@ -7,6 +8,7 @@ import ClaudeProvider from './providers/claude.provider.js';
 import QwenProvider from './providers/qwen.provider.js';
 import DeepSeekProvider from './providers/deepseek.provider.js';
 import { db } from '../config/database.js';
+import encryptionUtils from '../utils/encryption.js';
 
 type ProviderConfig = Parameters<typeof providerWrapperService.registerProvider>[2];
 
@@ -96,6 +98,32 @@ class ProviderRegistryService {
     );
 
     logger.info('[ProviderRegistry] 内置Providers已注册: imageProcess, aiModel, llm_deepseek');
+
+    // MCP Provider Adapter
+    this.registerProvider('mcp', {
+      execute: async (params: any, nodeId: string) => {
+        const { _provider_ref, ...toolParams } = params;
+        if (!_provider_ref) throw new Error('MCP Provider requires _provider_ref');
+
+        // Format: endpointId:toolName
+        // We find the first colon to split, assuming endpointId has no colon.
+        const separatorIndex = _provider_ref.indexOf(':');
+        if (separatorIndex === -1) throw new Error(`Invalid MCP provider ref: ${_provider_ref}`);
+
+        const endpointId = _provider_ref.substring(0, separatorIndex);
+        const toolName = _provider_ref.substring(separatorIndex + 1);
+
+        // Allow userId to be passed or inferred?
+        // Now extracting from params if present (injected by caller) or context
+        const userId = params._userId || 'system';
+
+        return await mcpEndpointsService.executeTool(endpointId, toolName, toolParams, userId);
+      }
+    } as unknown as ProviderInstance, {
+      timeout: 300000, // 5 minutes for long running tools
+      retry: { maxAttempts: 0, baseDelay: 1000, maxDelay: 5000, backoff: 'linear' }
+    });
+    logger.info('[ProviderRegistry] Registered generic MCP provider');
   }
 
   /**
@@ -126,7 +154,8 @@ class ProviderRegistryService {
     return raw === null || raw === undefined ? true : Boolean(raw);
   }
 
-  private getProviderType(providerRef: string): string {
+  private getProviderType(providerRef: string, authType?: string): string {
+    if (authType && authType !== 'unknown') return authType;
     return providerRef.replace(/^llm_/, '');
   }
 
@@ -140,8 +169,15 @@ class ProviderRegistryService {
     }
 
     try {
-      const providerType = this.getProviderType(dbConfig.provider_ref);
-      const providerInstance = this.createProviderInstance(providerType);
+      const providerType = this.getProviderType(dbConfig.provider_ref, dbConfig.auth_type);
+
+      const apiKey = encryptionUtils.decrypt(dbConfig.credentials_encrypted);
+      const baseURL = dbConfig.endpoint_url;
+
+      const providerInstance = this.createProviderInstance(providerType, {
+        apiKey: apiKey || undefined,
+        baseURL: baseURL || undefined
+      });
       if (!providerInstance) {
         logger.warn(
           `[ProviderRegistry] 不支持的Provider类型: ${providerType}，跳过: ${dbConfig.provider_name}`
@@ -171,23 +207,23 @@ class ProviderRegistryService {
   /**
    * 根据类型创建Provider实例
    */
-  private createProviderInstance(type: string): ProviderInstance | null {
+  private createProviderInstance(type: string, config?: { apiKey?: string; baseURL?: string }): ProviderInstance | null {
     switch (type.toLowerCase()) {
       case 'openai':
       case 'gpt':
-        return new OpenAIProvider() as unknown as ProviderInstance;
+        return new OpenAIProvider(config) as unknown as ProviderInstance;
 
       case 'claude':
       case 'anthropic':
-        return new ClaudeProvider() as unknown as ProviderInstance;
+        return new ClaudeProvider(config) as unknown as ProviderInstance;
 
       case 'qwen':
       case 'tongyi':
       case 'dashscope':
-        return new QwenProvider() as unknown as ProviderInstance;
+        return new QwenProvider(config) as unknown as ProviderInstance;
 
       case 'deepseek':
-        return new DeepSeekProvider() as unknown as ProviderInstance;
+        return new DeepSeekProvider(config) as unknown as ProviderInstance;
 
       default:
         return null;

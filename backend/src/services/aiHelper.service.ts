@@ -46,6 +46,13 @@ type TestOverrides = {
   apiKey?: string | null;
 };
 
+type TestEmbeddingOverrides = {
+  protocol?: string;
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string;
+};
+
 const CONFIG_KEYS = {
   enabled: 'ai_guide_enabled',
   apiUrl: 'ai_guide_api_url',
@@ -247,6 +254,21 @@ class AiHelperService {
       systemPrompt: parsed.systemPrompt
     };
   }
+  async getEmbeddingRuntimeConfig(overrides: TestEmbeddingOverrides = {}) {
+    const [protocol, baseUrl, model, apiKey] = await Promise.all([
+      overrides.protocol ? Promise.resolve(overrides.protocol) : systemConfigService.get('AI_EMBEDDING_PROTOCOL'),
+      overrides.baseUrl ? Promise.resolve(overrides.baseUrl) : systemConfigService.get('AI_EMBEDDING_BASE_URL'),
+      overrides.model ? Promise.resolve(overrides.model) : systemConfigService.get('AI_EMBEDDING_MODEL'),
+      overrides.apiKey ? Promise.resolve(overrides.apiKey) : systemConfigService.get('AI_EMBEDDING_API_KEY'),
+    ]);
+
+    return {
+      protocol: String(protocol || 'openai'),
+      baseUrl: String(baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, ''),
+      model: String(model || 'text-embedding-3-small'),
+      apiKey: String(apiKey || '')
+    };
+  }
 
   private parseModelsResponse(payload: Record<string, unknown>): AiModelInfo[] {
     const rawData =
@@ -314,6 +336,41 @@ class AiHelperService {
       baseUrl: runtime.baseUrl,
       chatEndpoint: runtime.chatEndpoint
     };
+  }
+
+  async testEmbeddingConnection(overrides: TestEmbeddingOverrides = {}): Promise<{ success: boolean; message: string }> {
+    const config = await this.getEmbeddingRuntimeConfig(overrides);
+    if (!config.apiKey && config.protocol !== 'local') {
+      // Local might not need key, but others do
+      // But user might want to test without key if local.
+      // If protocol is openai/zhipu, likely need key.
+    }
+
+    const url = `${config.baseUrl}/embeddings`;
+
+    try {
+      const response = await this.httpClient.request({
+        method: 'POST',
+        url,
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        data: {
+          model: config.model,
+          input: "Test embedding connection"
+        },
+        timeoutMs: 10000
+      });
+
+      const data = response.data as any;
+      if (data && data.data && Array.isArray(data.data) && data.data.length > 0) {
+        return { success: true, message: 'Embedding connection successful' };
+      }
+      throw new Error('Invalid response format from Embedding API');
+    } catch (error: any) {
+      throw new Error(`Embedding Test Failed: ${error.message}`);
+    }
   }
 
   async saveConfig(payload: SaveConfigPayload, userId: string | null = null): Promise<void> {

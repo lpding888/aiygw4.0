@@ -4,6 +4,7 @@ import aiHelperService from '../aiHelper.service.js';
 
 export interface DeepSeekProviderInput {
   prompt: string;
+  messages?: Array<{ role: string; content: string }>; // 支持完整历史
   systemPrompt?: string;
   model?: string;
   temperature?: number;
@@ -36,6 +37,8 @@ interface DeepSeekResponse {
 }
 
 class DeepSeekProvider {
+  private config?: { apiKey?: string; baseURL?: string };
+
   private readonly httpClient = createHttpClient({
     serviceName: 'deepseek',
     timeoutMs: 60000,
@@ -44,9 +47,14 @@ class DeepSeekProvider {
 
   private readonly fallbackEndpoint = 'https://api.deepseek.com/chat/completions';
 
+  constructor(config?: { apiKey?: string; baseURL?: string }) {
+    this.config = config;
+  }
+
   async execute(input: DeepSeekProviderInput, taskId: string): Promise<DeepSeekProviderResult> {
     const {
       prompt,
+      messages,
       systemPrompt = 'You are a helpful assistant.',
       model,
       temperature = 0.3,
@@ -54,11 +62,12 @@ class DeepSeekProvider {
       apiKey
     } = input;
 
-    if (!prompt) {
-      throw new Error('缺少必要参数: prompt');
+    // 如果传入了 messages，则 prompt 可选 (但通常我们会把 prompt 追加到 messages 最后)
+    if (!prompt && (!messages || messages.length === 0)) {
+      throw new Error('缺少必要参数: prompt 或 messages');
     }
 
-    const runtimeConfig = await aiHelperService.getRuntimeConfig({ apiKey });
+    const runtimeConfig = await aiHelperService.getRuntimeConfig({ apiKey: apiKey || this.config?.apiKey });
     const deepseekApiKey = runtimeConfig.apiKey;
     if (!deepseekApiKey) {
       throw new Error(
@@ -66,12 +75,33 @@ class DeepSeekProvider {
       );
     }
 
-    const resolvedEndpoint = runtimeConfig.chatEndpoint ?? this.fallbackEndpoint;
+    const resolvedEndpoint = this.config?.baseURL || runtimeConfig.chatEndpoint || this.fallbackEndpoint;
     const resolvedModel = model ?? runtimeConfig.defaultModel ?? 'deepseek-chat';
+
+    // 构造最终的消息列表
+    let finalMessages: Array<{ role: string; content: string }> = [];
+
+    if (messages && messages.length > 0) {
+      finalMessages = [...messages];
+      // 如果有 prompt，追加到最后作为 user 消息
+      if (prompt) {
+        finalMessages.push({ role: 'user', content: prompt });
+      }
+      // 确保第一条是 system (如果输入里没有的话，且有默认systemPrompt)
+      if (finalMessages.length > 0 && finalMessages[0].role !== 'system') {
+        finalMessages.unshift({ role: 'system', content: systemPrompt });
+      }
+    } else {
+      // 旧模式：仅 prompt
+      finalMessages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt }
+      ];
+    }
 
     try {
       logger.info(
-        `[DeepSeekProvider] 开始调用 taskId=${taskId} model=${resolvedModel} endpoint=${resolvedEndpoint}`
+        `[DeepSeekProvider] 开始调用 taskId=${taskId} model=${resolvedModel} endpoint=${resolvedEndpoint} msgCount=${finalMessages.length}`
       );
 
       const response = await this.httpClient.request<DeepSeekResponse>({
@@ -83,16 +113,7 @@ class DeepSeekProvider {
         },
         data: {
           model: resolvedModel,
-          messages: [
-            {
-              role: 'system',
-              content: systemPrompt
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
+          messages: finalMessages,
           temperature,
           max_tokens: maxTokens
         }

@@ -16,6 +16,32 @@ import * as providerEndpointsRepo from '../repositories/providerEndpoints.repo.j
 import type { ProviderEndpoint } from '../repositories/providerEndpoints.repo.js';
 import logger from '../utils/logger.js';
 import { EventEmitter } from 'events';
+import systemConfigService from './systemConfig.service.js';
+
+/**
+ * Embedding请求接口
+ */
+export interface EmbeddingRequest {
+  model: string;
+  input: string | string[];
+}
+
+/**
+ * Embedding响应接口
+ */
+export interface EmbeddingResponse {
+  object: 'list';
+  data: Array<{
+    object: 'embedding';
+    embedding: number[];
+    index: number;
+  }>;
+  model: string;
+  usage: {
+    prompt_tokens: number;
+    total_tokens: number;
+  };
+}
 
 /**
  * Chat消息接口
@@ -139,7 +165,7 @@ class AIGatewayService {
 
       logger.info(
         `[AIGateway] Chat请求: provider=${provider.provider_ref} ` +
-          `model=${request.model} stream=${request.stream || false}`
+        `model=${request.model} stream=${request.stream || false}`
       );
 
       // 获取适配器
@@ -162,7 +188,7 @@ class AIGatewayService {
 
       logger.info(
         `[AIGateway] Chat响应成功: provider=${provider.provider_ref} ` +
-          `tokens=${adaptedResponse.usage?.total_tokens || 'N/A'}`
+        `tokens=${adaptedResponse.usage?.total_tokens || 'N/A'}`
       );
 
       return adaptedResponse;
@@ -359,6 +385,99 @@ class AIGatewayService {
 
     return headers;
   }
+
+  /**
+   * 生成向量 (Embeddings)
+   * 支持协议: OpenAI (以及兼容的 Local/OneAPI), Zhipu
+   * 配置来源: SystemConfig (AI_EMBEDDING_*)
+   */
+  async embedDocuments(texts: string[]): Promise<number[][]> {
+    try {
+      // 1. 获取动态配置
+      const config = await systemConfigService.getMultiple([
+        'AI_EMBEDDING_PROTOCOL', // openai | zhipu
+        'AI_EMBEDDING_BASE_URL',
+        'AI_EMBEDDING_API_KEY',
+        'AI_EMBEDDING_MODEL'
+      ]);
+
+      const protocol = (config['AI_EMBEDDING_PROTOCOL'] as string) || 'openai';
+      const baseUrl = (config['AI_EMBEDDING_BASE_URL'] as string) || 'https://api.openai.com/v1';
+      const apiKey = (config['AI_EMBEDDING_API_KEY'] as string) || '';
+      const model = (config['AI_EMBEDDING_MODEL'] as string) || 'text-embedding-3-small';
+
+      if (!apiKey && protocol !== 'local' && protocol !== 'openai') {
+        // local 可能不需要key，openai 肯定需要，但如果用 baseUrl 代理也不一定
+        // 简单日志提示即可
+        logger.warn('[AIGateway] Embedding API Key未配置');
+      }
+
+      logger.info(`[AIGateway] Embedding请求: protocol=${protocol} model=${model} count=${texts.length}`);
+
+      let vectors: number[][] = [];
+
+      if (protocol === 'openai' || protocol === 'local') {
+        vectors = await this.embedOpenAICompatible(texts, baseUrl, apiKey, model);
+      } else if (protocol === 'zhipu') {
+        vectors = await this.embedZhipu(texts, baseUrl, apiKey, model);
+      } else {
+        // 默认尝试 OpenAI 兼容模式
+        vectors = await this.embedOpenAICompatible(texts, baseUrl, apiKey, model);
+      }
+
+      return vectors;
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[AIGateway] Embedding请求失败:', err);
+      throw err;
+    }
+  }
+
+  private async embedOpenAICompatible(
+    texts: string[],
+    baseUrl: string,
+    apiKey: string,
+    model: string
+  ): Promise<number[][]> {
+    // 自动补全 /embeddings 路径 (如果用户只填了 hostname)
+    // 如果已有 /embeddings 结尾则不动
+    // 注意：有些 BaseURL 如 https://api.openai.com/v1 需要拼 /embeddings
+    // 有些如 http://localhost:11434/api/embeddings (Ollama) 可能不同，但这里假设 OpenAI 兼容格式
+    const url = baseUrl.endsWith('/embeddings')
+      ? baseUrl
+      : `${baseUrl.replace(/\/+$/, '')}/embeddings`;
+
+    const response = await axios.post<EmbeddingResponse>(
+      url,
+      { input: texts, model },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        timeout: 60000
+      }
+    );
+
+    if (!response.data?.data) {
+      throw new Error('Invalid embedding response');
+    }
+
+    return response.data.data.sort((a, b) => a.index - b.index).map((item) => item.embedding);
+  }
+
+  private async embedZhipu(
+    texts: string[],
+    baseUrl: string,
+    apiKey: string,
+    model: string
+  ): Promise<number[][]> {
+    const targetUrl = baseUrl && baseUrl !== 'https://api.openai.com/v1'
+      ? baseUrl
+      : 'https://open.bigmodel.cn/api/paas/v4';
+
+    return this.embedOpenAICompatible(texts, targetUrl, apiKey, model);
+  }
 }
 
 /**
@@ -529,6 +648,8 @@ class DeepSeekAdapter implements ProviderAdapter {
     }
   }
 }
+
+// ... (previous code)
 
 // 单例导出
 export const aiGateway = new AIGatewayService();

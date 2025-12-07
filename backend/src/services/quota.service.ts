@@ -249,6 +249,32 @@ class QuotaService {
     return deleted;
   }
 
+  /**
+   * 补偿机制: 自动取消超时的预留配额
+   * 用于处理 Worker 崩溃或系统故障导致配额一直处于 reserved 状态的情况
+   */
+  async compensateStuckReservations(timeoutMinutes = 30): Promise<number> {
+    const cutoffTime = new Date(Date.now() - timeoutMinutes * 60 * 1000);
+
+    // Find stuck reserved transactions
+    const stuck = await db('quota_transactions')
+      .where('phase', 'reserved')
+      .where('created_at', '<', cutoffTime)
+      .select('task_id');
+
+    let count = 0;
+    for (const row of stuck) {
+      try {
+        await this.cancel(row.task_id);
+        count++;
+        logger.info(`[QuotaCompensate] Auto-cancelled stuck reservation for task ${row.task_id}`);
+      } catch (err) {
+        logger.error(`[QuotaCompensate] Failed to cancel stuck task ${row.task_id}`, err);
+      }
+    }
+    return count;
+  }
+
   private async reserveWithTransaction(
     trx: Knex.Transaction,
     userId: string,

@@ -49,29 +49,35 @@ interface QwenResponse {
 
 type QwenMessage =
   | {
-      role: 'system';
-      content: string;
-    }
+    role: 'system';
+    content: string;
+  }
   | {
-      role: 'user';
-      content:
-        | string
-        | Array<
-            | {
-                text: string;
-              }
-            | {
-                image: string;
-              }
-          >;
-    };
+    role: 'user';
+    content:
+    | string
+    | Array<
+      | {
+        text: string;
+      }
+      | {
+        image: string;
+      }
+    >;
+  };
 
 class QwenProvider {
+  private config?: { apiKey?: string; baseURL?: string };
+
   private httpClient = createHttpClient({
     serviceName: 'qwen',
     timeoutMs: 60000,
     maxRetries: 2
   });
+
+  constructor(config?: { apiKey?: string; baseURL?: string }) {
+    this.config = config;
+  }
 
   async execute(input: QwenProviderInput, taskId: string): Promise<QwenProviderResult> {
     const {
@@ -89,13 +95,15 @@ class QwenProvider {
     }
 
     // 获取API Key
-    const qwenApiKey = apiKey || process.env.DASHSCOPE_API_KEY || process.env.QWEN_API_KEY;
+    const qwenApiKey = apiKey || this.config?.apiKey || process.env.DASHSCOPE_API_KEY || process.env.QWEN_API_KEY;
     if (!qwenApiKey) {
       throw new Error('未配置通义千问API Key，请设置环境变量 DASHSCOPE_API_KEY 或在参数中传入');
     }
 
+    const endpoint = this.config?.baseURL || 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';
+
     try {
-      logger.info(`[QwenProvider] 开始调用通义千问 taskId=${taskId} model=${model}`);
+      logger.info(`[QwenProvider] 开始调用通义千问 taskId=${taskId} model=${model} endpoint=${endpoint}`);
 
       // 构建消息
       const messages: QwenMessage[] = [];
@@ -124,7 +132,7 @@ class QwenProvider {
       // 调用通义千问API
       const response = await this.httpClient.request<QwenResponse>({
         method: 'POST',
-        url: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
+        url: endpoint,
         headers: {
           Authorization: `Bearer ${qwenApiKey}`,
           'Content-Type': 'application/json'

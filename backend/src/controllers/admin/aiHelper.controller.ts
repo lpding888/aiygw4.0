@@ -55,7 +55,22 @@ class AiHelperController {
 
   async testConnection(req: Request, res: Response, next: NextFunction) {
     try {
-      const { apiUrl, apiKey } = req.body as { apiUrl?: string; apiKey?: string };
+      const { apiUrl, apiKey, type, protocol, baseUrl, model } = req.body as any;
+
+      if (type === 'embedding') {
+        const result = await aiHelperService.testEmbeddingConnection({
+          protocol,
+          baseUrl: apiUrl || baseUrl, // Frontend uses apiUrl field or distinct fields? frontend/src/lib/api.ts says: testConnection(data). 
+          // Wait, frontend testConnection for AiHelper sends apiUrl/apiKey.
+          // For embedding, I should support what I will send from frontend.
+          // I will probably send { type: 'embedding', protocol, baseUrl, model, apiKey }
+          model,
+          apiKey
+        });
+        res.json({ success: true, data: result });
+        return;
+      }
+
       const result = await aiHelperService.testConnection({
         apiUrl,
         apiKey
