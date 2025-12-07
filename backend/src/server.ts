@@ -18,21 +18,41 @@ const { app } = await (async () => {
   return { app: appInstance };
 })();
 
-const server = app.listen(PORT, () => {
-  logger.info(`[SERVER] 🚀 启动成功 环境=${NODE_ENV} 端口=${PORT}`);
+// ... imports
+// ... imports
+import socketService from './services/socket.service.js';
+import { pipelineQueue } from './engine/queue/PipelineQueue.js';
+import { PipelineWorker } from './engine/worker/PipelineWorker.js';
+import { executionWatchdog } from './engine/watchdog/ExecutionWatchdog.js';
+
+// ... existing code
+
+const server = app.listen(4000, () => {
+  logger.info(`[SERVER] 🚀 启动成功 环境=${NODE_ENV} 端口=4000`);
   logger.info(`[SERVER] 💊 健康检查 http://localhost:${PORT}/health`);
+
+  // 初始化 Socket.IO
+  socketService.init(server);
+
+  // Initialize AI Factory Engine (Worker + Watchdog)
+  new PipelineWorker();
+  executionWatchdog.start();
+  logger.info('[SERVER] AI Factory Engine started (Worker + Watchdog)');
+
   startSchedulers();
 });
 
 const shutdown = (signal: NodeJS.Signals) => {
   logger.warn(`[SERVER] 收到 ${signal}，准备优雅关闭`);
   stopSchedulers();
+  executionWatchdog.stop(); // Stop Watchdog
   server.close(async (error) => {
     if (error) {
       logger.error('[SERVER] 关闭过程中出错', { error });
       process.exit(1);
     }
     try {
+      await pipelineQueue.close(); // Close Pipeline Queue
       await queueService.close();
     } catch (e) {
       logger.warn('[SERVER] 关闭队列服务异常', { error: e });

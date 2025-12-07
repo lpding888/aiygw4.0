@@ -272,7 +272,7 @@ class PipelineExecutionController {
         try {
           switch (operation) {
             case 'cancel':
-              await pipelineExecutionService.cancelExecution(executionId);
+              await pipelineExecutionService.cancelExecution(executionId, 'User cancelled via API');
               results.push({ execution_id: executionId, success: true, operation: 'cancelled' });
               success_count++;
               break;
