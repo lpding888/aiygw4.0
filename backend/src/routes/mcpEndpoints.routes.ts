@@ -8,8 +8,8 @@ const router = Router();
 // 所有路由都需要认证
 router.use(authenticate);
 
-// 资源标识
-const resource = 'mcp' as const;
+// 资源标识，保持与 RBAC 一致
+const resource = 'mcp_endpoints' as const;
 
 router.get(
   '/',

@@ -10,7 +10,7 @@ import type { AuthRequest } from '../middlewares/auth.middleware.js';
 /**
  * 端点状态
  */
-export type EndpointStatus = 'active' | 'inactive' | 'error' | 'testing';
+export type EndpointStatus = 'active' | 'inactive' | 'error';
 
 /**
  * 服务器类型
@@ -24,19 +24,23 @@ export interface McpEndpoint {
   id: string;
   name: string;
   description?: string | null;
-  server_type: ServerType;
-  connection_string: string;
-  enabled: boolean;
+  endpointUrl: string;
+  apiKeyId: string;
+  protocolVersion: string;
+  capabilities: string[];
+  supportedTools: ToolInfo[];
   status: EndpointStatus;
-  timeout?: number;
-  retry_count?: number;
-  last_connected_at?: Date | string | null;
-  last_tested_at?: Date | string | null;
-  server_info?: string | Record<string, unknown> | null;
-  available_tools?: string | unknown[] | null;
-  created_by?: string | number | null;
-  created_at: Date | string;
-  updated_at: Date | string;
+  healthy: boolean;
+  timeoutMs: number;
+  maxRetries: number;
+  enabled: boolean;
+  metadata?: Record<string, unknown>;
+  lastSyncAt?: Date | string | null;
+  lastError?: string | null;
+  createdBy?: string | number | null;
+  updatedBy?: string | number | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
 }
 
 /**
@@ -45,12 +49,9 @@ export interface McpEndpoint {
 export interface EndpointQueryOptions {
   page?: number;
   limit?: number;
-  server_type?: ServerType;
   status?: EndpointStatus;
-  enabled?: boolean | string;
-  search?: string;
-  sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
+  enabled?: boolean;
+  healthy?: boolean;
 }
 
 /**
@@ -58,12 +59,7 @@ export interface EndpointQueryOptions {
  */
 export interface EndpointListResponse {
   endpoints: McpEndpoint[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    pages: number;
-  };
+  total: number;
 }
 
 /**
@@ -71,13 +67,11 @@ export interface EndpointListResponse {
  */
 export interface EndpointTestResult {
   success: boolean;
-  execution_time_ms?: number;
-  timestamp?: string;
-  error_message?: string | null;
-  server_info?: Record<string, unknown> | null;
-  available_tools?: unknown[] | null;
-  responseTime?: number;
-  message?: string;
+  latency?: number;
+  toolsCount?: number;
+  sampleTools?: string[];
+  capabilities?: string[];
+  error?: string | null;
 }
 
 /**
@@ -123,9 +117,11 @@ export type AuthenticatedRequest = AuthRequest;
  */
 export interface EndpointStats {
   total: number;
-  active: number;
-  inactive: number;
-  error: number;
+  byStatus: Record<string, number>;
+  totalTools: number;
+  activeTools: number;
+  healthyEndpoints: number;
+  enabledEndpoints: number;
 }
 
 /**
