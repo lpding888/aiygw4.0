@@ -3,6 +3,7 @@ import logger from '../utils/logger.js';
 import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
 import cmsCacheService from './cmsCache.service.js';
+import protocolAnalyzer from './protocolAnalyzer.service.js';
 import type {
   PromptTemplate,
   TemplateQueryOptions,
@@ -547,6 +548,103 @@ class PromptTemplateService {
       variables: raw.variables ? JSON.parse(raw.variables as string) : null,
       metadata: raw.metadata ? JSON.parse(raw.metadata as string) : null
     } as PromptTemplate;
+  }
+
+  // ========== AI Architect 专用方法 ==========
+
+  /**
+   * 获取 AI Architect 系统提示词（带动态节点类型文档）
+   */
+  async getArchitectSystemPrompt(): Promise<string> {
+    const template = await this.getTemplateByKey('ai_architect_system');
+    const fewShotTemplate = await this.getTemplateByKey('ai_architect_few_shot');
+
+    // 动态注入节点类型文档
+    const nodeDocs = await protocolAnalyzer.generateNodeTypeDocumentation();
+    const supportedTypes = await protocolAnalyzer.getSupportedNodeTypes();
+
+    const variables = {
+      NODE_TYPE_DOCUMENTATION: nodeDocs,
+      SUPPORTED_NODE_TYPES: supportedTypes.join(', ')
+    };
+
+    const systemPrompt = this.replaceVariables(template.content, variables);
+    const fewShot = this.replaceVariables(fewShotTemplate.content, variables);
+
+    return `${systemPrompt}\n\n${fewShot}`;
+  }
+
+  /**
+   * 获取修改 Pipeline 的提示词
+   */
+  async getArchitectModifyPrompt(): Promise<string> {
+    const template = await this.getTemplateByKey('ai_architect_modify');
+    return template.content;
+  }
+
+  /**
+   * 生成错误反馈提示词（用于 Auto-Fix 循环）
+   */
+  async generateErrorFeedback(errorMessage: string): Promise<string> {
+    const template = await this.getTemplateByKey('ai_architect_error_feedback');
+    const supportedTypes = await protocolAnalyzer.getSupportedNodeTypes();
+
+    const variables = {
+      ERROR_MESSAGE: errorMessage,
+      SUPPORTED_NODE_TYPES: supportedTypes.join(', ')
+    };
+
+    return this.replaceVariables(template.content, variables);
+  }
+
+  /**
+   * 刷新 Protocol 文档（当 Protocol 更新时调用）
+   */
+  async refreshProtocolDocumentation(userId: string): Promise<void> {
+    logger.info('[PromptTemplate] Refreshing Protocol documentation...');
+
+    // 重新分析 Protocol
+    await protocolAnalyzer.getAnalysis();
+
+    // 更新系统提示词的元数据
+    const systemTemplate = await this.getTemplateByKey('ai_architect_system');
+
+    if (systemTemplate.metadata) {
+      const metadata = systemTemplate.metadata as any;
+      metadata.last_protocol_sync = new Date().toISOString();
+
+      await this.updateTemplate(
+        systemTemplate.id,
+        { metadata: metadata as TemplateMetadata },
+        userId
+      );
+    }
+
+    logger.info('[PromptTemplate] Protocol documentation refreshed successfully');
+  }
+
+  /**
+   * 渲染带协议上下文的模板
+   */
+  async renderWithProtocolContext(
+    key: string,
+    additionalVariables: Record<string, unknown> = {}
+  ): Promise<string> {
+    const template = await this.getTemplateByKey(key);
+
+    // 自动构建 Protocol 上下文
+    const nodeDocs = await protocolAnalyzer.generateNodeTypeDocumentation();
+    const supportedTypes = await protocolAnalyzer.getSupportedNodeTypes();
+
+    const autoContext = {
+      NODE_TYPE_DOCUMENTATION: nodeDocs,
+      SUPPORTED_NODE_TYPES: supportedTypes.join(', '),
+      PROTOCOL_VERSION: '1.0',
+      TIMESTAMP: new Date().toISOString()
+    };
+
+    const mergedVariables = { ...autoContext, ...additionalVariables };
+    return this.replaceVariables(template.content, mergedVariables);
   }
 }
 
