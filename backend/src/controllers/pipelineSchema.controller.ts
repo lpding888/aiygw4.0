@@ -47,11 +47,13 @@ class PipelineSchemaController {
         is_valid,
         search,
         sortBy = 'created_at',
-        sortOrder = 'desc'
+        sortOrder = 'desc',
+        legacy
       } = req.query as Record<string, string>;
 
       const parsedIsValid = parseBooleanQuery(is_valid);
       const parsedSortOrder: 'asc' | 'desc' = sortOrder === 'asc' ? 'asc' : 'desc';
+      const isLegacy = legacy === 'true' || legacy === '1';
 
       const result = await pipelineSchemaService.getSchemas({
         page: parseInt(String(page)),
@@ -61,7 +63,9 @@ class PipelineSchemaController {
         is_valid: parsedIsValid,
         search,
         sortBy,
-        sortOrder: parsedSortOrder
+        sortOrder: parsedSortOrder,
+        minSchemaVersion: isLegacy ? undefined : 1,
+        maxSchemaVersion: isLegacy ? 0 : undefined
       });
 
       res.json({ success: true, data: result, requestId: req.id });

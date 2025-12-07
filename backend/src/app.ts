@@ -57,7 +57,10 @@ const routeDefinitions: RouteDefinition[] = [
     modulePath: './routes/pipelineExecution.routes.js'
   },
   { mountPath: '/api/admin/ai-helper', modulePath: './routes/admin/ai-helper.routes.js' },
-  { mountPath: '/api/admin/mcp-endpoints', modulePath: './routes/mcpEndpoints.routes.js' },
+  {
+    mountPath: '/api/admin/mcp-endpoints',
+    modulePath: './routes/admin/mcp-endpoints.routes.js'
+  },
   { mountPath: '/api/buildingai', modulePath: './routes/buildingai-adaptor.routes.js' },
   { mountPath: '/api/membership', modulePath: './routes/membership.routes.js' },
   { mountPath: '/api/media', modulePath: './routes/media.routes.js' },
@@ -85,9 +88,16 @@ const routeDefinitions: RouteDefinition[] = [
   { mountPath: '/api/cms/providers', modulePath: './routes/cmsProviders.routes.js' },
   { mountPath: '/api/pipeline-schemas', modulePath: './routes/pipelineSchemas.routes.js' },
   { mountPath: '/api/pipeline-executions', modulePath: './routes/pipelineExecution.routes.js' },
-  { mountPath: '/api/mcp-endpoints', modulePath: './routes/mcpEndpoints.routes.js' },
+  {
+    mountPath: '/api/mcp-endpoints',
+    modulePath: './routes/mcpEndpoints.routes.js'
+  },
   { mountPath: '/api/prompt-templates', modulePath: './routes/promptTemplates.routes.js' },
-  { mountPath: '/api/tenants', modulePath: './routes/tenants.routes.js' }
+  { mountPath: '/api/tenants', modulePath: './routes/tenants.routes.js' },
+  { mountPath: '/api/admin/prompts', modulePath: './routes/admin/prompts-stub.routes.js' },
+  { mountPath: '/api/admin/analytics', modulePath: './routes/admin/analytics.routes.js' },
+  { mountPath: '/api/admin/feedback', modulePath: './routes/admin/feedback.routes.js' },
+  { mountPath: '/api/admin/experiments', modulePath: './routes/admin/experiments.routes.js' }
 ];
 
 const normalizeOrigin = (origin: string): string | null => {

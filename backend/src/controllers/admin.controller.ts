@@ -5,6 +5,7 @@ import logger from '../utils/logger.js';
 import encryptionUtils from '../utils/encryption.js';
 import { aiGateway } from '../services/ai-gateway.service.js';
 import pipelineSimulationService from '../services/pipelineSimulation.service.js'; // Import new simulation service
+import pipelineExecutionService from '../services/pipelineExecution.service.js';
 import type { SimulationPipeline } from '../services/pipelineSimulation.service.js';
 
 type CountValue = string | number | bigint | null | undefined;
@@ -114,6 +115,7 @@ class AdminController {
     this.getDistributorReferrals = this.getDistributorReferrals.bind(this);
     this.getDistributorCommissions = this.getDistributorCommissions.bind(this);
     this.initializeSystem = this.initializeSystem.bind(this);
+    this.generatePipeline = this.generatePipeline.bind(this);
   }
   async getUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -177,11 +179,11 @@ class AdminController {
     activeMembers: number;
     memberRate: string;
   }> {
-    const totalUsersCount = await fetchCount(db('users'));
-    const memberUsersCount = await fetchCount(db('users').where('isMember', true));
-    const activeMembersCount = await fetchCount(
-      db('users').where('isMember', true).where('quota_expireAt', '>', new Date())
-    );
+    const [totalUsersCount, memberUsersCount, activeMembersCount] = await Promise.all([
+      fetchCount(db('users')),
+      fetchCount(db('users').where('isMember', true)),
+      fetchCount(db('users').where('isMember', true).where('quota_expireAt', '>', new Date()))
+    ]);
 
     return {
       totalUsers: totalUsersCount,
@@ -301,12 +303,13 @@ class AdminController {
     processingTasks: number;
     successRate: string;
   }> {
-    const totalTasksCount = await fetchCount(db('tasks'));
-    const successTasksCount = await fetchCount(db('tasks').where('status', 'success'));
-    const failedTasksCount = await fetchCount(db('tasks').where('status', 'failed'));
-    const processingTasksCount = await fetchCount(
-      db('tasks').whereIn('status', ['pending', 'processing'])
-    );
+    const [totalTasksCount, successTasksCount, failedTasksCount, processingTasksCount] =
+      await Promise.all([
+        fetchCount(db('tasks')),
+        fetchCount(db('tasks').where('status', 'success')),
+        fetchCount(db('tasks').where('status', 'failed')),
+        fetchCount(db('tasks').whereIn('status', ['pending', 'processing']))
+      ]);
 
     return {
       totalTasks: totalTasksCount,
@@ -358,23 +361,27 @@ class AdminController {
    */
   async getOverview(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userStats = await this.getUserStats();
-      const taskStats = await this.getTaskStats();
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
 
-      // 获取订单统计
-      const totalOrders = await fetchCount(db('orders'));
-      const paidOrders = await fetchCount(db('orders').where('status', 'paid'));
+      const [
+        userStats,
+        taskStats,
+        totalOrders,
+        paidOrders,
+        todayUsers,
+        todayTasks
+      ] = await Promise.all([
+        this.getUserStats(),
+        this.getTaskStats(),
+        fetchCount(db('orders')),
+        fetchCount(db('orders').where('status', 'paid')),
+        fetchCount(db('users').where('created_at', '>=', todayStart)),
+        fetchCount(db('tasks').where('created_at', '>=', todayStart))
+      ]);
 
       // 计算总收入(简化,实际应从orders表的amount字段累加)
       const revenue = paidOrders * 99;
-
-      // 今日新增用户
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayUsers = await fetchCount(db('users').where('created_at', '>=', todayStart));
-
-      // 今日新增任务
-      const todayTasks = await fetchCount(db('tasks').where('created_at', '>=', todayStart));
 
       res.json({
         success: true,
@@ -797,6 +804,35 @@ ${context || '无'}
   }
 
   /**
+   * 智能生成Pipeline
+   * POST /api/admin/pipelines/generate
+   */
+  async generatePipeline(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { prompt } = req.body;
+      if (!prompt) {
+        res.status(400).json({
+          success: false,
+          error: { code: 4001, message: '提示词不能为空' }
+        });
+        return;
+      }
+
+      // 动态导入以避免循环依赖
+      const pipelineGeneratorService = (await import('../services/pipelineGenerator.service.js')).default;
+
+      const pipeline = await pipelineGeneratorService.generatePipeline(prompt);
+
+      res.json({
+        success: true,
+        data: pipeline
+      });
+    } catch (error) {
+      logAndNext(next, error, '[AdminController] 智能生成失败');
+    }
+  }
+
+  /**
    * 测试运行Pipeline
    * POST /api/admin/pipelines/test
    */
@@ -812,7 +848,7 @@ ${context || '无'}
         return;
       }
 
-      // 创建临时任务ID
+      // 临时任务ID
       const taskId = `test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const user = req.user as { id?: string } | undefined;
       if (!user?.id) {
@@ -824,65 +860,39 @@ ${context || '无'}
       }
       const userId = user.id;
 
-      // 记录测试任务（可选：存入数据库或仅在内存中运行）
-      // 这里为了简单起见，我们模拟创建一个临时任务记录，以便PipelineEngine可以使用
-      await db('tasks').insert({
-        id: taskId,
-        userId,
-        type: 'test_run',
-        status: 'pending',
-        input: JSON.stringify(input || {}),
-        created_at: new Date(),
-        updated_at: new Date()
-      });
+      // 1. 构建 V1 Protocol Schema
+      // PipelineBuilder 传来的 pipeline 通常包含 nodes/edges 等
+      // 我们需要将其包装成完整的 schema_definition
+      const pipelineSchemaV1 = {
+        version: "1.0",
+        meta: { name: "Test Execution" },
+        nodes: pipeline.nodes,
+        edges: pipeline.edges,
+        config: { max_duration_seconds: 300, concurrency_limit: 1 }
+      };
 
-      // 异步执行Pipeline
-      // 注意：这里我们需要修改PipelineEngine以支持直接传入Pipeline Schema，而不是从数据库读取
-      // 或者我们可以临时创建一个Feature/PipelineSchema记录
-
-      // 方案B：直接调用PipelineEngine的内部方法（需要PipelineEngine支持）
-      // 由于PipelineEngine当前是从数据库读取Schema，我们先创建一个临时的PipelineSchema记录
+      // 2. 插入临时 Schema (使用 schema_definition 字段)
       const tempPipelineId = `temp_schema_${taskId}`;
       await db('pipeline_schemas').insert({
-        pipeline_id: tempPipelineId,
-        steps: JSON.stringify(pipeline.nodes), // 注意：这里简化了，实际上需要转换nodes/edges为steps
+        pipeline_id: tempPipelineId, // Legacy ID 兼容
+        // 使用新引擎的核心字段
+        schema_definition: JSON.stringify(pipelineSchemaV1),
+        schema_version: 1, // 标记为新版 (Integer)
+        // 兼容旧字段（可选，防止非空约束）
+        steps: '[]',
         created_at: new Date(),
         updated_at: new Date()
       });
 
-      // 创建临时Feature
-      const tempFeatureId = `temp_feature_${taskId}`;
-      await db('feature_definitions').insert({
-        feature_id: tempFeatureId,
-        feature_key: tempFeatureId,
-        feature_name: 'Test Run',
-        pipeline_schema_ref: tempPipelineId,
-        quota_cost: 0,
-        created_at: new Date(),
-        updated_at: new Date()
-      });
-
-      // 触发执行
-      // 注意：executePipeline是异步的，我们这里不等待它完成，而是返回taskId
-      // 前端可以通过轮询任务状态来获取结果
-      import('../services/pipelineEngine.service.js').then(async (module) => {
-        const pipelineEngine = module.default;
-        try {
-          await pipelineEngine.executePipeline(taskId, tempFeatureId, input || {});
-        } catch (err) {
-          logger.error(`[TestRun] 执行失败 taskId=${taskId}`, err);
-        } finally {
-          // 清理临时数据 (可选，或者保留用于调试)
-          // await db('feature_definitions').where('feature_id', tempFeatureId).delete();
-          // await db('pipeline_schemas').where('pipeline_id', tempPipelineId).delete();
-        }
-      });
+      // 3. 触发新引擎执行
+      // dispatch 返回 runId
+      const runId = await pipelineExecutionService.dispatch(tempPipelineId, userId, input || {});
 
       res.json({
         success: true,
         data: {
-          taskId,
-          message: '测试任务已启动'
+          taskId: runId, // V2 使用 runId 作为 taskId
+          message: '测试任务已启动 (V2 Engine)'
         }
       });
     } catch (error) {

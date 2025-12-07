@@ -34,6 +34,8 @@ interface SchemaQueryOptions {
   search?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  minSchemaVersion?: number;
+  maxSchemaVersion?: number;
 }
 
 interface ValidationOptions {
@@ -122,7 +124,9 @@ class PipelineSchemaService {
         is_valid,
         search,
         sortBy = 'created_at',
-        sortOrder = 'desc'
+        sortOrder = 'desc',
+        minSchemaVersion,
+        maxSchemaVersion
       } = options;
 
       let query = db('pipeline_schemas').select([
@@ -131,6 +135,7 @@ class PipelineSchemaService {
         'description',
         'category',
         'version',
+        'schema_version',
         'status',
         'is_valid',
         'created_at',
@@ -140,6 +145,9 @@ class PipelineSchemaService {
       if (category) query = query.where('category', category);
       if (status) query = query.where('status', status);
       if (is_valid !== undefined) query = query.where('is_valid', String(is_valid) === 'true');
+      if (minSchemaVersion !== undefined) query = query.where('schema_version', '>=', minSchemaVersion);
+      if (maxSchemaVersion !== undefined) query = query.where('schema_version', '<=', maxSchemaVersion);
+
       if (search) {
         query = query.where(function () {
           this.where('name', 'like', `%${search}%`).orWhere('description', 'like', `%${search}%`);
@@ -154,6 +162,8 @@ class PipelineSchemaService {
           if (category) this.where('category', category);
           if (status) this.where('status', status);
           if (is_valid !== undefined) this.where('is_valid', String(is_valid) === 'true');
+          if (minSchemaVersion !== undefined) this.where('schema_version', '>=', minSchemaVersion);
+          if (maxSchemaVersion !== undefined) this.where('schema_version', '<=', maxSchemaVersion);
           if (search)
             this.where('name', 'like', `%${search}%`).orWhere('description', 'like', `%${search}%`);
         })
@@ -179,7 +189,7 @@ class PipelineSchemaService {
     try {
       const cacheKey = `schema:${id}`;
       return await cmsCacheService.getOrSet(this.CACHE_SCOPE, cacheKey, async () => {
-        const schema = await db('pipeline_schemas').where('id', id).first();
+        const schema = await db('pipeline_schemas').where('pipeline_id', id).first();
         if (!schema) throw AppError.custom(ERROR_CODES.TASK_NOT_FOUND, '流程模板不存在');
         return schema as PipelineSchema;
       });
