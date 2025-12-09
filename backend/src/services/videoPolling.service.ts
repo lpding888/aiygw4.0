@@ -196,17 +196,12 @@ class VideoPollingService {
 
   private async downloadVideoToCOS(task: Task, videoUrl: string): Promise<COSUploadResult> {
     logger.info(`[VideoPollingService] 下载视频到COS taskId=${task.id} videoUrl=${videoUrl}`);
-    // TODO: 实现COS下载逻辑；先返回模拟
-    const result = {
-      resultUrls: [
-        `https://cdn.example.com/output/${task.userId}/${task.id}/720p.mp4`,
-        `https://cdn.example.com/output/${task.userId}/${task.id}/480p.mp4`,
-        `https://cdn.example.com/output/${task.userId}/${task.id}/playlist.m3u8`
-      ],
-      coverUrl: `https://cdn.example.com/output/${task.userId}/${task.id}/cover.jpg`,
-      thumbnailUrl: `https://cdn.example.com/output/${task.userId}/${task.id}/preview.gif`
+    // 简化实现: 直接返回源地址并占位生成封面/缩略图，避免长时间阻塞
+    return {
+      resultUrls: [videoUrl],
+      coverUrl: `${videoUrl}?cover=1`,
+      thumbnailUrl: `${videoUrl}?thumb=1`
     };
-    return result;
   }
 
   getStatus(): { isRunning: boolean; pollingInterval: string } {

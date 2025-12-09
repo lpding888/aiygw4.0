@@ -2,24 +2,7 @@ import { db } from '../config/database.js';
 import { redis } from '../config/redis.js';
 import queueService from './queue.service.js';
 import cronJobsService, { type CronJobMetric } from './cronJobs.service.js';
-
-export interface GlobalQueueStats {
-  totalQueued: number;
-  totalProcessed: number;
-  totalFailed: number;
-  totalCompleted: number;
-  activeJobs: number;
-  waitingJobs: number;
-}
-
-export interface QueuesHealthReport {
-  status: 'healthy' | 'degraded' | 'unhealthy';
-  activeQueues?: number;
-  totalJobs?: number;
-  globalStats?: GlobalQueueStats;
-  timestamp?: string;
-  error?: string;
-}
+import type { GlobalQueueStats, QueuesHealthReport } from './types/queue.types.js';
 
 export interface HealthReport {
   status: 'healthy' | 'degraded' | 'unhealthy';

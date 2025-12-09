@@ -1,7 +1,21 @@
-import { db } from '../src/config/database.js';
+import { configManager } from '../src/config/config.manager.js';
+import { initializeDatabase, db } from '../src/config/database.js';
+
+async function initialize() {
+  // 1. 初始化配置管理器
+  await configManager.initialize();
+  console.log('[check_tables] ConfigManager 初始化完成');
+
+  // 2. 初始化数据库
+  await initializeDatabase();
+  console.log('[check_tables] Database 初始化完成');
+}
 
 async function checkTables() {
   try {
+    // 执行初始化
+    await initialize();
+
     // 查询所有以 feature 开头的表
     const tables = await db.raw(`
       SELECT TABLE_NAME
@@ -34,9 +48,14 @@ async function checkTables() {
     process.exit(0);
   } catch (error) {
     console.error('错误:', error);
-    await db.destroy();
+    try {
+      await db.destroy();
+    } catch {
+      // 忽略未初始化的情况
+    }
     process.exit(1);
   }
 }
 
 checkTables();
+

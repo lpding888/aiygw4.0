@@ -4,11 +4,9 @@ import type { NextRequest } from 'next/server';
 /**
  * Middleware - 路由守卫 + 国际化 + CSRF防护
  *
- * 艹，保护 /admin/* 路径，只允许 admin 用户访问！
+ * 保护 /admin/* 路径，只允许 admin 用户访问！
  * 同时支持中英文国际化！
- * 老王我已经修复了权限验证漏洞，并集成了i18n和CSRF防护！
- *
- * @author 老王
+ * 已修复权限验证漏洞，并集成了i18n和CSRF防护！
  */
 
 // 不安全的HTTP方法需要CSRF验证

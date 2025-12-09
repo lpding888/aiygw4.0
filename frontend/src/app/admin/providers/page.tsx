@@ -964,7 +964,12 @@ export default function ProvidersPage() {
           </Space>
         }
       >
-        <Form form={form} layout="vertical" onValuesChange={handleFormValuesChange}>
+        <Form
+          name="provider_config_form"
+          form={form}
+          layout="vertical"
+          onValuesChange={handleFormValuesChange}
+        >
           {/* Provider引用ID */}
           <Form.Item
             name="provider_ref"
@@ -1200,11 +1205,11 @@ export default function ProvidersPage() {
             name="enabled"
             label="启用状态"
             valuePropName="checked"
+            initialValue={true}
             tooltip="禁用后，该Provider不会被路由选择"
           >
             <Select
               placeholder="选择状态"
-              defaultValue={true}
               options={[
                 { label: '启用', value: true },
                 { label: '禁用', value: false },
@@ -1243,6 +1248,7 @@ export default function ProvidersPage() {
         okText="更新"
         cancelText="取消"
         width={500}
+        centered
       >
         <div
           style={{
@@ -1302,7 +1308,6 @@ export default function ProvidersPage() {
         footer={null}
         width={600}
         centered
-        style={{ top: 20 }}
         styles={{ body: { maxHeight: '80vh', overflowY: 'auto' } }}
       >
         <Alert

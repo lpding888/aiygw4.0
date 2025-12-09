@@ -1,142 +1,72 @@
-# AI照后端服务
+# AI 照后端服务说明
 
-服装AI处理 SaaS 平台的后端API服务
+服装 AI 处理 SaaS 的后端 API，基于 Node.js/Express + MySQL + Redis + BullMQ。
 
-## 快速开始
+## 架构总览
+- **API 层**：Express 路由与控制器，统一经 `middlewares` 处理鉴权/鉴权、限流与错误上报。
+- **服务层**：`services/` 内聚业务（认证、支付、缓存、模板、健康检查等），遵循单一职责。
+- **数据访问层**：Knex 仓储（`repositories/`），负责 SQL 与脱敏/加密。
+- **异步任务**：BullMQ 队列（`queue.service.ts`）+ Worker（如 PipelineWorker、VideoPolling）。
+- **观测与安全**：Winston 日志、Prometheus 指标、Sentry/Slack Webhook（需配置）、BullBoard 只读监控。
+- **存储**：MySQL 8 (数据)、Redis 6 (缓存/队列)、COS (对象存储)。
 
-### 1. 安装依赖
-
+## 环境与快速开始
 ```bash
 npm install
-```
-
-### 2. 配置环境变量
-
-```bash
-# 复制环境变量模板
-cp .env.example .env
-
-# 编辑.env文件,填入真实配置
-vim .env
-```
-
-### 3. 初始化数据库
-
-```bash
-# 运行数据库迁移
+cp .env.example .env   # 按需填写 DB/Redis/COS/SMS/微信 等配置
 npm run db:migrate
+npm run dev            # http://localhost:3000
 ```
+关键环境变量：`DB_*`、`REDIS_*`、`COS_*`、`JWT_SECRET`、`SMTP_*`、`TENCENT_SMS_*`、`WECHAT_*`、`ENABLE_BULL_BOARD`。
 
-### 4. 启动开发服务器
+## API 文档
+- Swagger UI：`/api-docs`，JSON：`/api-docs.json`（`src/config/swagger.config.ts`）。
+- 主要路由：`src/routes`、管理端路由在 `src/routes/admin`。
+- 若需生成静态文档，可在根目录补充 `API_DOCUMENTATION.md`，并同步 Swagger schema。
 
+## 代码注释与规范
+- 公共方法、导出接口/类型需带 JSDoc（说明参数/返回值/异常）。示例：
+  ```ts
+  /**
+   * 获取模板详情
+   * @param id 模板ID
+   * @returns 模板实体，不存在时抛 AppError
+   */
+  async getTemplateById(id: string): Promise<PromptTemplate> { ... }
+  ```
+- 对安全/性能敏感的逻辑（缓存失效、外部调用重试、幂等保证）需写简短说明。
+- 统一使用 ESLint/Prettier (`npm run lint` / `npm run format`)。
+
+## 部署（生产）
 ```bash
-npm run dev
+npm ci
+npm run build
+npm run db:migrate           # 确保迁移完成
+NODE_ENV=production pm2 start ecosystem.config.js
+pm2 logs                     # 观察启动/错误日志
 ```
+运维要点：
+- 配置 BullBoard 认证：`ENABLE_BULL_BOARD=true` 且设置 `BULL_BOARD_WHITELIST_IPS` / `BULL_BOARD_USERNAME` / `BULL_BOARD_PASSWORD`。
+- 监控：Prometheus 抓取 `/metrics`；Sentry/Slack Webhook 配置 `NOTIFICATION_WEBHOOK_URL`。
+- 短信/邮件：生产必须配置 `TENCENT_SMS_*`、`SMTP_*`；COS/支付/微信等外部依赖需对应密钥。
 
-服务将在 http://localhost:3000 启动
+## 故障排查
+- **迁移失败**：检查 `DB_*` 连接、权限；使用 `npm run db:rollback` 回滚重试。
+- **Redis/队列异常**：确认 `REDIS_HOST/PORT`，查看 `/admin/queues`（已加只读+认证）。
+- **签名/鉴权错误**：JWT 依赖 `JWT_SECRET`；微信回调需 `WECHAT_OFFICIAL_TOKEN`。
+- **外部调用失败**：COS/SMS/支付等检查密钥、地域、网络出口；查看 `notification.service` 推送的告警。
+- **性能/缓存**：LRU + Redis 双层缓存，遇到不一致可调用相关 `deletePattern` 或版本化缓存失效接口。
 
-## 可用命令
-
+## 可用脚本
 ```bash
-npm start          # 生产环境启动
-npm run dev        # 开发环境启动(热重载)
-npm run db:migrate # 运行数据库迁移
-npm run db:rollback # 回滚数据库迁移
-npm run db:seed    # 运行数据库种子
-npm run lint       # 代码检查
-npm run format     # 代码格式化
+npm start              # 生产启动
+npm run dev            # 开发热重载
+npm run db:migrate     # 迁移
+npm run db:rollback    # 回滚
+npm run lint           # 代码检查
+npm run format         # 代码格式化
+npm test               # 单测（如配置了用例）
 ```
-
-## 邮箱验证登录/注册
-
-现在支持通过邮箱验证码完成注册、登录以及找回密码，便于海外用户或无手机号的场景。
-
-- `POST /api/auth/email/send-code`：发送邮箱验证码（需要配置 SMTP）
-- `POST /api/auth/email/register`：邮箱 + 验证码注册并设置密码
-- `POST /api/auth/email/login`：邮箱验证码登录，未注册将自动创建账号
-- `POST /api/auth/email/reset-password`：邮箱验证码重置密码
-
-> ⚠️ 生产环境必须在 `.env` 中配置 `SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD/SMTP_FROM` 等参数，否则无法发送邮箱验证码。
-
-## 项目结构
-
-```
-backend/
-├── src/
-│   ├── config/           # 配置文件
-│   │   ├── database.js   # 数据库配置
-│   │   └── cos.js        # COS配置
-│   ├── controllers/      # 控制器
-│   ├── services/         # 业务逻辑
-│   ├── models/           # 数据模型
-│   ├── middlewares/      # 中间件
-│   │   ├── auth.middleware.js
-│   │   └── errorHandler.middleware.js
-│   ├── routes/           # 路由
-│   ├── utils/            # 工具函数
-│   │   ├── logger.js     # 日志工具
-│   │   └── generator.js  # ID生成器
-│   ├── jobs/             # 后台任务
-│   ├── db/               # 数据库
-│   │   ├── migrations/   # 迁移文件
-│   │   └── seeds/        # 种子文件
-│   ├── app.js            # Express应用
-│   └── server.js         # 启动入口
-├── logs/                 # 日志目录
-├── .env.example          # 环境变量模板
-├── .gitignore
-├── knexfile.js           # Knex配置
-├── ecosystem.config.js   # PM2配置
-└── package.json
-```
-
-## 数据库表
-
-- `users` - 用户表
-- `orders` - 订单表
-- `tasks` - 任务表
-- `verification_codes` - 验证码表
-
-## API文档
-
-详细的API文档请参考: [API_DOCUMENTATION.md](../API_DOCUMENTATION.md)
-
-## 部署
-
-### 使用PM2部署
-
-```bash
-# 安装PM2
-npm install -g pm2
-
-# 启动应用
-pm2 start ecosystem.config.js
-
-# 查看日志
-pm2 logs
-
-# 重启应用
-pm2 restart ai-photo-api
-
-# 停止应用
-pm2 stop ai-photo-api
-```
-
-## 技术栈
-
-- **框架**: Express.js
-- **数据库**: MySQL 8.0 + Knex.js
-- **认证**: JWT
-- **文件存储**: 腾讯云COS
-- **日志**: Winston
-- **进程管理**: PM2
-
-## 环境要求
-
-- Node.js >= 18.0.0
-- MySQL >= 8.0
-- Redis >= 6.0 (用于Bull队列)
 
 ## 许可证
-
-[待定]
+待定

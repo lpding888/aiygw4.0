@@ -23,6 +23,8 @@ import metricsMiddleware from './middlewares/metrics.middleware.js';
 import metricsService from './services/metrics.service.js';
 import queueService from './services/queue.service.js';
 import providerRegistryService from './services/provider-registry.service.js';
+import imageProcessService from './services/imageProcess.service.js';
+import aiModelService from './services/aiModel.service.js';
 
 type RouterModule = { default?: express.Router } | express.Router;
 
@@ -253,25 +255,42 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Express
     res.send(swaggerSpec);
   });
 
-  // P1-XXX: BullMQ 队列监控面板（艹！只在非生产环境默认开启，生产环境请用Nginx/IP白名单保护）
+  // BullMQ 队列监控面板 (已加固安全保护: IP白名单 + Basic Auth)
   const enableQueuesDashboard =
     process.env.ENABLE_BULL_BOARD === 'true' || process.env.NODE_ENV !== 'production';
   if (enableQueuesDashboard) {
     try {
+      const { bullBoardAuthMiddleware, bullBoardReadOnlyMiddleware } = await import(
+        './middlewares/bullboard-auth.middleware.js'
+      );
+
       const serverAdapter = new ExpressAdapter();
       serverAdapter.setBasePath('/admin/queues');
 
-      const bullQueues = queueService
-        .getAllQueues()
-        .map((q) => new BullMQAdapter(q, { readOnlyMode: false }));
+      // 生产环境默认只读模式，除非显式禁用
+      const readOnlyMode = process.env.NODE_ENV === 'production' && process.env.BULL_BOARD_READONLY !== 'false';
+
+      const bullQueues = (await queueService.getAllQueues()).map(
+        (q) => new BullMQAdapter(q, { readOnlyMode })
+      );
 
       createBullBoard({
         queues: bullQueues,
         serverAdapter
       });
 
+      // 应用安全中间件: IP白名单 + Basic Auth
+      app.use('/admin/queues', bullBoardAuthMiddleware);
+      if (readOnlyMode) {
+        app.use('/admin/queues', bullBoardReadOnlyMiddleware);
+      }
       app.use('/admin/queues', serverAdapter.getRouter());
-      logger.info('[BullBoard] 队列监控面板已挂载在 /admin/queues');
+
+      logger.info('[BullBoard] 队列监控面板已挂载', {
+        path: '/admin/queues',
+        readOnlyMode,
+        security: 'IP白名单 + Basic Auth'
+      });
     } catch (error) {
       logger.error('[BullBoard] 初始化队列监控面板失败', { error });
     }
@@ -279,7 +298,10 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Express
 
   // 初始化Provider Registry (从数据库加载LLM Providers)
   try {
-    await providerRegistryService.initialize();
+    await providerRegistryService.initialize({
+      imageProcess: imageProcessService as unknown as Record<string, unknown>,
+      aiModel: aiModelService as unknown as Record<string, unknown>
+    });
   } catch (error) {
     logger.error('[App] Provider Registry初始化失败', { error });
   }

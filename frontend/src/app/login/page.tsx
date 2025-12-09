@@ -11,7 +11,8 @@ import {
   ArrowRightOutlined,
   InfoCircleOutlined,
   GithubOutlined,
-  WechatOutlined
+  WechatOutlined,
+  GiftOutlined
 } from '@ant-design/icons';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -104,7 +105,11 @@ function LoginPageContent() {
       let response: any;
 
       if (type === 'phone') {
-        response = await api.auth.loginWithCode(values.account, values.code, initialReferralCode || undefined);
+        response = await api.auth.loginWithCode(
+          values.account,
+          values.code,
+          initialReferralCode || values.referrerCode || undefined
+        );
       } else if (type === 'email') {
         // Try login first
         response = await api.auth.loginWithEmail(values.account, values.code);
@@ -258,6 +263,15 @@ function LoginPageContent() {
                   </Button>
                 </div>
               </Form.Item>
+
+              <Form.Item name="referrerCode">
+                <Input
+                  placeholder="邀请码 (选填)"
+                  prefix={<GiftOutlined style={{ color: '#999' }} />}
+                  className="vision-input"
+                />
+              </Form.Item>
+
               <Form.Item>
                 <Button type="primary" htmlType="submit" block loading={loading} className="btn-vision-lg">
                   登录 / 注册 <ArrowRightOutlined />

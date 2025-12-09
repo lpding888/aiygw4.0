@@ -5,9 +5,6 @@
  * - 图片处理（缩放、裁剪、水印等）
  * - 视频处理（转码、截帧、水印等）
  * - 内容审核（图片/视频/文本）
- *
- * TODO: 实现具体的腾讯云CI SDK调用逻辑
- * 艹，这个需要集成腾讯云SDK，目前是符合IProvider规范的占位实现！
  */
 
 import { BaseProvider } from '../base/base-provider.js';
@@ -140,41 +137,8 @@ export class TencentCiProvider extends BaseProvider {
         objectKey
       });
 
-      // TODO: 实现腾讯云CI SDK调用
-      // 例如：使用cos-nodejs-sdk-v5或专门的CI SDK
-      //
-      // 示例代码：
-      // const COS = require('cos-nodejs-sdk-v5');
-      // const cos = new COS({
-      //   SecretId: auth?.secretId || process.env.TENCENT_SECRET_ID,
-      //   SecretKey: auth?.secretKey || process.env.TENCENT_SECRET_KEY,
-      // });
-      //
-      // 根据action执行不同的操作：
-      // - imageProcess: 图片处理
-      // - videoProcess: 视频处理
-      // - contentAudit: 内容审核
-      // - imageCompress: 图片压缩
-      // - imageWatermark: 图片水印
-
-      this.logger.warn(`[${this.key}] TencentCiProvider尚未实现，返回占位结果`, {
-        taskId: context.taskId
-      });
-
-      // 艹，占位实现（返回成功但提示未实现）
-      return {
-        success: true,
-        data: {
-          message: 'TencentCiProvider尚未实现，请先集成腾讯云CI SDK',
-          action,
-          bucket,
-          region,
-          objectKey,
-          params
-          // TODO: 实现后应该返回真实的处理结果
-          // 例如：processedUrl, taskId, status等
-        }
-      };
+      // 为避免静默成功，这里直接返回明确的未实现错误
+      throw new Error('Tencent CI 未集成，需接入 cos-nodejs-sdk-v5/CI API 后再使用');
     } catch (error: unknown) {
       // 艹，腾讯云CI任务失败了！
       const err = error instanceof Error ? error : new Error(String(error));
@@ -209,9 +173,12 @@ export class TencentCiProvider extends BaseProvider {
    * @returns Promise<boolean> - true表示健康
    */
   public async healthCheck(): Promise<boolean> {
-    // TODO: 实现真正的健康检查（可选）
-    // 例如：调用腾讯云API检查服务状态
-    return true;
+    // 简单检查必需的环境变量是否存在
+    const hasCreds = Boolean(process.env.TENCENT_SECRET_ID && process.env.TENCENT_SECRET_KEY);
+    if (!hasCreds) {
+      this.logger.warn('[tencent-ci] 未配置 TENCENT_SECRET_ID/KEY，健康检查判定为不健康');
+    }
+    return hasCreds;
   }
 }
 

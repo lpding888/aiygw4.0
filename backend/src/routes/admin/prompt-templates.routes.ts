@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
-import * as promptTemplateService from '../../services/prompt-template.service.js';
+import promptTemplateService from '../../services/prompt-template.service.js';
 import { authenticate as authenticateToken } from '../../middlewares/auth.middleware.js';
 import { requireAdmin } from '../../middlewares/adminAuth.middleware.js';
 import { requirePermission } from '../../middlewares/require-permission.middleware.js';

@@ -75,7 +75,16 @@ class DeepSeekProvider {
       );
     }
 
-    const resolvedEndpoint = this.config?.baseURL || runtimeConfig.chatEndpoint || this.fallbackEndpoint;
+    let endpoint = this.config?.baseURL || runtimeConfig.chatEndpoint || this.fallbackEndpoint;
+
+    // 智能修正: 如果是 DeepSeek 且 URL 不包含 chat/completions，自动追加
+    if (endpoint.includes('deepseek.com') && !endpoint.includes('/chat/completions')) {
+      // 去除末尾斜杠
+      endpoint = endpoint.replace(/\/$/, '');
+      endpoint = `${endpoint}/chat/completions`;
+    }
+
+    const resolvedEndpoint = endpoint;
     const resolvedModel = model ?? runtimeConfig.defaultModel ?? 'deepseek-chat';
 
     // 构造最终的消息列表

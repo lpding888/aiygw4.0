@@ -1,8 +1,6 @@
 import logger from '../utils/logger.js';
 import providerWrapperService, { type HealthCheckResponse } from './provider-wrapper.service.js';
 import mcpEndpointsService from './mcp-endpoints.service.js';
-import imageProcessService from './imageProcess.service.js';
-import aiModelService from './aiModel.service.js';
 import OpenAIProvider from './providers/openai.provider.js';
 import ClaudeProvider from './providers/claude.provider.js';
 import QwenProvider from './providers/qwen.provider.js';
@@ -11,6 +9,34 @@ import { db } from '../config/database.js';
 import encryptionUtils from '../utils/encryption.js';
 
 type ProviderConfig = Parameters<typeof providerWrapperService.registerProvider>[2];
+
+/**
+ * Provider 能力声明（用于 Agent 节点动态感知）
+ */
+export interface ProviderCapabilities {
+  tool_use: boolean;           // 是否支持 Function Calling / Tool Use
+  parallel_tool_use: boolean;  // 是否支持并行工具调用
+  vision: boolean;             // 是否支持图片输入
+  streaming: boolean;          // 是否支持流式输出
+  json_mode: boolean;          // 是否支持 JSON 输出模式
+  max_context: number;         // 最大上下文窗口
+  max_output: number;          // 最大输出 Token
+}
+
+/**
+ * 默认模型能力矩阵（数据库未配置时的 fallback）
+ */
+const DEFAULT_CAPABILITIES: Record<string, ProviderCapabilities> = {
+  'gpt-4o': { tool_use: true, parallel_tool_use: true, vision: true, streaming: true, json_mode: true, max_context: 128000, max_output: 16384 },
+  'gpt-4-turbo': { tool_use: true, parallel_tool_use: true, vision: true, streaming: true, json_mode: true, max_context: 128000, max_output: 4096 },
+  'gpt-3.5-turbo': { tool_use: true, parallel_tool_use: true, vision: false, streaming: true, json_mode: true, max_context: 16385, max_output: 4096 },
+  'deepseek-chat': { tool_use: true, parallel_tool_use: true, vision: false, streaming: true, json_mode: true, max_context: 128000, max_output: 8192 },
+  'deepseek-reasoner': { tool_use: false, parallel_tool_use: false, vision: false, streaming: true, json_mode: false, max_context: 64000, max_output: 8192 },
+  'claude-3-5-sonnet': { tool_use: true, parallel_tool_use: true, vision: true, streaming: true, json_mode: false, max_context: 200000, max_output: 8192 },
+  'claude-3-opus': { tool_use: true, parallel_tool_use: true, vision: true, streaming: true, json_mode: false, max_context: 200000, max_output: 4096 },
+  'qwen-turbo': { tool_use: true, parallel_tool_use: false, vision: false, streaming: true, json_mode: true, max_context: 128000, max_output: 8192 },
+  'qwen-plus': { tool_use: true, parallel_tool_use: true, vision: true, streaming: true, json_mode: true, max_context: 128000, max_output: 8192 },
+};
 
 // 数据库中的Provider配置结构（旧表结构）
 interface DbProviderConfig {
@@ -22,16 +48,20 @@ interface DbProviderConfig {
   created_at: Date;
   updated_at: Date;
   enabled?: boolean | number | null;
+  capabilities?: string | ProviderCapabilities | null; // JSON 或已解析对象
 }
 
 interface ProviderInstance {
   [key: string]: unknown;
 }
 
+type BuiltinProviders = Partial<Record<'imageProcess' | 'aiModel', ProviderInstance>>;
+
 class ProviderRegistryService {
   private registeredProviders = new Map<string, ProviderInstance>();
   private providerConfigs = new Map<string, ProviderConfig>();
   private initialized = false;
+  private builtinProviders: BuiltinProviders = {};
   private readonly externalProviderConfig: ProviderConfig = {
     circuitBreaker: {
       failureThreshold: 3,
@@ -50,11 +80,12 @@ class ProviderRegistryService {
     cache: { ttl: 300, enabled: false }
   };
 
-  async initialize() {
+  async initialize(builtinProviders: BuiltinProviders = {}) {
     if (this.initialized) {
       logger.warn('[ProviderRegistry] 已初始化，跳过');
       return;
     }
+    this.builtinProviders = builtinProviders;
     logger.info('[ProviderRegistry] 开始注册Provider...');
     await this.registerBuiltinProviders();
     await this.registerExternalProviders();
@@ -63,33 +94,51 @@ class ProviderRegistryService {
   }
 
   private async registerBuiltinProviders() {
-    // 图片处理服务
-    this.registerProvider('imageProcess', imageProcessService as unknown as ProviderInstance, {
-      circuitBreaker: {
-        failureThreshold: 3,
-        resetTimeout: 30000,
-        monitoringPeriod: 10000,
-        halfOpenMaxCalls: 2,
-        successThreshold: 2
-      },
-      retry: { maxAttempts: 2, baseDelay: 1000, maxDelay: 8000, backoff: 'exponential' },
-      timeout: 60000,
-      cache: { ttl: 300, enabled: true }
-    });
+    const registered: string[] = [];
 
-    // 原有AI模型服务（RunningHub）
-    this.registerProvider('aiModel', aiModelService as unknown as ProviderInstance, {
-      circuitBreaker: {
-        failureThreshold: 2,
-        resetTimeout: 60000,
-        monitoringPeriod: 15000,
-        halfOpenMaxCalls: 1,
-        successThreshold: 1
-      },
-      retry: { maxAttempts: 1, baseDelay: 2000, maxDelay: 5000, backoff: 'linear' },
-      timeout: 120000,
-      cache: { ttl: 600, enabled: true }
-    });
+    if (this.builtinProviders.imageProcess) {
+      this.registerProvider(
+        'imageProcess',
+        this.builtinProviders.imageProcess,
+        {
+          circuitBreaker: {
+            failureThreshold: 3,
+            resetTimeout: 30000,
+            monitoringPeriod: 10000,
+            halfOpenMaxCalls: 2,
+            successThreshold: 2
+          },
+          retry: { maxAttempts: 2, baseDelay: 1000, maxDelay: 8000, backoff: 'exponential' },
+          timeout: 60000,
+          cache: { ttl: 300, enabled: true }
+        }
+      );
+      registered.push('imageProcess');
+    } else {
+      logger.warn('[ProviderRegistry] 跳过注册 imageProcess: 未提供内置实现');
+    }
+
+    if (this.builtinProviders.aiModel) {
+      this.registerProvider(
+        'aiModel',
+        this.builtinProviders.aiModel,
+        {
+          circuitBreaker: {
+            failureThreshold: 2,
+            resetTimeout: 60000,
+            monitoringPeriod: 15000,
+            halfOpenMaxCalls: 1,
+            successThreshold: 1
+          },
+          retry: { maxAttempts: 1, baseDelay: 2000, maxDelay: 5000, backoff: 'linear' },
+          timeout: 120000,
+          cache: { ttl: 600, enabled: true }
+        }
+      );
+      registered.push('aiModel');
+    } else {
+      logger.warn('[ProviderRegistry] 跳过注册 aiModel: 未提供内置实现');
+    }
 
     this.registerProvider(
       'llm_deepseek',
@@ -97,7 +146,9 @@ class ProviderRegistryService {
       this.externalProviderConfig
     );
 
-    logger.info('[ProviderRegistry] 内置Providers已注册: imageProcess, aiModel, llm_deepseek');
+    logger.info(
+      `[ProviderRegistry] 内置Providers已注册: ${registered.length > 0 ? registered.join(', ') + ', ' : ''}llm_deepseek`
+    );
 
     // MCP Provider Adapter
     this.registerProvider('mcp', {
@@ -248,6 +299,13 @@ class ProviderRegistryService {
     return providerWrapperService.getAllProviderStates();
   }
 
+  /**
+   * 获取所有 Provider 配置（供 ProtocolAnalyzer 使用）
+   */
+  getProviderConfigs(): Map<string, ProviderConfig> {
+    return new Map(this.providerConfigs);
+  }
+
   async execute(
     providerName: string,
     methodName: string,
@@ -277,7 +335,77 @@ class ProviderRegistryService {
       logger.info(`[ProviderRegistry] Provider已禁用并注销: ${providerRef}`);
     }
   }
+
+  /**
+   * 获取 Provider 能力（优先从数据库，fallback 到默认矩阵）
+   */
+  async getProviderCapabilities(providerRef: string): Promise<ProviderCapabilities | null> {
+    try {
+      // 尝试从数据库获取
+      const dbConfig = await db('provider_endpoints')
+        .where({ provider_ref: providerRef })
+        .first() as DbProviderConfig | undefined;
+
+      if (dbConfig?.capabilities) {
+        // 如果是字符串则解析
+        return typeof dbConfig.capabilities === 'string'
+          ? JSON.parse(dbConfig.capabilities)
+          : dbConfig.capabilities;
+      }
+
+      // Fallback: 从 providerRef 提取模型名并查默认矩阵
+      // 例如 llm_deepseek_chat -> deepseek-chat
+      const modelName = this.extractModelName(providerRef);
+      return DEFAULT_CAPABILITIES[modelName] || null;
+    } catch (error) {
+      logger.error(`[ProviderRegistry] 获取能力失败: ${providerRef}`, error);
+      return null;
+    }
+  }
+
+  /**
+   * 根据模型名称获取能力（不依赖 providerRef）
+   */
+  getModelCapabilities(modelName: string): ProviderCapabilities | null {
+    return DEFAULT_CAPABILITIES[modelName] || null;
+  }
+
+  /**
+   * 获取所有支持 Tool Use 的 Provider 列表
+   */
+  async getToolUseEnabledProviders(): Promise<string[]> {
+    const enabled: string[] = [];
+
+    for (const [providerRef] of this.registeredProviders) {
+      if (!providerRef.startsWith('llm_')) continue;
+
+      const caps = await this.getProviderCapabilities(providerRef);
+      if (caps?.tool_use) {
+        enabled.push(providerRef);
+      }
+    }
+
+    return enabled;
+  }
+
+  /**
+   * 从 providerRef 提取模型名
+   * 例如: llm_deepseek -> deepseek-chat, llm_openai_gpt4o -> gpt-4o
+   */
+  private extractModelName(providerRef: string): string {
+    // 移除前缀
+    let name = providerRef.replace(/^(llm_|img_)/, '');
+    // 常见映射
+    const mappings: Record<string, string> = {
+      'deepseek': 'deepseek-chat',
+      'openai': 'gpt-4o',
+      'claude': 'claude-3-5-sonnet',
+      'qwen': 'qwen-turbo',
+    };
+    return mappings[name] || name.replace(/_/g, '-');
+  }
 }
 
 const providerRegistryService = new ProviderRegistryService();
 export default providerRegistryService;
+

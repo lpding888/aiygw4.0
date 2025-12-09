@@ -534,7 +534,7 @@ export default function WebhooksPage() {
         okText="保存"
         cancelText="取消"
       >
-        <Form form={form} layout="vertical">
+        <Form name="webhook_form" form={form} layout="vertical">
           <Form.Item label="Webhook名称" name="name" rules={[{ required: true, message: '请输入名称' }]}>
             <Input placeholder="例如：客服工单系统" />
           </Form.Item>

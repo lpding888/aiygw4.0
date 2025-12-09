@@ -9,10 +9,26 @@ export enum PipelineStatus {
     CANCELLED = 'CANCELLED'
 }
 
+export enum NodeStatus {
+    PENDING = 'PENDING',       // 等待执行
+    RUNNING = 'RUNNING',       // 执行中
+    COMPLETED = 'COMPLETED',   // 执行成功
+    FAILED = 'FAILED',         // 执行失败
+    SKIPPED = 'SKIPPED'        // 被跳过
+}
+
 export type PipelineState = {
     status: PipelineStatus;
     updatedAt: number;
     error?: string;
+}
+
+export type NodeState = {
+    status: NodeStatus;
+    startedAt?: number;
+    completedAt?: number;
+    error?: string;
+    retries?: number;
 }
 
 /**
@@ -122,6 +138,88 @@ export class StateManager {
             return JSON.parse(raw);
         } catch (e) {
             return raw;
+        }
+    }
+
+    /**
+     * 设置节点执行状态（细粒度状态管理）
+     * 节点状态键格式: exec:{runId}:nodes:{nodeId}
+     */
+    async setNodeState(runId: string, nodeId: string, status: NodeStatus, error?: string) {
+        const key = `exec:${runId}:nodes:${nodeId}`;
+        const now = Date.now();
+
+        const state: NodeState = {
+            status,
+            ...(status === NodeStatus.RUNNING && { startedAt: now }),
+            ...(status === NodeStatus.COMPLETED || status === NodeStatus.FAILED ? { completedAt: now } : {}),
+            ...(error && { error })
+        };
+
+        // 存储完整状态
+        await this.redis.hset(key, state as any);
+
+        // 设置过期时间（7天后自动清理）
+        await this.redis.expire(key, 7 * 24 * 60 * 60);
+    }
+
+    /**
+     * 获取节点执行状态
+     */
+    async getNodeState(runId: string, nodeId: string): Promise<NodeState | null> {
+        const key = `exec:${runId}:nodes:${nodeId}`;
+        const data = await this.redis.hgetall(key);
+
+        if (!data || Object.keys(data).length === 0) {
+            return null;
+        }
+
+        return {
+            status: data.status as NodeStatus,
+            startedAt: data.startedAt ? parseInt(data.startedAt) : undefined,
+            completedAt: data.completedAt ? parseInt(data.completedAt) : undefined,
+            error: data.error,
+            retries: data.retries ? parseInt(data.retries) : undefined
+        };
+    }
+
+    /**
+     * 获取Pipeline中所有节点的状态
+     */
+    async getAllNodeStates(runId: string, nodeIds: string[]): Promise<Map<string, NodeState>> {
+        const states = new Map<string, NodeState>();
+
+        // 批量获取所有节点状态
+        await Promise.all(
+            nodeIds.map(async (nodeId) => {
+                const state = await this.getNodeState(runId, nodeId);
+                if (state) {
+                    states.set(nodeId, state);
+                }
+            })
+        );
+
+        return states;
+    }
+
+    /**
+     * 增加节点重试次数
+     */
+    async incrementNodeRetries(runId: string, nodeId: string): Promise<number> {
+        const key = `exec:${runId}:nodes:${nodeId}`;
+        const retries = await this.redis.hincrby(key, 'retries', 1);
+        return retries;
+    }
+
+    /**
+     * 清理执行状态（包括节点状态）
+     */
+    async cleanupExecution(runId: string) {
+        const pattern = `exec:${runId}:*`;
+        const keys = await this.redis.keys(pattern);
+
+        if (keys.length > 0) {
+            await this.redis.del(...keys);
         }
     }
 

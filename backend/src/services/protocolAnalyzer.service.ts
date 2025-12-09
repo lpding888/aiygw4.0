@@ -7,6 +7,9 @@
 
 import { z } from 'zod';
 import logger from '../utils/logger.js';
+import providerRegistryService from './provider-registry.service.js';
+import mcpEndpointsService from './mcp-endpoints.service.js';
+import { db } from '../db/index.js';
 
 // Import the actual Protocol schemas
 import {
@@ -14,6 +17,37 @@ import {
     type PipelineSchemaV1Type,
     type PipelineNodeType
 } from '../engine/protocol.js';
+
+/**
+ * 可用模型信息
+ */
+export interface AvailableModelsInfo {
+    llm: { provider: string; models: string[]; features?: Record<string, unknown> }[];
+    image: { provider: string; models: string[]; features?: Record<string, unknown> }[];
+}
+
+/**
+ * MCP 工具信息
+ */
+export interface MCPToolInfo {
+    endpoint: string;
+    endpointName: string;
+    tools: {
+        name: string;
+        description: string;
+        parameters?: string[];
+    }[];
+}
+
+/**
+ * 知识库信息
+ */
+export interface KnowledgeBaseInfo {
+    kbId: string;
+    name: string;
+    documentCount: number;
+    description?: string;
+}
 
 /**
  * Node Type 元数据
@@ -158,12 +192,176 @@ class ProtocolAnalyzerService {
     }
 
     /**
+     * 获取已注册的 Provider 及其 Model 信息
+     */
+    async getAvailableModels(): Promise<AvailableModelsInfo> {
+        try {
+            const providers = providerRegistryService.getRegisteredProviders();
+            const configs = providerRegistryService.getProviderConfigs();
+
+            const llmProviders: AvailableModelsInfo['llm'] = [];
+            const imageProviders: AvailableModelsInfo['image'] = [];
+
+            for (const providerRef of providers) {
+                const config = configs.get(providerRef) as Record<string, unknown> | undefined;
+
+                if (providerRef.startsWith('llm_')) {
+                    const models = (config?.models as string[]) ||
+                        (config?.defaultModel ? [config.defaultModel as string] : ['default']);
+                    llmProviders.push({
+                        provider: providerRef.replace('llm_', ''),
+                        models,
+                        features: { temperature: true, maxTokens: true, systemPrompt: true }
+                    });
+                } else if (providerRef.startsWith('img_')) {
+                    const models = (config?.models as string[]) || ['default'];
+                    imageProviders.push({
+                        provider: providerRef.replace('img_', ''),
+                        models,
+                        features: { aspectRatio: ['1:1', '16:9', '9:16', '3:4', '4:3'] }
+                    });
+                }
+            }
+
+            logger.debug('[ProtocolAnalyzer] Available models', {
+                llmCount: llmProviders.length,
+                imageCount: imageProviders.length
+            });
+
+            return { llm: llmProviders, image: imageProviders };
+        } catch (error) {
+            logger.error('[ProtocolAnalyzer] Failed to get available models', error);
+            return { llm: [], image: [] };
+        }
+    }
+
+    /**
+     * 获取已注册的 MCP 端点及其工具
+     */
+    async getAvailableMCPTools(): Promise<MCPToolInfo[]> {
+        try {
+            const { endpoints } = await mcpEndpointsService.getEndpoints({ enabled: true, healthy: true });
+
+            const mcpTools: MCPToolInfo[] = [];
+
+            for (const endpoint of endpoints) {
+                if (endpoint.supportedTools && endpoint.supportedTools.length > 0) {
+                    mcpTools.push({
+                        endpoint: endpoint.id,
+                        endpointName: endpoint.name,
+                        tools: endpoint.supportedTools.map(tool => ({
+                            name: tool.name,
+                            description: tool.description,
+                            parameters: tool.parameters?.map(p => `${p.name}: ${p.type}${p.required ? ' (required)' : ''}`)
+                        }))
+                    });
+                }
+            }
+
+            logger.debug('[ProtocolAnalyzer] Available MCP tools', {
+                endpointCount: mcpTools.length,
+                totalTools: mcpTools.reduce((sum, e) => sum + e.tools.length, 0)
+            });
+
+            return mcpTools;
+        } catch (error) {
+            logger.error('[ProtocolAnalyzer] Failed to get MCP tools', error);
+            return [];
+        }
+    }
+
+    /**
+     * 获取可用的知识库列表
+     */
+    async getAvailableKnowledgeBases(): Promise<KnowledgeBaseInfo[]> {
+        try {
+            // 获取所有唯一的 kb_id 及其文档数量
+            const kbStats = await db('kb_documents')
+                .select('kb_id')
+                .count('* as doc_count')
+                .where('status', 'completed')
+                .groupBy('kb_id');
+
+            const knowledgeBases: KnowledgeBaseInfo[] = kbStats.map((kb: any) => ({
+                kbId: kb.kb_id,
+                name: kb.kb_id, // 目前使用 kb_id 作为名称
+                documentCount: parseInt(kb.doc_count) || 0
+            }));
+
+            logger.debug('[ProtocolAnalyzer] Available knowledge bases', {
+                count: knowledgeBases.length
+            });
+
+            return knowledgeBases;
+        } catch (error) {
+            logger.error('[ProtocolAnalyzer] Failed to get knowledge bases', error);
+            return [];
+        }
+    }
+
+    /**
      * 生成节点类型文档（供 LLM 使用）
+     * 现在会动态注入已注册的 Provider、Model、MCP Tools 和 Knowledge Bases
      */
     async generateNodeTypeDocumentation(): Promise<string> {
         const analysis = await this.getAnalysis();
+        const availableModels = await this.getAvailableModels();
+        const mcpTools = await this.getAvailableMCPTools();
+        const knowledgeBases = await this.getAvailableKnowledgeBases();
 
-        let doc = '### Available Node Types (Auto-discovered from Protocol)\n\n';
+        let doc = '';
+
+        // 动态注入可用模型信息
+        doc += '### ⚠️ AVAILABLE MODELS (Use ONLY these - others will fail at runtime)\n\n';
+
+        if (availableModels.llm.length > 0) {
+            doc += '#### Registered LLM Providers\n';
+            for (const p of availableModels.llm) {
+                doc += `- **${p.provider}**: ${p.models.join(', ')}\n`;
+            }
+            doc += '\n';
+        } else {
+            doc += '> ⚠️ **NO LLM PROVIDERS CONFIGURED** - Cannot generate pipelines with LLM nodes until providers are added.\n\n';
+        }
+
+        if (availableModels.image.length > 0) {
+            doc += '#### Registered Image Generation Providers\n';
+            for (const p of availableModels.image) {
+                doc += `- **${p.provider}**: ${p.models.join(', ')}\n`;
+            }
+            doc += '\n';
+        }
+
+        // 动态注入 MCP 工具信息
+        if (mcpTools.length > 0) {
+            doc += '---\n\n';
+            doc += '### 🔧 AVAILABLE MCP TOOLS\n\n';
+            doc += 'Use `mcp_tool_call` node type to invoke these tools:\n\n';
+            for (const endpoint of mcpTools) {
+                doc += `#### ${endpoint.endpointName} (endpoint: ${endpoint.endpoint})\n`;
+                for (const tool of endpoint.tools) {
+                    doc += `- **${tool.name}**: ${tool.description}\n`;
+                    if (tool.parameters && tool.parameters.length > 0) {
+                        doc += `  - Parameters: ${tool.parameters.join(', ')}\n`;
+                    }
+                }
+                doc += '\n';
+            }
+        }
+
+        // 动态注入知识库信息
+        if (knowledgeBases.length > 0) {
+            doc += '---\n\n';
+            doc += '### 📚 AVAILABLE KNOWLEDGE BASES\n\n';
+            doc += 'Use `kb_retrieve` node type to search these knowledge bases:\n\n';
+            for (const kb of knowledgeBases) {
+                doc += `- **${kb.kbId}**: ${kb.documentCount} documents\n`;
+            }
+            doc += '\n';
+        }
+
+        doc += '---\n\n';
+        doc += '### Available Node Types (Auto-discovered from Protocol)\n\n';
 
         for (const nodeType of analysis.nodeTypes) {
             doc += `#### ${nodeType.type.toUpperCase()} Node\n`;
@@ -193,9 +391,26 @@ class ProtocolAnalyzerService {
             }
             doc += '}\n```\n\n';
 
-            // Examples
-            if (nodeType.examples.length > 0) {
-                doc += '**Example models/values**:\n';
+            // Dynamic examples based on registered providers
+            if (nodeType.type === 'llm' && availableModels.llm.length > 0) {
+                doc += '**Available models (from registered providers)**:\n';
+                for (const p of availableModels.llm) {
+                    for (const model of p.models) {
+                        doc += `  - \"${model}\" (${p.provider})\n`;
+                    }
+                }
+                doc += '\n';
+            } else if (nodeType.type === 'image_gen' && availableModels.image.length > 0) {
+                doc += '**Available models (from registered providers)**:\n';
+                for (const p of availableModels.image) {
+                    for (const model of p.models) {
+                        doc += `  - \"${model}\" (${p.provider})\n`;
+                    }
+                }
+                doc += '\n';
+            } else if (nodeType.examples.length > 0) {
+                // Fallback to static examples only if no providers registered
+                doc += '**Example models/values** (fallback - no providers registered):\n';
                 for (const example of nodeType.examples) {
                     doc += `  - ${example}\n`;
                 }

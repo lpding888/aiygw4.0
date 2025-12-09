@@ -7,6 +7,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, Form, Input, Select, Button, Space, message, Divider, Spin, Switch } from 'antd';
+import { CodeOutlined } from '@ant-design/icons';
 import { VarPicker, buildDefaultVarTree, validateVarReferences } from '@/components/flow/VarPicker';
 import type { VarNode } from '@/components/flow/VarPicker';
 import type { VarNode as MonacoVarNode } from '@/components/common/MonacoEditor';
@@ -246,8 +247,121 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
             </>
           )}
 
+
+          {/* HTTP API Node Config */}
+          {nodeType === 'http_api' && (
+            <>
+              <Form.Item name="method" label="请求方法" initialValue="GET">
+                <Select options={[
+                  { label: 'GET', value: 'GET' },
+                  { label: 'POST', value: 'POST' },
+                  { label: 'PUT', value: 'PUT' },
+                  { label: 'DELETE', value: 'DELETE' },
+                  { label: 'PATCH', value: 'PATCH' }
+                ]} />
+              </Form.Item>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Form.Item name="url" label="请求URL" style={{ flex: 1 }} rules={[{ required: true }]}>
+                  <Input placeholder="https://api.example.com/data" />
+                </Form.Item>
+                <Button onClick={() => openVarPicker('url')} icon={<CodeOutlined />} style={{ marginTop: 30 }} />
+              </div>
+
+              <Divider>请求参数</Divider>
+              <Form.Item label="Headers (JSON)" name="headers">
+                <MonacoEditor
+                  value={form.getFieldValue('headers') || '{}'}
+                  onChange={(value) => form.setFieldValue('headers', value)}
+                  language="json"
+                  height={150}
+                  availableVars={monacoVars}
+                />
+              </Form.Item>
+
+              <Form.Item label="Body (JSON)" name="body">
+                <MonacoEditor
+                  value={form.getFieldValue('body') || '{}'}
+                  onChange={(value) => form.setFieldValue('body', value)}
+                  language="json"
+                  height={200}
+                  availableVars={monacoVars}
+                />
+              </Form.Item>
+
+              <Form.Item label="输出字段名" name="outputKey" initialValue="result">
+                <Input />
+              </Form.Item>
+            </>
+          )}
+
+          {/* Loop Node Config */}
+          {nodeType === 'loop' && (
+            <>
+              <Form.Item name="loopType" label="循环类型" initialValue="forEach">
+                <Select options={[
+                  { label: '遍历数组 (ForEach)', value: 'forEach' },
+                  { label: '数值范围 (Range)', value: 'range' },
+                  { label: '条件循环 (While)', value: 'while' }
+                ]} />
+              </Form.Item>
+
+              <Form.Item
+                noStyle
+                shouldUpdate={(prev, curr) => prev.loopType !== curr.loopType}
+              >
+                {({ getFieldValue }) => {
+                  const type = getFieldValue('loopType') || 'forEach';
+                  return type === 'forEach' ? (
+                    <Form.Item label="目标数组" name="items" tooltip="例如 {{node1.data.list}}">
+                      <Space.Compact style={{ width: '100%' }}>
+                        <Input placeholder="{{array_variable}}" />
+                        <Button icon={<CodeOutlined />} onClick={() => openVarPicker('items')} />
+                      </Space.Compact>
+                    </Form.Item>
+                  ) : type === 'range' ? (
+                    <Space>
+                      <Form.Item label="开始" name={['range', 'start']} initialValue={0}><Input type="number" /></Form.Item>
+                      <Form.Item label="结束" name={['range', 'end']} initialValue={10}><Input type="number" /></Form.Item>
+                      <Form.Item label="步长" name={['range', 'step']} initialValue={1}><Input type="number" /></Form.Item>
+                    </Space>
+                  ) : (
+                    <Form.Item label="退出条件" name="condition" tooltip="当条件为 false 时退出">
+                      <Input placeholder="i < 100" />
+                    </Form.Item>
+                  );
+                }}
+              </Form.Item>
+            </>
+          )}
+
+          {/* KB Retrieve Node Config */}
+          {nodeType === 'kb_retrieve' && (
+            <>
+              <Form.Item label="检索查询" name="query" rules={[{ required: true }]}>
+                <Space.Compact style={{ width: '100%' }}>
+                  <Input.TextArea rows={2} placeholder="输入查询词或引用变量" />
+                  <Button icon={<CodeOutlined />} onClick={() => openVarPicker('query')} style={{ height: 'auto' }} />
+                </Space.Compact>
+              </Form.Item>
+
+              <Space>
+                <Form.Item label="Top K" name="topK" initialValue={3}>
+                  <Input type="number" />
+                </Form.Item>
+                <Form.Item label="最低匹配度" name="minScore" initialValue={0.7}>
+                  <Input type="number" step={0.1} />
+                </Form.Item>
+              </Space>
+
+              <Form.Item label="知识库ID" name="kbId">
+                <Input placeholder="留空则搜索所有知识库" />
+              </Form.Item>
+            </>
+          )}
+
           {/* Regular Provider/Transform Node Config */}
-          {nodeType !== 'agent' && (
+          {!['agent', 'http_api', 'loop', 'kb_retrieve'].includes(nodeType || '') && (
             <>
               {/* Provider类型 */}
               <Form.Item
@@ -284,7 +398,7 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
               </Form.Item>
 
               {/* LLM Provider专用配置 */}
-              {selectedProvider?.startsWith('llm_') && (
+              {selectedProvider && selectedProvider.startsWith('llm_') && (
                 <>
                   <Divider>LLM配置</Divider>
 
@@ -415,9 +529,8 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
                   language="json"
                   height={250}
                   theme="vs-dark"
-                  showActions={true}
-                  enableVarCompletion={true}
                   availableVars={monacoVars}
+                  enableVarCompletion={true}
                 />
               </Form.Item>
 

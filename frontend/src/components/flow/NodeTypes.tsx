@@ -189,6 +189,78 @@ export function AgentNode({ id, data, selected }: NodeProps) {
   );
 }
 
+
+export function HttpApiNode({ id, data, selected }: NodeProps) {
+  return (
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="http_api"
+      label={(data.label as string) || 'HTTP请求'}
+      status={data.status as any}
+      icon={<ApiOutlined style={{ color: 'white' }} />}
+      stats={{
+        'Method': (data.method as string) || 'GET',
+        'URL': (data.url as string) ? ((data.url as string).length > 20 ? (data.url as string).substring(0, 18) + '..' : (data.url as string)) : 'Pending'
+      }}
+      handles={[
+        { type: 'target', position: Position.Top },
+        { type: 'source', position: Position.Bottom }
+      ]}
+    />
+  );
+}
+
+export function LoopNode({ id, data, selected }: NodeProps) {
+  const loopType = (data.loopType as string) || 'forEach';
+  return (
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="loop"
+      label={(data.label as string) || '循环控制'}
+      status={data.status as any}
+      handles={[
+        { type: 'target', position: Position.Top },
+        { type: 'source', position: Position.Right, id: 'body' }, // Loop body
+        { type: 'source', position: Position.Bottom, id: 'next' } // After loop
+      ]}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 8px', marginTop: 4 }}>
+        <span style={{ fontSize: 10, color: '#1890ff' }}>循环体 →</span>
+        <span style={{ fontSize: 10, color: '#666' }}>完成后 ↓</span>
+      </div>
+      <div style={{ fontSize: 11, color: '#888', textAlign: 'center', marginTop: 2 }}>
+        {loopType === 'forEach' ? '遍历数组' : (loopType === 'range' ? '数值范围' : '条件循环')}
+      </div>
+      {/* Custom Handles Visualization */}
+      <div className="react-flow__handle react-flow__handle-right source" style={{ top: '50%', background: '#1890ff', right: -5, position: 'absolute', width: 8, height: 8, borderRadius: '50%' }} data-handleid="body"></div>
+      <div className="react-flow__handle react-flow__handle-bottom source" style={{ left: '50%', background: '#666', bottom: -5, position: 'absolute', width: 8, height: 8, borderRadius: '50%' }} data-handleid="next"></div>
+    </NodeCard>
+  );
+}
+
+export function KbRetrieveNode({ id, data, selected }: NodeProps) {
+  return (
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="kb_retrieve"
+      label={(data.label as string) || '知识库检索'}
+      status={data.status as any}
+      icon={<CloudUploadOutlined style={{ color: 'white' }} />}
+      stats={{
+        'Query': (data.query as string) ? '已配置' : 'Pending',
+        'TopK': (data.topK as number) || 3
+      }}
+      handles={[
+        { type: 'target', position: Position.Top },
+        { type: 'source', position: Position.Bottom }
+      ]}
+    />
+  );
+}
+
 export const nodeTypes: NodeTypes = {
   start: StartNode,
   provider: ProviderNode as any,
@@ -198,4 +270,8 @@ export const nodeTypes: NodeTypes = {
   fork: ForkNode,
   join: JoinNode,
   agent: AgentNode as any,
+  http_api: HttpApiNode as any,
+  loop: LoopNode as any,
+  kb_retrieve: KbRetrieveNode as any
 };
+

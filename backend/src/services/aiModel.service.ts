@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
 import logger from '../utils/logger.js';
-import taskService from './task.service.js';
+import taskStatusGateway from './task-status.gateway.js';
 import { createHttpClient } from '../utils/httpClient.js';
 
 // 提示：aiModel.service.ts 已被精简。
@@ -39,7 +39,7 @@ class AIModelService {
     // 在完全切换到 Pipeline 之前，这里只能返回一个模拟状态
 
     // 自动更新为失败，提示用户
-    await taskService.updateStatus(taskId, 'failed', {
+    await taskStatusGateway.updateStatus(taskId, 'failed', {
       errorMessage: '系统升级中：请使用新的 AI 工作流编排功能来执行此任务。'
     });
 

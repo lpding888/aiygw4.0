@@ -132,7 +132,7 @@ export default function ConfigsPage() {
       const response = await api.admin.getSystemConfig();
       return response.data.data; // APIResponse的data字段包含实际业务数据
     },
-    });
+  });
 
   // 获取配置统计
   const { data: statsData } = useQuery({
@@ -565,9 +565,9 @@ export default function ConfigsPage() {
   const stats = statsData?.stats;
   const lastUpdateMinutes = stats?.lastUpdatedAt
     ? Math.max(
-        0,
-        Math.floor((Date.now() - new Date(stats.lastUpdatedAt as string).getTime()) / 60000)
-      )
+      0,
+      Math.floor((Date.now() - new Date(stats.lastUpdatedAt as string).getTime()) / 60000)
+    )
     : null;
 
   return (
@@ -716,6 +716,7 @@ export default function ConfigsPage() {
         }}
         footer={null}
         width={600}
+        centered
       >
         <Form
           form={createForm}
@@ -806,6 +807,7 @@ export default function ConfigsPage() {
         }}
         footer={null}
         width={600}
+        centered
       >
         <Form
           form={editForm}
@@ -893,6 +895,7 @@ export default function ConfigsPage() {
           </Button>
         ]}
         width={800}
+        centered
       >
         <Timeline>
           {selectedHistory.map((history, index) => (
@@ -904,12 +907,12 @@ export default function ConfigsPage() {
                       {history.action === 'create'
                         ? '创建'
                         : history.action === 'update'
-                        ? '更新'
-                        : history.action === 'delete'
-                        ? '删除'
-                        : history.action === 'rollback'
-                        ? '回滚'
-                        : history.action}
+                          ? '更新'
+                          : history.action === 'delete'
+                            ? '删除'
+                            : history.action === 'rollback'
+                              ? '回滚'
+                              : history.action}
                     </Text>
                     <Text type="secondary" style={{ marginLeft: 8 }}>
                       {new Date(history.createdAt).toLocaleString('zh-CN')}
@@ -978,6 +981,7 @@ export default function ConfigsPage() {
           </Button>
         ]}
         width={800}
+        centered
       >
         <Table
           dataSource={snapshotsData?.snapshots || []}

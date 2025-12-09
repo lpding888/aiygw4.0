@@ -5,7 +5,7 @@ import { Space } from 'antd';
 import { FlowCanvas } from '@/components/pipeline-builder/FlowCanvas';
 import { PropertiesPanel } from '@/components/pipeline-builder/PropertiesPanel';
 import CopilotChat from '@/components/pipeline-builder/CopilotChat';
-import { usePipelineStore } from '@/stores/usePipelineStore';
+import { usePipelineStore } from '@/store/pipelineStore';
 import './pipeline-builder.css';
 
 export default function PipelineBuilderPage() {

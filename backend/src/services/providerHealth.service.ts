@@ -5,6 +5,7 @@
 
 import { db } from '../config/database.js';
 import logger from '../utils/logger.js';
+import fetch, { type RequestInit } from 'node-fetch';
 
 /**
  * Provider配置
@@ -14,6 +15,7 @@ export interface ProviderConfig {
   provider_name: string;
   type: string;
   config: Record<string, unknown>;
+  endpoint_url?: string;
   is_enabled: boolean;
   deleted_at: Date | null;
 }
@@ -88,6 +90,7 @@ export class ProviderHealthService {
         'provider_ref as provider_id',
         'provider_name',
         'auth_type as type',
+        'endpoint_url',
         db.raw("'{}' as config")
       );
 
@@ -140,7 +143,7 @@ export class ProviderHealthService {
    * @returns 健康检查结果
    */
   async checkProviderHealth(provider: ProviderConfig): Promise<HealthCheckResult> {
-    const { provider_id, type, config } = provider;
+    const { provider_id, type, config, endpoint_url } = provider;
     const startTime = Date.now();
 
     try {
@@ -150,15 +153,15 @@ export class ProviderHealthService {
       // 根据type执行不同的健康检查
       switch (type) {
         case 'SYNC_IMAGE_PROCESS':
-          isHealthy = await this.checkSyncImageProcessHealth(config);
+          isHealthy = await this.checkSyncImageProcessHealth(config, endpoint_url);
           break;
 
         case 'RUNNINGHUB_WORKFLOW':
-          isHealthy = await this.checkRunninghubHealth(config);
+          isHealthy = await this.checkRunninghubHealth(config, endpoint_url);
           break;
 
         case 'SCF_POST_PROCESS':
-          isHealthy = await this.checkScfHealth(config);
+          isHealthy = await this.checkScfHealth(config, endpoint_url);
           break;
 
         case 'email':
@@ -201,17 +204,20 @@ export class ProviderHealthService {
 
   /**
    * 检查同步图片处理Provider健康状态
-   * 艹,TODO实现实际的健康检查逻辑!
    * @param config - Provider配置
    * @returns 是否健康
    */
-  async checkSyncImageProcessHealth(config: ProviderHealthCheckConfig): Promise<boolean> {
+  async checkSyncImageProcessHealth(
+    config: ProviderHealthCheckConfig,
+    endpointUrl?: string
+  ): Promise<boolean> {
     try {
-      // TODO: 实现实际的健康检查逻辑
-      // 例如: ping腾讯云数据万象API
-      // 暂时返回true
-      logger.debug('[ProviderHealthService] 检查同步图片处理Provider (暂时返回健康)');
-      return true;
+      const healthUrl = (config.health_url as string) || endpointUrl;
+      if (!healthUrl) {
+        logger.warn('[ProviderHealthService] 缺少健康检查URL，默认健康');
+        return true;
+      }
+      return await this.pingUrl(healthUrl);
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       logger.error(`[ProviderHealthService] 同步图片处理健康检查失败: ${err.message}`);
@@ -221,16 +227,22 @@ export class ProviderHealthService {
 
   /**
    * 检查RunningHub工作流Provider健康状态
-   * 艹,TODO调用RunningHub的health endpoint!
    * @param config - Provider配置
    * @returns 是否健康
    */
-  async checkRunninghubHealth(config: ProviderHealthCheckConfig): Promise<boolean> {
+  async checkRunninghubHealth(
+    config: ProviderHealthCheckConfig,
+    endpointUrl?: string
+  ): Promise<boolean> {
     try {
-      // TODO: 实现实际的健康检查逻辑
-      // 例如: 调用RunningHub的health endpoint
-      logger.debug('[ProviderHealthService] 检查RunningHub Provider (暂时返回健康)');
-      return true;
+      const healthUrl =
+        (config.health_url as string) ||
+        (endpointUrl ? `${endpointUrl.replace(/\/$/, '')}/health` : undefined);
+      if (!healthUrl) {
+        logger.warn('[ProviderHealthService] RunningHub缺少健康检查URL，默认健康');
+        return true;
+      }
+      return await this.pingUrl(healthUrl);
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       logger.error(`[ProviderHealthService] RunningHub健康检查失败: ${err.message}`);
@@ -240,16 +252,19 @@ export class ProviderHealthService {
 
   /**
    * 检查SCF云函数Provider健康状态
-   * 艹,TODO调用云函数的health check接口!
    * @param config - Provider配置
    * @returns 是否健康
    */
-  async checkScfHealth(config: ProviderHealthCheckConfig): Promise<boolean> {
+  async checkScfHealth(config: ProviderHealthCheckConfig, endpointUrl?: string): Promise<boolean> {
     try {
-      // TODO: 实现实际的健康检查逻辑
-      // 例如: 调用云函数的health check接口
-      logger.debug('[ProviderHealthService] 检查SCF Provider (暂时返回健康)');
-      return true;
+      const healthUrl =
+        (config.health_url as string) ||
+        (endpointUrl ? `${endpointUrl.replace(/\/$/, '')}?health=1` : undefined);
+      if (!healthUrl) {
+        logger.warn('[ProviderHealthService] SCF缺少健康检查URL，默认健康');
+        return true;
+      }
+      return await this.pingUrl(healthUrl, { method: 'GET' });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       logger.error(`[ProviderHealthService] SCF健康检查失败: ${err.message}`);
@@ -360,6 +375,24 @@ export class ProviderHealthService {
       const err = error instanceof Error ? error : new Error(String(error));
       logger.error(`[ProviderHealthService] 获取不健康Provider失败: ${err.message}`, err);
       throw err;
+    }
+  }
+
+  /**
+   * 通用健康探活请求
+   */
+  private async pingUrl(url: string, options: RequestInit = {}): Promise<boolean> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const res = await fetch(url, { method: 'HEAD', ...options, signal: controller.signal });
+      return res.ok;
+    } catch (error) {
+      const err = error as Error;
+      logger.warn('[ProviderHealthService] 健康探测失败', { url, error: err.message });
+      return false;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 }

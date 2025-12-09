@@ -100,7 +100,16 @@ class OpenAIProvider {
       throw new Error('未配置OpenAI API Key，请设置环境变量 OPENAI_API_KEY 或在参数中传入');
     }
 
-    const baseURL = this.config?.baseURL || 'https://api.openai.com/v1/chat/completions';
+    let baseURL = this.config?.baseURL || 'https://api.openai.com/v1/chat/completions';
+
+    // 智能补全 OpenAI 路径
+    if (baseURL.includes('openai.com') && !baseURL.includes('/chat/completions')) {
+      baseURL = baseURL.replace(/\/$/, '');
+      if (!baseURL.includes('/v1')) {
+        baseURL += '/v1';
+      }
+      baseURL += '/chat/completions';
+    }
 
     try {
       logger.info(`[OpenAIProvider] 开始调用OpenAI taskId=${taskId} model=${model} baseURL=${baseURL}`);

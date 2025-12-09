@@ -2,7 +2,7 @@ import logger from '../utils/logger.js';
 import { aiGateway } from './ai-gateway.service.js';
 import { PipelineSchemaV1, type PipelineSchemaV1Type } from '../engine/protocol.js';
 import { TopologySorter, TopologyErrorType, type ValidationError } from '../engine/runner/TopologySorter.js';
-import * as promptTemplateService from './prompt-template.service.js';
+import promptTemplateService from './prompt-template.service.js';
 import systemConfigService from './systemConfig.service.js';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';

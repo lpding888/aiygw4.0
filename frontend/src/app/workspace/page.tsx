@@ -1,6 +1,6 @@
 /**
  * 工作台页面
- * 艹！全能服装图片解决方案中心！
+ * 全能服装图片解决方案中心！
  */
 
 'use client';
@@ -67,7 +67,7 @@ export default function WorkspacePage() {
       return;
     }
     fetchMembershipStatus();
-  }, [user, router]);
+  }, [user?.id, router]);
 
   if (loading && !user) {
     return (

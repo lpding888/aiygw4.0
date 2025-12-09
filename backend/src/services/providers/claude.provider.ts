@@ -102,7 +102,16 @@ class ClaudeProvider {
       throw new Error('未配置Claude API Key，请设置环境变量 ANTHROPIC_API_KEY 或在参数中传入');
     }
 
-    const baseURL = this.config?.baseURL || 'https://api.anthropic.com/v1/messages';
+    let baseURL = this.config?.baseURL || 'https://api.anthropic.com/v1/messages';
+
+    // 智能补全 Claude 路径
+    if (baseURL.includes('anthropic.com') && !baseURL.includes('/v1/messages')) {
+      baseURL = baseURL.replace(/\/$/, '');
+      if (!baseURL.includes('/v1')) {
+        baseURL += '/v1';
+      }
+      baseURL += '/messages';
+    }
 
     try {
       logger.info(`[ClaudeProvider] 开始调用Claude taskId=${taskId} model=${model} baseURL=${baseURL}`);

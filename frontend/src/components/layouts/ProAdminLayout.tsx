@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Layout, Menu, Breadcrumb, Avatar, Dropdown, Space, Button, theme } from 'antd';
+import { Layout, Menu, Breadcrumb, Avatar, Dropdown, Space, Button, theme, Input, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import { useRouter, usePathname } from 'next/navigation';
 import {
@@ -16,7 +16,6 @@ import {
     DollarOutlined,
     RocketOutlined,
     FileTextOutlined,
-    ThunderboltOutlined,
     ToolOutlined,
     ShopOutlined,
     ApiOutlined,
@@ -38,9 +37,12 @@ import {
     BugOutlined,
     KeyOutlined,
     ReadOutlined,
+    SearchOutlined,
+    ThunderboltOutlined
 } from '@ant-design/icons';
 import { useAuthStore } from '@/store/authStore';
 import { ADMIN_BRAND, getBreadcrumbItems, getMenuOpenKeys } from '@/config/admin';
+import CommandPalette, { useCommandPalette } from '../admin/CommandPalette';
 
 const { Header, Sider, Content } = Layout;
 
@@ -48,7 +50,30 @@ interface ProAdminLayoutProps {
     children: React.ReactNode;
 }
 
+// Search Trigger Component to use CommandPalette Context
+const SearchTrigger = () => {
+    const { openPalette } = useCommandPalette();
+    return (
+        <div
+            onClick={openPalette}
+            className="flex items-center bg-gray-100/50 hover:bg-gray-100 transition-colors px-3 py-1.5 rounded-lg cursor-pointer text-gray-500 w-48 border border-transparent hover:border-gray-200"
+        >
+            <SearchOutlined className="mr-2" />
+            <span className="text-sm">搜索...</span>
+            <span className="ml-auto text-xs bg-white px-1.5 rounded border border-gray-200">⌘K</span>
+        </div>
+    );
+};
+
 export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
+    return (
+        <CommandPalette>
+            <AdminLayoutContent>{children}</AdminLayoutContent>
+        </CommandPalette>
+    );
+}
+
+function AdminLayoutContent({ children }: ProAdminLayoutProps) {
     const router = useRouter();
     const pathname = usePathname();
     const { user, logout } = useAuthStore();
@@ -317,8 +342,15 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
                 collapsed={collapsed}
                 width={260}
                 style={{
-                    background: '#000000', // 纯黑背景，对比度更高
-                    borderRight: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(0, 0, 0, 0.85)', // Dark Glassmorphism 
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)',
+                    borderRight: '1px solid rgba(255,255,255,0.08)',
+                    position: 'fixed',
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    zIndex: 200,
                 }}
             >
                 <div style={{
@@ -328,7 +360,8 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
                     justifyContent: collapsed ? 'center' : 'flex-start',
                     padding: collapsed ? '0' : '0 24px',
                     overflow: 'hidden',
-                    transition: 'all 0.3s ease'
+                    transition: 'all 0.3s ease',
+                    borderBottom: '1px solid rgba(255,255,255,0.05)'
                 }}>
                     <div style={{
                         width: 32,
@@ -358,22 +391,24 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
                         </span>
                     )}
                 </div>
-                <Menu
-                    theme="dark"
-                    mode="inline"
-                    defaultSelectedKeys={getSelectedKeys()}
-                    defaultOpenKeys={getOpenKeys()}
-                    selectedKeys={getSelectedKeys()}
-                    items={menuItems}
-                    onClick={({ key }) => router.push(key)}
-                    style={{
-                        background: 'transparent',
-                        borderRight: 'none',
-                        padding: '0 12px'
-                    }}
-                />
+                <div className="custom-scrollbar" style={{ height: 'calc(100vh - 80px)', overflowY: 'auto', overflowX: 'hidden' }}>
+                    <Menu
+                        theme="dark"
+                        mode="inline"
+                        defaultSelectedKeys={getSelectedKeys()}
+                        defaultOpenKeys={getOpenKeys()}
+                        selectedKeys={getSelectedKeys()}
+                        items={menuItems}
+                        onClick={({ key }) => router.push(key)}
+                        style={{
+                            background: 'transparent',
+                            borderRight: 'none',
+                            padding: '12px'
+                        }}
+                    />
+                </div>
             </Sider>
-            <Layout className="mesh-bg">
+            <Layout className="mesh-bg" style={{ marginLeft: collapsed ? 80 : 260, transition: 'all 0.2s' }}>
                 <Header style={{
                     padding: '0 24px',
                     background: 'rgba(255, 255, 255, 0.8)',
@@ -389,17 +424,20 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
                     zIndex: 100,
                     transition: 'all 0.3s ease'
                 }}>
-                    <Button
-                        type="text"
-                        icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                        onClick={() => setCollapsed(!collapsed)}
-                        style={{
-                            fontSize: '16px',
-                            width: 40,
-                            height: 40,
-                            borderRadius: 12,
-                        }}
-                    />
+                    <Space>
+                        <Button
+                            type="text"
+                            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                            onClick={() => setCollapsed(!collapsed)}
+                            style={{
+                                fontSize: '16px',
+                                width: 40,
+                                height: 40,
+                                borderRadius: 12,
+                            }}
+                        />
+                        <SearchTrigger />
+                    </Space>
 
                     <Space size="large">
                         <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">

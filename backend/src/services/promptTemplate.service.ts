@@ -646,6 +646,159 @@ class PromptTemplateService {
     const mergedVariables = { ...autoContext, ...additionalVariables };
     return this.replaceVariables(template.content, mergedVariables);
   }
+
+  // ========== API Compatibility Aliases ==========
+  // These methods provide compatibility with prompt-templates.routes.ts
+
+  /**
+   * Alias for getTemplateById (routes expect 'getTemplate')
+   */
+  async getTemplate(id: string): Promise<PromptTemplate | null> {
+    try {
+      return await this.getTemplateById(id);
+    } catch (error) {
+      // Return null instead of throwing for not found
+      return null;
+    }
+  }
+
+  /**
+   * Alias for getTemplateStats (routes expect 'getStats')
+   */
+  async getStats(): Promise<TemplateStats> {
+    return this.getTemplateStats();
+  }
+
+  /**
+   * Alias for rollbackToVersion (routes expect 'rollbackTemplate')
+   */
+  async rollbackTemplate(
+    id: string,
+    targetVersion: number,
+    userId: string,
+    _reason?: string
+  ): Promise<PromptTemplate> {
+    return this.rollbackToVersion(id, targetVersion, userId);
+  }
+
+  /**
+   * Search templates by query string
+   */
+  async searchTemplates(
+    query: string,
+    filters: { limit?: number; category?: string; tags?: string[] } = {}
+  ): Promise<PromptTemplate[]> {
+    const { limit = 10, category, tags } = filters;
+
+    let dbQuery = db('prompt_templates')
+      .where('status', 'published')
+      .where(function () {
+        this.where('name', 'like', `%${query}%`)
+          .orWhere('description', 'like', `%${query}%`)
+          .orWhere('content', 'like', `%${query}%`);
+      });
+
+    if (category) {
+      dbQuery = dbQuery.where('category', category);
+    }
+
+    const templates = await dbQuery.limit(limit).orderBy('updated_at', 'desc');
+    return templates.map((t) => this.parseTemplate(t));
+  }
+
+  /**
+   * Get popular tags (stub - returns empty for now)
+   */
+  async getPopularTags(limit: number = 20): Promise<string[]> {
+    const rows = await db('prompt_templates').where('status', 'published').select('tags');
+
+    const tagCounts = new Map<string, number>();
+
+    rows.forEach((row) => {
+      const raw = row.tags as unknown;
+      if (!raw) return;
+      let tags: string[] = [];
+      if (typeof raw === 'string') {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            tags = parsed.filter((t) => typeof t === 'string');
+          }
+        } catch {
+          // fall back: comma separated
+          tags = raw.split(',').map((t) => t.trim()).filter(Boolean);
+        }
+      } else if (Array.isArray(raw)) {
+        tags = raw.filter((t) => typeof t === 'string');
+      }
+
+      tags.forEach((tag) => {
+        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+      });
+    });
+
+    return Array.from(tagCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([tag]) => tag);
+  }
+
+  /**
+   * Rate a template (stub - logs for now)
+   */
+  async rateTemplate(id: string, userId: string, rating: number): Promise<void> {
+    const sanitizedRating = Math.min(Math.max(rating, 1), 5);
+
+    // Upsert rating
+    const existing = await db('prompt_template_ratings').where({ template_id: id, user_id: userId }).first();
+
+    if (existing) {
+      await db('prompt_template_ratings')
+        .where({ template_id: id, user_id: userId })
+        .update({ rating: sanitizedRating, updated_at: new Date() });
+    } else {
+      await db('prompt_template_ratings').insert({
+        id: `${id}-${userId}`,
+        template_id: id,
+        user_id: userId,
+        rating: sanitizedRating,
+        created_at: new Date()
+      });
+    }
+
+    // Recalculate stats
+    const stats = await db('prompt_template_ratings')
+      .where({ template_id: id })
+      .avg<{ avg: number }>('rating as avg')
+      .count<{ count: string }>('* as count')
+      .first();
+
+    const avgRating = stats?.avg ? Number(stats.avg) : 0;
+    const ratingCount = stats?.count ? Number(stats.count) : 0;
+
+    await db('prompt_templates')
+      .where({ id })
+      .update({
+        avg_rating: avgRating,
+        rating_count: ratingCount,
+        updated_at: new Date()
+      });
+
+    logger.info('[PromptTemplate] Template rated', { templateId: id, userId, rating: sanitizedRating, avgRating, ratingCount });
+  }
+
+  /**
+   * Get template version history (alias for getTemplateVersions)
+   */
+  async getTemplateHistory(id: string): Promise<any[]> {
+    const result = await this.getTemplateVersions(id, { limit: 50 });
+    return result.versions.map(v => ({
+      version: v.version,
+      status: v.status,
+      created_at: v.created_at,
+      created_by: v.created_by
+    }));
+  }
 }
 
 export default new PromptTemplateService();

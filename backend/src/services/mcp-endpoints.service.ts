@@ -244,11 +244,13 @@ class MCPEndpointsService {
       throw new Error('MCP端点不存在');
     }
 
+    let apiKeyToDelete: string | null = null;
     try {
       await knex.transaction(async (trx) => {
-        // 删除相关的API密钥
-        // TODO: Fix KMS delete method missing
-        // await kmsService.delete(endpoint.apiKeyId);
+        // 延迟删除API密钥，避免事务回滚导致不一致
+        if (endpoint.apiKeyId) {
+          apiKeyToDelete = endpoint.apiKeyId;
+        }
 
         // 软删除端点
         await trx('mcp_endpoints').where('id', endpointId).update({
@@ -258,6 +260,16 @@ class MCPEndpointsService {
           updated_at: new Date()
         });
       });
+
+      // 事务提交后再删除密钥
+      if (apiKeyToDelete) {
+        try {
+          await kmsService.deleteKey(apiKeyToDelete, { force: true });
+          logger.info('MCP端点API密钥已删除', { endpointId, apiKeyId: apiKeyToDelete });
+        } catch (error: unknown) {
+          logger.warn('删除API密钥失败(可能已不存在),继续删除端点', { error });
+        }
+      }
 
       // 失效缓存
       await this.invalidateCache();

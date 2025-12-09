@@ -1,5 +1,6 @@
 import Redis from 'ioredis';
 import type { Redis as RedisInstance } from 'ioredis';
+import { LRUCache } from 'lru-cache';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
 import metricsService from './metrics.service.js';
@@ -17,11 +18,7 @@ type CacheStats = {
   errors: number;
 };
 
-type MemoryCacheEntry<T = unknown> = {
-  value: T;
-  expiresAt: number;
-  createdAt: number;
-};
+// 不再需要自定义的 MemoryCacheEntry，LRUCache 会自动管理
 
 type CacheGetOptions = {
   memoryTTL?: number;
@@ -47,7 +44,7 @@ type CacheSetOptions = {
 class CacheService {
   private readonly redis: RedisInstance;
 
-  private readonly memoryCache: Map<string, MemoryCacheEntry>;
+  private readonly memoryCache: LRUCache<string, unknown>;
 
   private memoryCacheMaxSize: number;
 
@@ -65,8 +62,6 @@ class CacheService {
 
   private stats: CacheStats;
 
-  private memoryCacheCleanupTimer?: NodeJS.Timeout;
-
   constructor() {
     // Redis连接
     this.redis = new RedisCtor({
@@ -80,10 +75,16 @@ class CacheService {
       lazyConnect: true
     });
 
-    // 内存缓存（L1缓存）
-    this.memoryCache = new Map<string, MemoryCacheEntry>();
+    // 内存缓存（L1缓存）- 使用LRU缓存库优化性能
     this.memoryCacheMaxSize = 1000;
     this.memoryCacheTTL = 60000; // 1分钟
+    this.memoryCache = new LRUCache<string, unknown>({
+      max: this.memoryCacheMaxSize,
+      ttl: this.memoryCacheTTL,
+      updateAgeOnGet: true, // LRU策略：访问时更新年龄
+      updateAgeOnHas: true, // 检查时也更新年龄
+      allowStale: false // 不允许返回过期数据
+    });
 
     // 版本管理
     // 缓存配置
@@ -106,8 +107,7 @@ class CacheService {
       errors: 0
     };
 
-    // 定期清理内存缓存
-    this.startMemoryCacheCleanup();
+    // LRUCache 会自动管理过期项，无需手动清理定时器
 
     // 监听Redis事件
     this.setupRedisListeners();
@@ -123,17 +123,14 @@ class CacheService {
     try {
       const startTime = Date.now();
 
-      // 1. 检查内存缓存（L1）
-      const item = this.memoryCache.get(key);
-      if (item) {
-        if (Date.now() < item.expiresAt) {
-          this.stats.hits += 1;
-          this.stats.memoryHits += 1;
-          logger.debug(`[CacheService] 内存缓存命中: ${key}`);
-          metricsService.recordCacheHit('cache_l1_memory');
-          return item.value as T;
-        }
-        this.memoryCache.delete(key);
+      // 1. 检查内存缓存（L1）- LRUCache 自动处理过期
+      const cachedValue = this.memoryCache.get(key);
+      if (cachedValue !== undefined) {
+        this.stats.hits += 1;
+        this.stats.memoryHits += 1;
+        logger.debug(`[CacheService] 内存缓存命中: ${key}`);
+        metricsService.recordCacheHit('cache_l1_memory');
+        return cachedValue as T;
       }
 
       // 2. 检查Redis缓存（L2）
@@ -151,8 +148,8 @@ class CacheService {
           parsedValue = redisValue as unknown as T;
         }
 
-        // 更新内存缓存
-        this.setMemoryCache(key, parsedValue, options.memoryTTL);
+        // 更新内存缓存 - LRUCache 自动管理TTL
+        this.memoryCache.set(key, parsedValue, { ttl: options.memoryTTL });
 
         logger.debug(`[CacheService] Redis缓存命中: ${key}`);
         return parsedValue;
@@ -209,12 +206,10 @@ class CacheService {
       }
 
       // 设置Redis缓存
-      const redisPromise = this.redis.setex(key, ttl, serializedValue);
+      await this.redis.setex(key, ttl, serializedValue);
 
-      // 设置内存缓存
-      const memoryPromise = Promise.resolve(this.setMemoryCache(key, value, options.memoryTTL));
-
-      await Promise.all([redisPromise, memoryPromise]);
+      // 设置内存缓存 - LRUCache 自动管理
+      this.memoryCache.set(key, value, { ttl: options.memoryTTL || this.memoryCacheTTL });
 
       this.stats.sets += 1;
       logger.debug(`[CacheService] 缓存设置成功: ${key}, TTL: ${ttl}s`);
@@ -257,26 +252,40 @@ class CacheService {
    * 批量删除缓存（支持模式匹配）
    * @param {string} pattern - 匹配模式
    * @returns {Promise<number>} 删除数量
+   * 性能优化：使用SCAN代替KEYS命令，避免阻塞Redis主线程
    */
   async deletePattern(pattern: string): Promise<number> {
     try {
-      const keys = await this.redis.keys(pattern);
-      if (keys.length === 0) {
-        return 0;
-      }
+      let cursor = '0';
+      let deletedCount = 0;
+      const batchSize = 100;
 
-      // 删除Redis缓存
-      const redisPromise = this.redis.del(...keys);
+      // 使用SCAN命令逐批扫描和删除，避免阻塞Redis
+      do {
+        const [nextCursor, keys] = await this.redis.scan(
+          cursor,
+          'MATCH',
+          pattern,
+          'COUNT',
+          batchSize
+        );
+        cursor = nextCursor;
 
-      // 删除内存缓存
-      keys.forEach((key: string) => this.memoryCache.delete(key));
+        if (keys.length > 0) {
+          // 删除Redis缓存
+          await this.redis.del(...keys);
 
-      await redisPromise;
+          // 删除内存缓存
+          keys.forEach((key: string) => this.memoryCache.delete(key));
 
-      this.stats.deletes += keys.length;
-      logger.debug(`[CacheService] 批量删除缓存成功: ${pattern}, 删除数量: ${keys.length}`);
+          deletedCount += keys.length;
+          this.stats.deletes += keys.length;
+        }
+      } while (cursor !== '0');
 
-      return keys.length;
+      logger.debug(`[CacheService] 批量删除缓存成功: ${pattern}, 删除数量: ${deletedCount}`);
+
+      return deletedCount;
     } catch (error: unknown) {
       this.stats.errors += 1;
       logger.error(`[CacheService] 批量删除缓存失败: ${pattern}`, error);
@@ -588,61 +597,8 @@ class CacheService {
     }
   }
 
-  /**
-   * 设置内存缓存
-   * @param {string} key - 键
-   * @param {T} value - 值
-   * @param {number} ttl - 生存时间（毫秒）
-   * @private
-   */
-  setMemoryCache<T = unknown>(key: string, value: T, ttl: number = this.memoryCacheTTL): void {
-    // 检查缓存大小限制
-    if (this.memoryCache.size >= this.memoryCacheMaxSize) {
-      // 删除最旧的缓存项（LRU）
-      const oldestKey = this.memoryCache.keys().next().value as string | undefined;
-      if (oldestKey) {
-        this.memoryCache.delete(oldestKey);
-      }
-    }
-
-    this.memoryCache.set(key, {
-      value,
-      expiresAt: Date.now() + ttl,
-      createdAt: Date.now()
-    });
-  }
-
-  /**
-   * 启动内存缓存清理定时器
-   * @private
-   */
-  startMemoryCacheCleanup(): void {
-    if (this.memoryCacheCleanupTimer) {
-      clearInterval(this.memoryCacheCleanupTimer);
-    }
-
-    this.memoryCacheCleanupTimer = setInterval(() => {
-      const now = Date.now();
-      const keysToDelete: string[] = [];
-
-      this.memoryCache.forEach((item: MemoryCacheEntry, cacheKey: string) => {
-        if (now >= item.expiresAt) {
-          keysToDelete.push(cacheKey);
-        }
-      });
-
-      keysToDelete.forEach((cacheKey) => this.memoryCache.delete(cacheKey));
-
-      if (keysToDelete.length > 0) {
-        logger.debug(`[CacheService] 内存缓存清理: ${keysToDelete.length} 项`);
-      }
-    }, 60000); // 每分钟清理一次
-
-    // 测试环境下如果不调用 unref，Jest 会因为定时器保持运行而无法退出
-    if (typeof this.memoryCacheCleanupTimer.unref === 'function') {
-      this.memoryCacheCleanupTimer.unref();
-    }
-  }
+  // 性能优化：使用 LRUCache 后，这些方法不再需要，LRUCache 会自动管理大小和过期
+  // setMemoryCache 和 startMemoryCacheCleanup 已被移除
 
   /**
    * 设置Redis事件监听
@@ -669,13 +625,11 @@ class CacheService {
   /**
    * 关闭缓存服务
    * @returns {Promise<void>}
+   * 性能优化：LRUCache 自动管理，无需清理定时器
    */
   async close(): Promise<void> {
     try {
-      if (this.memoryCacheCleanupTimer) {
-        clearInterval(this.memoryCacheCleanupTimer);
-        this.memoryCacheCleanupTimer = undefined;
-      }
+      // LRUCache 不需要手动清理定时器
       await this.redis.quit();
       this.memoryCache.clear();
       logger.info('[CacheService] 缓存服务已关闭');

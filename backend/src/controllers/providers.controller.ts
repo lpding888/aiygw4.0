@@ -9,6 +9,7 @@ import * as providerRepo from '../repositories/providerEndpoints.repo.js';
 import type { ProviderEndpointInput } from '../repositories/providerEndpoints.repo.js';
 import providerRegistryService from '../services/provider-registry.service.js';
 import { decrypt, type EncryptedData } from '../utils/crypto.js';
+import { capabilityDetectorService } from '../services/capability-detector.service.js';
 
 /**
  * 审计日志条目类型
@@ -421,6 +422,20 @@ export class ProvidersController {
         details: { provider_name: created.provider_name }
       });
 
+      // 异步触发能力探测（仅 LLM 类 Provider）
+      const providerName = created.provider_name.toLowerCase();
+      if (created.provider_ref.startsWith('llm_') ||
+        providerName.includes('deepseek') ||
+        providerName.includes('openai') ||
+        providerName.includes('claude') ||
+        providerName.includes('qwen')) {
+        setImmediate(() => {
+          capabilityDetectorService.detectCapabilities(created.provider_ref).catch((err) => {
+            console.warn(`[ProvidersController] 能力探测失败: ${created.provider_ref}`, err);
+          });
+        });
+      }
+
       res.status(201).json({
         success: true,
         data: created
@@ -465,6 +480,22 @@ export class ProvidersController {
           user_id: getUserIdOrNull(req),
           details: updates
         });
+
+        // 如果更新了凭证或端点URL，异步重新探测能力
+        if (updates.credentials || updates.endpoint_url) {
+          const providerName = updated.provider_name.toLowerCase();
+          if (updated.provider_ref.startsWith('llm_') ||
+            providerName.includes('deepseek') ||
+            providerName.includes('openai') ||
+            providerName.includes('claude') ||
+            providerName.includes('qwen')) {
+            setImmediate(() => {
+              capabilityDetectorService.detectCapabilities(updated.provider_ref).catch((err) => {
+                console.warn(`[ProvidersController] 能力重新探测失败: ${updated.provider_ref}`, err);
+              });
+            });
+          }
+        }
 
         res.json({
           success: true,
@@ -794,21 +825,18 @@ export class ProvidersController {
    */
   private async recordAuditLog(log: AuditLogEntry): Promise<void> {
     try {
-      // 艹，这里应该写入provider_audit_logs表
-      // 但先用console.log代替（后续实现审计日志表后再完善）
-      console.log('[AUDIT] Provider操作日志:', {
-        ...log,
-        timestamp: new Date().toISOString()
+      const { createAuditLog } = await import('../repositories/auditLogs.repo.js');
+      await createAuditLog({
+        entity_type: 'provider',
+        entity_id: undefined,
+        action: log.action.toLowerCase() as any,
+        user_id: log.user_id ? Number(log.user_id) : undefined,
+        user_name: log.user_id ?? undefined,
+        changes: log.details,
+        reason: log.action,
+        ip_address: '',
+        user_agent: ''
       });
-
-      // TODO: 后续实现审计日志表后，写入数据库
-      // await db('provider_audit_logs').insert({
-      //   action: log.action,
-      //   provider_ref: log.provider_ref,
-      //   user_id: log.user_id,
-      //   details: JSON.stringify(log.details),
-      //   created_at: new Date(),
-      // });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       console.error('[AUDIT] 记录审计日志失败:', err.message);

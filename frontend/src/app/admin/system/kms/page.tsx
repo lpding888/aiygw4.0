@@ -159,6 +159,7 @@ export default function KMSPage() {
                 className="rounded-2xl overflow-hidden"
             >
                 <Form
+                    name="kms_form"
                     form={form}
                     layout="vertical"
                     onFinish={handleCreate}

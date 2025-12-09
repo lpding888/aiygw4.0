@@ -1,3 +1,14 @@
+export interface APIResponse<T = any> {
+  success: boolean;
+  data?: T;
+  total?: number;
+  error?: {
+    code: number;
+    message: string;
+  };
+  message?: string;
+}
+
 export interface User {
   id: string;
   phone: string;

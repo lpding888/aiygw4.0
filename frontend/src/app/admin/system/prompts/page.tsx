@@ -414,6 +414,7 @@ export default function PromptManagementPage() {
                 onCancel={() => setIsHistoryModalOpen(false)}
                 footer={null}
                 width={800}
+                centered
             >
                 <Table
                     dataSource={history}

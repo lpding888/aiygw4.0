@@ -163,6 +163,39 @@ router.get(
   providersController.getProvider.bind(providersController)
 );
 
+/**
+ * 获取供应商能力（用于 Agent 节点动态感知）
+ * GET /api/admin/providers/:provider_ref/capabilities
+ */
+router.get(
+  '/:provider_ref/capabilities',
+  param('provider_ref').notEmpty().withMessage('供应商ID不能为空'),
+  validate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { provider_ref } = req.params;
+      const capabilities = await providerRegistryService.getProviderCapabilities(provider_ref);
+
+      if (!capabilities) {
+        return res.json({
+          success: true,
+          data: null,
+          message: '该供应商未配置能力信息'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: capabilities
+      });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`获取供应商能力失败: ${req.params.provider_ref}`, err);
+      next(err);
+    }
+  }
+);
+
 // ============ 需要编辑权限的路由 ============
 router.use(
   requirePermission({
@@ -449,6 +482,87 @@ router.delete(
   param('provider_ref').notEmpty().withMessage('供应商ID不能为空'),
   validate,
   providersController.deleteProvider.bind(providersController)
+);
+
+/**
+ * 手动触发模型能力探测
+ * POST /api/admin/providers/:provider_ref/detect-capabilities
+ */
+router.post(
+  '/:provider_ref/detect-capabilities',
+  requirePermission({
+    resource: 'providers',
+    actions: ['update']
+  }),
+  param('provider_ref').notEmpty().withMessage('供应商ID不能为空'),
+  validate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { provider_ref } = req.params;
+
+      // 动态导入避免循环依赖
+      const { capabilityDetectorService } = await import('../../services/capability-detector.service.js');
+      const result = await capabilityDetectorService.detectCapabilities(provider_ref);
+
+      logger.info('模型能力探测完成', {
+        providerRef: provider_ref,
+        duration: result.duration_ms,
+        requestedBy: req.user?.id,
+        ip: req.ip
+      });
+
+      res.json({
+        success: true,
+        data: result,
+        message: result.success ? '能力探测成功' : '部分能力探测失败',
+        requestId: req.id
+      });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(`模型能力探测失败: ${req.params.provider_ref}`, err);
+      next(err);
+    }
+  }
+);
+
+/**
+ * 批量探测所有 LLM Provider 的能力
+ * POST /api/admin/providers/detect-all-capabilities
+ */
+router.post(
+  '/detect-all-capabilities',
+  requirePermission({
+    resource: 'providers',
+    actions: ['update']
+  }),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { capabilityDetectorService } = await import('../../services/capability-detector.service.js');
+      const results = await capabilityDetectorService.detectAllProviders();
+
+      const resultObj: Record<string, unknown> = {};
+      results.forEach((value, key) => {
+        resultObj[key] = value;
+      });
+
+      logger.info('批量模型能力探测完成', {
+        totalProviders: results.size,
+        requestedBy: req.user?.id,
+        ip: req.ip
+      });
+
+      res.json({
+        success: true,
+        data: resultObj,
+        message: `已完成 ${results.size} 个 Provider 的能力探测`,
+        requestId: req.id
+      });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('批量模型能力探测失败', err);
+      next(err);
+    }
+  }
 );
 
 export default router;

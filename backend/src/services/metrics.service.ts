@@ -65,6 +65,20 @@ class MetricsService {
   private queueJobGauge: promClient.Gauge<string>;
   private dbPoolGauge: promClient.Gauge<string>;
 
+  // Pipeline指标
+  private pipelineExecutionTotal: promClient.Counter<string>;
+  private pipelineSuccessTotal: promClient.Counter<string>;
+  private pipelineFailureTotal: promClient.Counter<string>;
+  private pipelineDuration: promClient.Histogram<string>;
+
+  // AI调用指标
+  private aiCallTotal: promClient.Counter<string>;
+  private aiCallCost: promClient.Counter<string>;
+  private aiCallDuration: promClient.Histogram<string>;
+
+  // 慢查询指标
+  private slowQueryTotal: promClient.Counter<string>;
+
   constructor() {
     // 默认启用Prometheus指标收集
     this.enabled = process.env.PROMETHEUS_ENABLED !== 'false';
@@ -94,6 +108,17 @@ class MetricsService {
       this.cacheMisses = new promClient.Counter({ name: 'dummy19', help: 'dummy' });
       this.queueJobGauge = new promClient.Gauge({ name: 'dummy20', help: 'dummy' });
       this.dbPoolGauge = new promClient.Gauge({ name: 'dummy21', help: 'dummy' });
+      // Pipeline指标
+      this.pipelineExecutionTotal = new promClient.Counter({ name: 'dummy22', help: 'dummy' });
+      this.pipelineSuccessTotal = new promClient.Counter({ name: 'dummy23', help: 'dummy' });
+      this.pipelineFailureTotal = new promClient.Counter({ name: 'dummy24', help: 'dummy' });
+      this.pipelineDuration = new promClient.Histogram({ name: 'dummy25', help: 'dummy' });
+      // AI指标
+      this.aiCallTotal = new promClient.Counter({ name: 'dummy26', help: 'dummy' });
+      this.aiCallCost = new promClient.Counter({ name: 'dummy27', help: 'dummy' });
+      this.aiCallDuration = new promClient.Histogram({ name: 'dummy28', help: 'dummy' });
+      // 慢查询指标
+      this.slowQueryTotal = new promClient.Counter({ name: 'dummy29', help: 'dummy' });
       return;
     }
 
@@ -284,6 +309,78 @@ class MetricsService {
       registers: [this.register]
     });
 
+    // ========== Pipeline指标 ==========
+
+    // Pipeline执行总数
+    this.pipelineExecutionTotal = new promClient.Counter({
+      name: 'aiphoto_pipeline_execution_total',
+      help: 'Pipeline执行总数',
+      labelNames: ['pipeline_name'],
+      registers: [this.register]
+    });
+
+    // Pipeline成功总数
+    this.pipelineSuccessTotal = new promClient.Counter({
+      name: 'aiphoto_pipeline_success_total',
+      help: 'Pipeline成功总数',
+      labelNames: ['pipeline_name'],
+      registers: [this.register]
+    });
+
+    // Pipeline失败总数
+    this.pipelineFailureTotal = new promClient.Counter({
+      name: 'aiphoto_pipeline_failure_total',
+      help: 'Pipeline失败总数',
+      labelNames: ['pipeline_name', 'error_type'],
+      registers: [this.register]
+    });
+
+    // Pipeline执行耗时
+    this.pipelineDuration = new promClient.Histogram({
+      name: 'aiphoto_pipeline_duration_seconds',
+      help: 'Pipeline执行耗时（秒）',
+      labelNames: ['pipeline_name'],
+      buckets: [0.5, 1, 2, 5, 10, 30, 60, 120, 300],
+      registers: [this.register]
+    });
+
+    // ========== AI调用指标 ==========
+
+    // AI调用总数
+    this.aiCallTotal = new promClient.Counter({
+      name: 'aiphoto_ai_call_total',
+      help: 'AI服务调用总数',
+      labelNames: ['provider', 'model', 'status'],
+      registers: [this.register]
+    });
+
+    // AI调用成本（元）
+    this.aiCallCost = new promClient.Counter({
+      name: 'aiphoto_ai_call_cost_yuan',
+      help: 'AI服务调用成本（元）',
+      labelNames: ['provider', 'model'],
+      registers: [this.register]
+    });
+
+    // AI调用耗时
+    this.aiCallDuration = new promClient.Histogram({
+      name: 'aiphoto_ai_call_duration_seconds',
+      help: 'AI服务调用耗时（秒）',
+      labelNames: ['provider', 'model'],
+      buckets: [0.1, 0.5, 1, 2, 5, 10, 30, 60],
+      registers: [this.register]
+    });
+
+    // ========== 慢查询指标 ==========
+
+    // 慢查询总数
+    this.slowQueryTotal = new promClient.Counter({
+      name: 'aiphoto_slow_query_total',
+      help: '慢查询总数',
+      labelNames: ['table'],
+      registers: [this.register]
+    });
+
     logger.info('[Metrics] ✅ Prometheus监控服务已启动');
   }
 
@@ -416,6 +513,44 @@ class MetricsService {
     this.dbPoolGauge.set({ state: 'used' }, stats.used);
     this.dbPoolGauge.set({ state: 'idle' }, stats.free);
     this.dbPoolGauge.set({ state: 'pending' }, stats.pending);
+  }
+
+  // ========== Pipeline指标记录方法 ==========
+
+  recordPipelineExecution(pipelineName: string): void {
+    if (!this.enabled) return;
+    this.pipelineExecutionTotal.inc({ pipeline_name: pipelineName });
+  }
+
+  recordPipelineSuccess(pipelineName: string, duration: number): void {
+    if (!this.enabled) return;
+    this.pipelineSuccessTotal.inc({ pipeline_name: pipelineName });
+    this.pipelineDuration.observe({ pipeline_name: pipelineName }, duration);
+  }
+
+  recordPipelineFailure(pipelineName: string, errorType: string): void {
+    if (!this.enabled) return;
+    this.pipelineFailureTotal.inc({ pipeline_name: pipelineName, error_type: errorType });
+  }
+
+  // ========== AI调用指标记录方法 ==========
+
+  recordAiCall(provider: string, model: string, status: 'success' | 'failure', duration: number): void {
+    if (!this.enabled) return;
+    this.aiCallTotal.inc({ provider, model, status });
+    this.aiCallDuration.observe({ provider, model }, duration);
+  }
+
+  recordAiCost(provider: string, model: string, costYuan: number): void {
+    if (!this.enabled) return;
+    this.aiCallCost.inc({ provider, model }, costYuan);
+  }
+
+  // ========== 慢查询指标记录方法 ==========
+
+  recordSlowQuery(table: string = 'unknown'): void {
+    if (!this.enabled) return;
+    this.slowQueryTotal.inc({ table });
   }
 
   // ========== Prometheus端点方法 ==========

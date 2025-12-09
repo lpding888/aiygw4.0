@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { usePipelineStore } from '../../stores/usePipelineStore';
+import { usePipelineStore } from '@/store/pipelineStore';
 
 // Simple binding selector modal/popover could be added here, 
 // but for V1 we'll just show a list of potential sources in a dropdown if "Link" is active.
@@ -146,6 +146,76 @@ export function PropertiesPanel() {
             {node.type === 'code' && (
                 <>
                     {renderField('Code Loop', 'code')}
+                </>
+            )}
+
+            {node.type === 'agent' && (
+                <>
+                    {renderField('Model', 'model', 'select', ['deepseek-chat', 'gpt-4o', 'gpt-4-turbo', 'claude-3-5-sonnet', 'qwen-plus'])}
+                    {renderField('System Prompt', 'system_prompt')}
+                    {renderField('Max Iterations', 'max_iterations', 'number')}
+                    {renderField('Temperature', 'temperature', 'number')}
+
+                    <div style={{ marginBottom: 15 }}>
+                        <label style={{ fontSize: 12, opacity: 0.8, display: 'block', marginBottom: 5 }}>Tools</label>
+                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 8 }}>
+                            Configure KB and MCP tools for the agent
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={Boolean((node.data as any)?.tools?.some((t: any) => t.type === 'kb_retrieve'))}
+                                    onChange={(e) => {
+                                        const currentTools = (node.data as any)?.tools || [];
+                                        if (e.target.checked) {
+                                            handleDataChange('tools', [...currentTools, { type: 'kb_retrieve', kb_id: 'default' }]);
+                                        } else {
+                                            handleDataChange('tools', currentTools.filter((t: any) => t.type !== 'kb_retrieve'));
+                                        }
+                                    }}
+                                />
+                                Knowledge Base Retrieval
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={Boolean((node.data as any)?.tools?.some((t: any) => t.type === 'code_execute'))}
+                                    onChange={(e) => {
+                                        const currentTools = (node.data as any)?.tools || [];
+                                        if (e.target.checked) {
+                                            handleDataChange('tools', [...currentTools, { type: 'code_execute' }]);
+                                        } else {
+                                            handleDataChange('tools', currentTools.filter((t: any) => t.type !== 'code_execute'));
+                                        }
+                                    }}
+                                />
+                                Code Execution
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style={{ marginBottom: 15 }}>
+                        <label style={{ fontSize: 12, opacity: 0.8, display: 'block', marginBottom: 5 }}>Advanced</label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={Boolean((node.data as any)?.parallel_tool_calls)}
+                                    onChange={(e) => handleDataChange('parallel_tool_calls', e.target.checked)}
+                                />
+                                Parallel Tool Calls
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={Boolean((node.data as any)?.memory_enabled)}
+                                    onChange={(e) => handleDataChange('memory_enabled', e.target.checked)}
+                                />
+                                Enable Memory
+                            </label>
+                        </div>
+                    </div>
                 </>
             )}
         </div>

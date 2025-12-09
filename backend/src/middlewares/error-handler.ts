@@ -1,12 +1,76 @@
 import type { NextFunction, Request, Response } from 'express';
 import AppError from '../utils/AppError.js';
 import logger from '../utils/logger.js';
+import notificationService from '../services/notification.service.js';
 import { ERROR_CODES } from '../config/error-codes.js';
 import { SUPPORTED_LANGUAGES, type SupportedLanguageCode } from '../config/i18n-messages.js';
 
 const supportedLanguageCodes = new Set<SupportedLanguageCode>(
   Object.keys(SUPPORTED_LANGUAGES) as SupportedLanguageCode[]
 );
+
+/**
+ * 错误统计类 - 整合自 enhanced-error-handler.middleware.ts
+ */
+type ErrorStat = {
+  code: number;
+  category?: string;
+  severity?: string;
+  count: number;
+  lastOccurrence: number;
+};
+
+class ErrorStatsCollector {
+  private stats = new Map<number, ErrorStat>();
+
+  public record(code: number, category?: string, severity?: string): void {
+    const now = Date.now();
+    const prev = this.stats.get(code);
+    if (prev) {
+      prev.count += 1;
+      prev.lastOccurrence = now;
+      if (category && !prev.category) prev.category = category;
+      if (severity && !prev.severity) prev.severity = severity;
+    } else {
+      this.stats.set(code, { code, category, severity, count: 1, lastOccurrence: now });
+    }
+  }
+
+  public reset(): void {
+    this.stats.clear();
+  }
+
+  public snapshot(): { total: number; topErrors: ErrorStat[]; byCategory: Record<string, number>; bySeverity: Record<string, number> } {
+    const list = Array.from(this.stats.values()).sort((a, b) => b.count - a.count);
+    const total = list.reduce((acc, s) => acc + s.count, 0);
+
+    // 按分类统计
+    const byCategory: Record<string, number> = {};
+    const bySeverity: Record<string, number> = {};
+
+    list.forEach((stat) => {
+      if (stat.category) {
+        byCategory[stat.category] = (byCategory[stat.category] || 0) + stat.count;
+      }
+      if (stat.severity) {
+        bySeverity[stat.severity] = (bySeverity[stat.severity] || 0) + stat.count;
+      }
+    });
+
+    return { total, topErrors: list.slice(0, 10), byCategory, bySeverity };
+  }
+}
+
+// 全局错误统计实例
+const errorStats = new ErrorStatsCollector();
+
+/**
+ * 导出错误统计API
+ */
+export const errorStatsApi = {
+  getStats: () => errorStats.snapshot(),
+  reset: () => errorStats.reset()
+};
 
 const resolveLanguage = (
   header: string | string[] | undefined
@@ -40,7 +104,6 @@ export function appErrorHandler(
   err: unknown,
   req: Request,
   res: Response,
-
   _next: NextFunction
 ): void {
   const appError = AppError.fromError(err, ERROR_CODES.INTERNAL_SERVER_ERROR, {
@@ -51,6 +114,9 @@ export function appErrorHandler(
     userAgent: req.headers['user-agent'],
     ip: req.ip || req.socket.remoteAddress
   });
+
+  // 记录错误统计
+  errorStats.record(appError.code, appError.metadata.category, appError.metadata.severity);
 
   // 记录增强的错误日志
   if (appError.options.shouldLog) {
@@ -70,16 +136,35 @@ export function appErrorHandler(
     });
   }
 
+  // 上报Prometheus指标 (延迟导入避免循环依赖)
+  void (async () => {
+    try {
+      const metricsModule = await import('../services/metrics.service.js');
+      metricsModule.default.recordTaskFailed(
+        appError.metadata.category || 'unknown',
+        String(appError.code)
+      );
+    } catch {
+      // 忽略指标上报失败
+    }
+  })();
+
   // Critical错误需要特殊处理（如发送通知）
   if (appError.metadata.severity === 'critical' && appError.options.shouldNotify) {
-    // TODO: 集成通知服务（邮件、Slack、钉钉等）
-    logger.error('[ErrorHandler] 🚨 CRITICAL错误需要立即处理！', {
-      code: appError.code,
-      message: appError.message,
-      requestId: appError.requestId,
-      userId: appError.userId,
-      path: req.originalUrl
-    });
+    const notifyPayload = {
+      title: '🚨 Critical Error Detected',
+      message: `${appError.code} - ${appError.message}`,
+      severity: 'critical' as const,
+      context: {
+        requestId: appError.requestId,
+        userId: appError.userId,
+        path: req.originalUrl,
+        method: req.method,
+        ip: req.ip || req.socket.remoteAddress
+      }
+    };
+    logger.error('[ErrorHandler] 🚨 CRITICAL错误需要立即处理！', notifyPayload.context);
+    void notificationService.notify(notifyPayload);
   }
 
   const language = resolveLanguage(req.headers['accept-language']);

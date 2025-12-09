@@ -35,10 +35,12 @@ import {
   CheckCircleOutlined,
   ClockCircleOutlined,
   CloseCircleOutlined,
+  GiftOutlined
 } from '@ant-design/icons';
 import type { ColumnType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { WithdrawalModal } from '@/components/referral/WithdrawalModal';
+import { api } from '@/lib/api';
 
 const { Title, Text, Paragraph } = Typography;
 const { TabPane } = Tabs;
@@ -142,8 +144,39 @@ export default function ReferralPage() {
   // 提现Modal
   const [withdrawalModalVisible, setWithdrawalModalVisible] = useState(false);
 
+  // 邀请码兑换
+  const [redeemCode, setRedeemCode] = useState('');
+  const [redeemLoading, setRedeemLoading] = useState(false);
+
   // 加载状态
   const [loading, setLoading] = useState(false);
+
+  /**
+   * 兑换邀请码
+   */
+  const handleRedeem = async () => {
+    if (!redeemCode.trim()) {
+      message.warning('请输入邀请码');
+      return;
+    }
+
+    setRedeemLoading(true);
+    try {
+      const res = await api.inviteCode.use(redeemCode);
+      if (res.success) {
+        message.success('兑换成功！');
+        setRedeemCode('');
+        // 刷新数据
+        loadStats();
+      } else {
+        message.error(res.error?.message || '兑换失败');
+      }
+    } catch (error: any) {
+      message.error(error.message || '邀请码无效或已过期');
+    } finally {
+      setRedeemLoading(false);
+    }
+  };
 
   /**
    * 加载邀请统计
@@ -498,6 +531,33 @@ export default function ReferralPage() {
               <li>支持提现方式：微信、支付宝、银行卡</li>
             </ul>
           </div>
+        </Card>
+
+        {/* 兑换邀请码卡片 */}
+        <Card title="兑换邀请码" style={{ marginBottom: 24 }}>
+          <Alert
+            message="如果您拥有邀请码，可以在此兑换以获得会员时长或特殊权益。"
+            type="success"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+          <Space>
+            <Input
+              placeholder="请输入邀请码"
+              value={redeemCode}
+              onChange={e => setRedeemCode(e.target.value)}
+              style={{ width: 300 }}
+              prefix={<GiftOutlined style={{ color: '#eb2f96' }} />}
+            />
+            <Button
+              type="primary"
+              onClick={handleRedeem}
+              loading={redeemLoading}
+              style={{ background: '#eb2f96', borderColor: '#eb2f96' }}
+            >
+              立即兑换
+            </Button>
+          </Space>
         </Card>
 
         {/* 数据详情Tabs */}

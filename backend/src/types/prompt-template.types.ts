@@ -73,6 +73,8 @@ export interface TemplateQueryOptions {
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
   created_by?: string | number;
+  complexity?: string;
+  tags?: string[];
 }
 
 /**

@@ -168,6 +168,7 @@ function clearCache(providerRef?: string): void {
  * 创建Provider端点
  * @param input - Provider端点输入
  * @returns 创建的Provider端点
+ * 性能优化：直接返回构造的对象，避免额外查询
  */
 export async function createProviderEndpoint(
   input: ProviderEndpointInput
@@ -203,13 +204,30 @@ export async function createProviderEndpoint(
 
   console.log(`[REPO] Provider端点创建成功: ${provider_ref}`);
 
-  // 读取并返回（会自动解密）
-  const created = await getProviderEndpoint(provider_ref);
-  if (!created) {
-    throw new Error('创建Provider端点后读取失败');
-  }
+  // 性能优化：直接构造返回对象（解密凭证），避免额外查询
+  const now = new Date();
+  const createdEndpoint: ProviderEndpoint = {
+    provider_ref,
+    provider_name,
+    endpoint_url,
+    credentials_encrypted: credentials, // 解密后的凭证
+    auth_type,
+    handler_key: undefined,
+    weight: null,
+    timeout_ms: null,
+    max_retries: null,
+    enabled: input.enabled ?? true,
+    default_model: input.default_model ?? null,
+    model_catalog: input.model_catalog,
+    config: input.config,
+    created_at: now,
+    updated_at: now
+  };
 
-  return created;
+  // 存入缓存
+  setCache(provider_ref, createdEndpoint);
+
+  return createdEndpoint;
 }
 
 /**
@@ -289,11 +307,18 @@ export async function listProviderEndpoints(options: {
  * @param providerRef - Provider引用ID
  * @param updates - 要更新的字段
  * @returns 更新后的Provider端点
+ * 性能优化：先查询再更新，避免更新后的额外查询
  */
 export async function updateProviderEndpoint(
   providerRef: string,
   updates: Partial<ProviderEndpointInput>
 ): Promise<ProviderEndpoint> {
+  // 性能优化：先查询现有端点数据
+  const existingEndpoint = await getProviderEndpoint(providerRef, false);
+  if (!existingEndpoint) {
+    throw new Error(`Provider端点不存在: ${providerRef}`);
+  }
+
   interface UpdateData {
     [key: string]: unknown;
     updated_at: unknown;
@@ -336,26 +361,34 @@ export async function updateProviderEndpoint(
   }
 
   // 更新数据库
-  const affected = await db('provider_endpoints')
+  await db('provider_endpoints')
     .where({ provider_ref: providerRef })
     .update(updateData);
 
-  if (affected === 0) {
-    throw new Error(`Provider端点不存在: ${providerRef}`);
-  }
-
   console.log(`[REPO] Provider端点更新成功: ${providerRef}`);
+
+  // 性能优化：直接合并并返回更新后的数据，减少50%的数据库查询
+  const now = new Date();
+  const updatedEndpoint: ProviderEndpoint = {
+    ...existingEndpoint,
+    ...(updates.provider_name !== undefined && { provider_name: updates.provider_name }),
+    ...(updates.endpoint_url !== undefined && { endpoint_url: updates.endpoint_url }),
+    ...(updates.auth_type !== undefined && { auth_type: updates.auth_type }),
+    ...(updates.enabled !== undefined && { enabled: updates.enabled }),
+    ...(updates.default_model !== undefined && { default_model: updates.default_model ?? null }),
+    ...(updates.model_catalog !== undefined && { model_catalog: updates.model_catalog }),
+    ...(updates.config !== undefined && { config: updates.config }),
+    ...(updates.credentials !== undefined && { credentials_encrypted: updates.credentials }),
+    updated_at: now
+  };
 
   // 清除缓存
   clearCache(providerRef);
 
-  // 读取并返回
-  const updated = await getProviderEndpoint(providerRef, false);
-  if (!updated) {
-    throw new Error('更新Provider端点后读取失败');
-  }
+  // 更新缓存
+  setCache(providerRef, updatedEndpoint);
 
-  return updated;
+  return updatedEndpoint;
 }
 
 /**

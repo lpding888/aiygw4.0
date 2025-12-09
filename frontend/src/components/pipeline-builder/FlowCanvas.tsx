@@ -15,7 +15,7 @@ import {
     applyEdgeChanges
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { usePipelineStore } from '../../stores/usePipelineStore';
+import { usePipelineStore } from '@/store/pipelineStore';
 
 // Mappers to convert shared protocol to React Flow format
 const protocolToFlow = (pipeline: any) => {
@@ -77,16 +77,39 @@ export function FlowCanvas() {
 
     // TODO: Ideally we sync store -> useNodesState or use store directly.
     // For "Controlled" React Flow, we pass nodes/edges and onNodesChange calls store actions.
-    const { nodes, edges } = protocolToFlow(currentPipeline);
+    const { nodes: initialNodes, edges: initialEdges } = protocolToFlow(currentPipeline);
+    const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+    const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
     const { setSelectedNode } = usePipelineStore();
 
-    const onNodesChange = useCallback((changes: NodeChange[]) => {
-        changes.forEach(change => {
-            if (change.type === 'position' && change.position) {
-                updateNodePosition(change.id, change.position);
-            }
+    // Sync React Flow's internal state with our store's state
+    React.useEffect(() => {
+        const { nodes: newNodes, edges: newEdges } = protocolToFlow(currentPipeline);
+        setNodes(newNodes);
+        setEdges(newEdges);
+    }, [currentPipeline, setNodes, setEdges]);
+
+    const onNodesChangeHandler = useCallback((changes: NodeChange[]) => {
+        setNodes((nds) => {
+            const updatedNodes = applyNodeChanges(changes, nds);
+            changes.forEach(change => {
+                if (change.type === 'position' && change.position) {
+                    updateNodePosition(change.id, change.position);
+                }
+            });
+            return updatedNodes;
         });
-    }, [updateNodePosition]);
+    }, [setNodes, updateNodePosition]);
+
+    const onEdgesChangeHandler = useCallback((changes: EdgeChange[]) => {
+        setEdges((eds) => applyEdgeChanges(changes, eds));
+    }, [setEdges]);
+
+    const onConnect = useCallback((params: Connection) => {
+        setEdges((eds) => addEdge(params, eds));
+        // TODO: Add addEdge action to store
+        console.log('Connect:', params);
+    }, [setEdges]);
 
     const onNodeClick = useCallback((_: React.MouseEvent, node: any) => {
         setSelectedNode(node.id);
@@ -96,17 +119,13 @@ export function FlowCanvas() {
         setSelectedNode(null);
     }, [setSelectedNode]);
 
-    const onConnect = useCallback((params: Connection) => {
-        // TODO: Add addEdge action to store
-        console.log('Connect:', params);
-    }, []);
-
     return (
         <div style={{ width: '100%', height: '100%' }}>
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
-                onNodesChange={onNodesChange}
+                onNodesChange={onNodesChangeHandler}
+                onEdgesChange={onEdgesChangeHandler}
                 onConnect={onConnect}
                 onNodeClick={onNodeClick}
                 onPaneClick={onPaneClick}

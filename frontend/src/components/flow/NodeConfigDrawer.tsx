@@ -40,7 +40,7 @@ export interface NodeConfigDrawerProps {
   node: Node | null;
   onClose: () => void;
   onSave: (nodeId: string, data: any) => void;
-  availableVariables?: string[]; 
+  availableVariables?: string[];
 }
 
 export default function NodeConfigDrawer({
@@ -66,7 +66,7 @@ export default function NodeConfigDrawer({
       // 兼容旧逻辑
       if (node.type === 'condition') initialValues.condition = node.data.condition;
       if (node.type === 'postProcess') initialValues.processor = node.data.processor;
-      
+
       form.setFieldsValue(initialValues);
     }
   }, [node, open, form]);
@@ -74,10 +74,10 @@ export default function NodeConfigDrawer({
   const handleSave = () => {
     form.validateFields().then((values) => {
       if (!node) return;
-      
+
       // 分离 label 和 params
       const { label, ...params } = values;
-      
+
       // 构造新的 data
       const newData = {
         label,
@@ -110,15 +110,15 @@ export default function NodeConfigDrawer({
 
     return schema.map((field: any) => {
       const { name, label, type, description, required, default: defaultValue } = field;
-      
+
       let inputComponent;
       // 变量插入按钮
       const suffix = availableVariables.length > 0 && type === 'string' ? (
         <Tooltip title="插入变量">
-          <Select 
-            style={{ width: 24 }} 
+          <Select
+            style={{ width: 24 }}
             dropdownMatchSelectWidth={false}
-            bordered={false}
+            variant="borderless"
             suffixIcon={<PlusOutlined style={{ color: '#1890ff' }} />}
             onSelect={(val) => insertVariable(name, val)}
             options={availableVariables.map(v => ({ label: v, value: v }))}

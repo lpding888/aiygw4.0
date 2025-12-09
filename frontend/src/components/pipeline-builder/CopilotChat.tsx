@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { FloatButton, Drawer, Input, Button, List, Card, Typography, Spin, Tag, message } from 'antd';
 import { RobotOutlined, SendOutlined, CheckCircleOutlined, EditOutlined, BulbOutlined } from '@ant-design/icons';
-import { usePipelineStore } from '@/stores/usePipelineStore';
+import { usePipelineStore } from '@/store/pipelineStore';
 import { architectService, ArchitectResult } from '@/lib/services/architect';
 
 const { TextArea } = Input;
@@ -128,10 +128,10 @@ export default function CopilotChat() {
                             {/* Message Bubble */}
                             <div
                                 className={`max-w-[85%] rounded-lg p-3 ${msg.role === 'user'
-                                        ? 'bg-blue-500 text-white'
-                                        : msg.role === 'system'
-                                            ? 'bg-red-50 text-red-600 border border-red-100'
-                                            : 'bg-white border border-gray-200 shadow-sm text-gray-800'
+                                    ? 'bg-blue-500 text-white'
+                                    : msg.role === 'system'
+                                        ? 'bg-red-50 text-red-600 border border-red-100'
+                                        : 'bg-white border border-gray-200 shadow-sm text-gray-800'
                                     }`}
                             >
                                 {msg.role === 'assistant' && (

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Spin, List, Typography, Tag, Space, Button, message } from 'antd';
+import { Card, Row, Col, Statistic, Spin, Tag, Space, Button, message } from 'antd';
 import {
   UserOutlined,
   RocketOutlined,
@@ -9,12 +9,12 @@ import {
   ThunderboltOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
-  ArrowRightOutlined,
   ReloadOutlined
 } from '@ant-design/icons';
 import api from '@/lib/api';
-
-const { Title, Text } = Typography;
+import RevenueTrendChart from './components/RevenueTrendChart';
+import UserGrowthChart from './components/UserGrowthChart';
+import TaskDistributionChart from './components/TaskDistributionChart';
 
 interface DashboardStats {
   userStats: {
@@ -83,12 +83,12 @@ export default function DashboardPage() {
       <div className="flex justify-between items-end mb-8">
         <div>
           <h1 className="text-4xl font-bold text-gradient mb-2">👋 欢迎回来，管理员</h1>
-          <p className="text-gray-500 text-lg">这里是您的 AI 工厂控制台，今日系统运行平稳。</p>
+          <p className="text-gray-500 text-lg">这里是您的 AI 工厂控制台，数据概览一目了然。</p>
         </div>
         <Button icon={<ReloadOutlined />} onClick={fetchStats} loading={loading}>刷新数据</Button>
       </div>
 
-      {/* 核心指标卡片 (Bento Grid) */}
+      {/* 核心指标卡片 (Key Metrics) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {/* User Stats */}
         <div className="glass-card-strong p-6 relative overflow-hidden group hover:shadow-lg transition-all">
@@ -129,7 +129,6 @@ export default function DashboardPage() {
             <div className="p-3 bg-amber-50 rounded-2xl text-amber-600">
               <DollarOutlined className="text-xl" />
             </div>
-            <div className="h-6"></div>
           </div>
           <div className="text-gray-500 text-sm font-medium mb-1">总收入</div>
           <div className="text-3xl font-bold text-gray-800 mb-2">¥ {stats.orderStats.revenue.toFixed(2)}</div>
@@ -156,13 +155,28 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* 图表展示区 (Charts) */}
+      <Row gutter={[24, 24]} className="mb-8">
+        <Col xs={24} lg={16}>
+          <RevenueTrendChart />
+        </Col>
+        <Col xs={24} lg={8}>
+          <TaskDistributionChart />
+        </Col>
+      </Row>
+
       <Row gutter={[24, 24]}>
-        <Col xs={24} md={16}>
-          <div className="glass-card-strong p-6 h-full">
+        <Col xs={24} lg={12}>
+          <UserGrowthChart />
+        </Col>
+        <Col xs={24} lg={12}>
+          <div className="glass-card-strong p-6 h-full flex flex-col">
             <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-              <RocketOutlined /> 快捷操作
+              <RocketOutlined /> 快捷操作 & 系统状态
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+            {/* Quick Actions */}
+            <div className="grid grid-cols-2 gap-4 mb-8">
               <div
                 className="p-4 rounded-xl bg-gray-50 border border-gray-100 hover:border-blue-200 hover:bg-blue-50/30 cursor-pointer transition-all group"
                 onClick={() => window.location.href = '/admin/pipelines/editor'}
@@ -173,7 +187,6 @@ export default function DashboardPage() {
                   </div>
                   <span className="font-semibold text-gray-700">新建工作流</span>
                 </div>
-                <p className="text-xs text-gray-400 pl-11">创建新的AI处理流程</p>
               </div>
 
               <div
@@ -184,49 +197,24 @@ export default function DashboardPage() {
                   <div className="p-2 bg-purple-100/50 rounded-lg text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-colors">
                     <ThunderboltOutlined />
                   </div>
-                  <span className="font-semibold text-gray-700">上架新应用</span>
+                  <span className="font-semibold text-gray-700">上架应用</span>
                 </div>
-                <p className="text-xs text-gray-400 pl-11">发布新的AI功能应用</p>
-              </div>
-
-              <div
-                className="p-4 rounded-xl bg-gray-50 border border-gray-100 hover:border-green-200 hover:bg-green-50/30 cursor-pointer transition-all group"
-                onClick={() => window.location.href = '/admin/users'}
-              >
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="p-2 bg-green-100/50 rounded-lg text-green-600 group-hover:bg-green-600 group-hover:text-white transition-colors">
-                    <UserOutlined />
-                  </div>
-                  <span className="font-semibold text-gray-700">用户管理</span>
-                </div>
-                <p className="text-xs text-gray-400 pl-11">查看和管理注册用户</p>
               </div>
             </div>
-          </div>
-        </Col>
 
-        <Col xs={24} md={8}>
-          <div className="glass-card-strong p-6 h-full">
-            <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-              <CheckCircleOutlined /> 系统状态
-            </h3>
-            <div className="space-y-4">
+            {/* System Health Compact */}
+            <div className="flex-1 space-y-3">
               {[
-                { title: 'API 服务正常', status: 'success' },
-                { title: 'Redis 连接正常', status: 'success' },
-                { title: '数据库连接正常', status: 'success' },
-                { title: 'DeepSeek 大脑在线', status: 'processing' },
+                { title: 'API 服务', status: 'success' },
+                { title: 'Redis Cache', status: 'success' },
+                { title: 'PostgreSQL DB', status: 'success' },
               ].map((item, index) => (
-
                 <div key={index} className="flex justify-between items-center p-3 rounded-xl bg-gray-50/50 border border-gray-100">
                   <div className="flex items-center gap-3">
-                    {item.status === 'success' ?
-                      <CheckCircleOutlined className="text-green-500" /> :
-                      <ClockCircleOutlined className="text-blue-500 animate-spin-slow" />
-                    }
+                    <CheckCircleOutlined className="text-green-500" />
                     <span className="font-medium text-gray-700">{item.title}</span>
                   </div>
-                  <div className={`w-2 h-2 rounded-full ${item.status === 'success' ? 'bg-green-500' : 'bg-blue-500 animate-pulse'}`}></div>
+                  <Tag color="success">Running</Tag>
                 </div>
               ))}
             </div>

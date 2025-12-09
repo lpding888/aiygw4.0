@@ -8,19 +8,17 @@ import featureService, {
 import pipelineEngine from './pipelineEngine.service.js';
 import { checkFeatureRateLimit } from '../middlewares/rateLimiter.middleware.js';
 import logger from '../utils/logger.js';
-import websocketService from './websocket.service.js';
+import taskStatusGateway from './task-status.gateway.js';
 import type {
   Task,
   TaskCreateResult,
   TaskDetailResponse,
   TaskListOptions,
   TaskListResponse,
-  TaskUpdateData,
   TaskParams,
   TaskInputData,
   RateLimitResult,
   VideoGenerateResult,
-  TaskWebSocketData,
   TaskError
 } from '../types/task.types.js';
 
@@ -237,66 +235,7 @@ class TaskService {
     status: string,
     data: { resultUrls?: string[]; errorMessage?: string } = {}
   ): Promise<void> {
-    try {
-      const updateData: TaskUpdateData = {
-        status: status as 'pending' | 'processing' | 'success' | 'failed',
-        updated_at: new Date()
-      };
-      if (status === 'success' || status === 'failed') {
-        updateData.completed_at = new Date();
-      }
-      if (data.resultUrls) updateData.resultUrls = JSON.stringify(data.resultUrls);
-      if (data.errorMessage) updateData.errorMessage = data.errorMessage;
-
-      await db('tasks').where('id', taskId).update(updateData);
-
-      logger.info(`[TaskService] 任务状态更新 taskId=${taskId} status=${status}`);
-
-      // P1-011: 获取任务详情用于WebSocket推送
-      const task = (await db('tasks').where('id', taskId).first()) as Task | undefined;
-      if (task) {
-        // P1-011: 推送任务状态变更
-        try {
-          const taskData: TaskWebSocketData = {
-            id: task.id,
-            type: task.type,
-            status: task.status,
-            inputUrl: task.inputUrl,
-            resultUrls: task.resultUrls ? JSON.parse(task.resultUrls) : null,
-            errorMessage: task.errorMessage,
-            createdAt: task.created_at,
-            updatedAt: task.updated_at,
-            completedAt: task.completed_at
-          };
-
-          // 推送WebSocket任务状态变更事件
-          websocketService.pushTaskStatusChange(task.userId, taskId, status, taskData);
-        } catch (wsError) {
-          // WebSocket推送失败不影响主流程
-          const err = wsError as Error;
-          logger.warn(`[TaskService] WebSocket推送失败: ${err.message}`, { taskId });
-        }
-      }
-
-      // 如果任务失败,取消配额预留(艹!使用cancel方法返还配额)
-      if (status === 'failed' && task && task.eligible_for_refund && !task.refunded) {
-        try {
-          await quotaService.cancel(taskId);
-          await db('tasks').where('id', taskId).update({ refunded: true });
-          const refundAmount = this.getQuotaCost(task.type);
-          logger.info(
-            `[TaskService] 任务失败,配额已返还 taskId=${taskId} userId=${task.userId} amount=${refundAmount}`
-          );
-        } catch (cancelError) {
-          const err = cancelError as Error;
-          logger.error(`[TaskService] 配额返还失败: ${err.message}`, { taskId });
-        }
-      }
-    } catch (error) {
-      const err = error as Error;
-      logger.error(`[TaskService] 更新任务状态失败: ${err.message}`, { taskId, status, error });
-      throw error;
-    }
+    await taskStatusGateway.updateStatus(taskId, status, data);
   }
 
   /**

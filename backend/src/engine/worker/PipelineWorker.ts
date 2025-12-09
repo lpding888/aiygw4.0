@@ -1,6 +1,6 @@
 import { Worker, Job } from 'bullmq';
 import { PIPELINE_QUEUE_NAME } from '../queue/PipelineQueue.js';
-import { StateManager, PipelineStatus } from '../runner/StateManager.js';
+import { StateManager, PipelineStatus, NodeStatus } from '../runner/StateManager.js';
 import { TopologySorter } from '../runner/TopologySorter.js';
 import { pipelineQueue } from '../queue/PipelineQueue.js';
 import { ProtocolValidator } from '../protocol.js';
@@ -65,58 +65,89 @@ export class PipelineWorker {
     }
 
     private async executeNode(runId: string, nodeId: string, job: Job) {
-        // 1. Update State -> Running
-        // TODO: Granular Node State in Redis (exec:{runId}:nodes:{nodeId})
-        logger.info(`[PipelineWorker] Executing Node ${nodeId}`);
+        try {
+            // 1. 设置节点状态为RUNNING (细粒度状态管理 - Redis键: exec:{runId}:nodes:{nodeId})
+            await this.stateManager.setNodeState(runId, nodeId, NodeStatus.RUNNING);
+            logger.info(`[PipelineWorker] Node ${nodeId} started`, {
+                runId,
+                nodeId,
+                status: NodeStatus.RUNNING
+            });
 
-        // 2. Fetch Node Config
-        const schemaId = await this.stateManager.getExecutionSchema(runId);
-        if (!schemaId) throw new Error("Missing Schema ID");
+            // 2. Fetch Node Config
+            const schemaId = await this.stateManager.getExecutionSchema(runId);
+            if (!schemaId) throw new Error("Missing Schema ID");
 
-        const schemaRow = await pipelineSchemaService.getSchemaById(schemaId) as any;
-        const pipelineDef = ProtocolValidator.validate(schemaRow.schema_definition);
-        const node = pipelineDef.nodes.find(n => n.id === nodeId);
+            const schemaRow = await pipelineSchemaService.getSchemaById(schemaId) as any;
+            const pipelineDef = ProtocolValidator.validate(schemaRow.schema_definition);
+            const node = pipelineDef.nodes.find(n => n.id === nodeId);
 
-        if (!node) {
-            throw new Error(`Node ${nodeId} not found in schema`);
-        }
+            if (!node) {
+                throw new Error(`Node ${nodeId} not found in schema`);
+            }
 
-        // 3. Resolve Bindings (Data Flow)
-        if (node.bindings) {
-            logger.info(`[PipelineWorker] Resolving bindings for ${nodeId}`);
-            for (const [targetField, binding] of Object.entries(node.bindings)) {
-                if (binding.sourceNode && binding.sourceOutput) {
-                    const sourceData = await this.stateManager.getNodeOutput(runId, binding.sourceNode);
-                    if (sourceData && sourceData[binding.sourceOutput] !== undefined) {
-                        // Inject upstream data into node configuration
-                        (node.data as any)[targetField] = sourceData[binding.sourceOutput];
-                        logger.info(`[PipelineWorker] Injected ${targetField} from ${binding.sourceNode}.${binding.sourceOutput}`);
-                    } else {
-                        logger.warn(`[PipelineWorker] Missing upstream data for ${nodeId}.${targetField}`);
+            // 3. Resolve Bindings (Data Flow)
+            if (node.bindings) {
+                logger.info(`[PipelineWorker] Resolving bindings for ${nodeId}`);
+                for (const [targetField, binding] of Object.entries(node.bindings)) {
+                    if (binding.sourceNode && binding.sourceOutput) {
+                        const sourceData = await this.stateManager.getNodeOutput(runId, binding.sourceNode);
+                        if (sourceData && sourceData[binding.sourceOutput] !== undefined) {
+                            // Inject upstream data into node configuration
+                            (node.data as any)[targetField] = sourceData[binding.sourceOutput];
+                            logger.info(`[PipelineWorker] Injected ${targetField} from ${binding.sourceNode}.${binding.sourceOutput}`);
+                        } else {
+                            logger.warn(`[PipelineWorker] Missing upstream data for ${nodeId}.${targetField}`);
+                        }
                     }
                 }
             }
+
+            // 4. ACTUAL EXECUTION (Stub for now)
+            // await NodeExecutorRegistry.execute(nodeType, nodeConfig, inputs)
+            // Simulation: Just echo data and add a result field
+
+            // Simulation delay
+            await new Promise(r => setTimeout(r, 500));
+
+            const output = {
+                status: 'success',
+                result: `Result from ${node.label}`,
+                timestamp: Date.now(),
+                // Pass through data for testing flow
+                ...node.data
+            };
+
+            // 5. Store Output for downstream
+            await this.stateManager.setNodeOutput(runId, nodeId, output);
+
+            // 6. 设置节点状态为COMPLETED
+            await this.stateManager.setNodeState(runId, nodeId, NodeStatus.COMPLETED);
+
+            logger.info(`[PipelineWorker] Node ${nodeId} completed successfully`, {
+                runId,
+                nodeId,
+                status: NodeStatus.COMPLETED
+            });
+
+        } catch (error) {
+            // 节点执行失败，记录错误状态
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            await this.stateManager.setNodeState(runId, nodeId, NodeStatus.FAILED, errorMessage);
+
+            // 记录重试次数
+            const retries = await this.stateManager.incrementNodeRetries(runId, nodeId);
+
+            logger.error(`[PipelineWorker] Node ${nodeId} failed`, {
+                runId,
+                nodeId,
+                error: errorMessage,
+                retries,
+                status: NodeStatus.FAILED
+            });
+
+            throw error; // 重新抛出错误以触发批处理失败
         }
-
-        // 4. ACTUAL EXECUTION (Stub for now)
-        // await NodeExecutorRegistry.execute(nodeType, nodeConfig, inputs)
-        // Simulation: Just echo data and add a result field
-
-        // Simulation delay
-        await new Promise(r => setTimeout(r, 500));
-
-        const output = {
-            status: 'success',
-            result: `Result from ${node.label}`,
-            timestamp: Date.now(),
-            // Pass through data for testing flow
-            ...node.data
-        };
-
-        // 5. Store Output for downstream
-        await this.stateManager.setNodeOutput(runId, nodeId, output);
-
-        logger.info(`[PipelineWorker] Node ${nodeId} Completed and Output Stored`);
     }
 
     private async handleBatchCompletion(runId: string, currentBatchIndex: number) {

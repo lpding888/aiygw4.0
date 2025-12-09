@@ -279,8 +279,9 @@ export default function AiHelperConfigSection() {
             // api.admin.createSystemConfig usually fails if exists.
             // We should check api.admin.updateSystemConfig logic in handledSaveEmbedding above.
             // It calls update, catch 404 then create. Let's replicate that.
+            let values;
             try {
-                const values = await architectForm.validateFields();
+                values = await architectForm.validateFields();
                 await api.admin.updateSystemConfig('AI_ARCHITECT_MODEL', { value: values.AI_ARCHITECT_MODEL });
                 message.success('Architect 配置已保存');
             } catch (updateError: any) {
@@ -301,139 +302,139 @@ export default function AiHelperConfigSection() {
     };
 
     return (
-            <div className="space-y-8">
-                <Card
-                    title={
-                        <Space>
-                            <ExperimentOutlined />
-                            <span>AI助手配置 (Chat)</span>
-                        </Space>
-                    }
-                    extra={
-                        <Space>
-                            <Button icon={<ReloadOutlined />} onClick={loadConfig} disabled={loading}>
-                                刷新
-                            </Button>
-                            <Button
-                                type="primary"
-                                icon={<SaveOutlined />}
-                                loading={saving}
-                                onClick={handleSave}
-                            >
-                                保存助手配置
-                            </Button>
-                        </Space>
-                    }
-                >
-                    <Spin spinning={loading}>
-                        <Form
-                            layout="vertical"
-                            form={form}
-                            initialValues={{
-                                enabled: true,
-                                allowedModels: [],
-                                defaultModel: undefined
-                            }}
+        <div className="space-y-8">
+            <Card
+                title={
+                    <Space>
+                        <ExperimentOutlined />
+                        <span>AI助手配置 (Chat)</span>
+                    </Space>
+                }
+                extra={
+                    <Space>
+                        <Button icon={<ReloadOutlined />} onClick={loadConfig} disabled={loading}>
+                            刷新
+                        </Button>
+                        <Button
+                            type="primary"
+                            icon={<SaveOutlined />}
+                            loading={saving}
+                            onClick={handleSave}
                         >
-                            <Alert
-                                message="配置用于 AI 学习 / 表单向导 的模型与密钥"
-                                description="填写 Base URL 与 API Key 后，点击“测试连接”可自动验证并拉取模型列表。保存后后端将自动使用此配置执行 DeepSeek 调用。"
-                                type="info"
-                                showIcon
-                                style={{ marginBottom: 16 }}
-                            />
+                            保存助手配置
+                        </Button>
+                    </Space>
+                }
+            >
+                <Spin spinning={loading}>
+                    <Form
+                        layout="vertical"
+                        form={form}
+                        initialValues={{
+                            enabled: true,
+                            allowedModels: [],
+                            defaultModel: undefined
+                        }}
+                    >
+                        <Alert
+                            message="配置用于 AI 学习 / 表单向导 的模型与密钥"
+                            description="填写 Base URL 与 API Key 后，点击“测试连接”可自动验证并拉取模型列表。保存后后端将自动使用此配置执行 DeepSeek 调用。"
+                            type="info"
+                            showIcon
+                            style={{ marginBottom: 16 }}
+                        />
 
-                            <Form.Item label="启用 AI 助手" name="enabled" valuePropName="checked">
-                                <Switch />
-                            </Form.Item>
+                        <Form.Item label="启用 AI 助手" name="enabled" valuePropName="checked">
+                            <Switch />
+                        </Form.Item>
 
-                            {connectionAlert}
+                        {connectionAlert}
 
-                            <Form.Item
-                                label="API 地址 (Base URL 或 Chat Endpoint)"
-                                name="apiUrl"
-                                tooltip="可填写 https://api.deepseek.com 或完整 Chat Completions 地址"
+                        <Form.Item
+                            label="API 地址 (Base URL 或 Chat Endpoint)"
+                            name="apiUrl"
+                            tooltip="可填写 https://api.deepseek.com 或完整 Chat Completions 地址"
+                        >
+                            <Input placeholder="https://api.deepseek.com" />
+                        </Form.Item>
+
+                        <Form.Item
+                            label="API Key"
+                            name="apiKey"
+                            tooltip="不会回显已保存的密钥，输入则会覆盖"
+                        >
+                            <Input.Password placeholder="sk-..." />
+                        </Form.Item>
+
+                        <Space style={{ marginBottom: 16 }}>
+                            <Button
+                                icon={<ExperimentOutlined />}
+                                onClick={handleTestConnection}
+                                loading={testing}
                             >
-                                <Input placeholder="https://api.deepseek.com" />
-                            </Form.Item>
-
-                            <Form.Item
-                                label="API Key"
-                                name="apiKey"
-                                tooltip="不会回显已保存的密钥，输入则会覆盖"
-                            >
-                                <Input.Password placeholder="sk-..." />
-                            </Form.Item>
-
-                            <Space style={{ marginBottom: 16 }}>
+                                测试连接
+                            </Button>
+                            {hasStoredKey && !pendingKeyReset && (
+                                <Tag color="green">已配置密钥</Tag>
+                            )}
+                            {pendingKeyReset && <Tag color="orange">保存后将清空密钥</Tag>}
+                            {hasStoredKey && (
                                 <Button
-                                    icon={<ExperimentOutlined />}
-                                    onClick={handleTestConnection}
-                                    loading={testing}
+                                    danger
+                                    size="small"
+                                    onClick={() => {
+                                        setPendingKeyReset(true);
+                                        form.setFieldsValue({ apiKey: undefined });
+                                    }}
                                 >
-                                    测试连接
+                                    清空已保存密钥
                                 </Button>
-                                {hasStoredKey && !pendingKeyReset && (
-                                    <Tag color="green">已配置密钥</Tag>
-                                )}
-                                {pendingKeyReset && <Tag color="orange">保存后将清空密钥</Tag>}
-                                {hasStoredKey && (
-                                    <Button
-                                        danger
-                                        size="small"
-                                        onClick={() => {
-                                            setPendingKeyReset(true);
-                                            form.setFieldsValue({ apiKey: undefined });
-                                        }}
-                                    >
-                                        清空已保存密钥
-                                    </Button>
-                                )}
-                            </Space>
+                            )}
+                        </Space>
 
-                            <Form.Item
-                                label="允许使用的模型"
-                                name="allowedModels"
-                                tooltip="测试连接后可从列表中选择，也可以手动输入"
-                            >
-                                <Select
-                                    mode="tags"
-                                    placeholder="选择或输入模型名称"
-                                    options={modelOptions}
-                                    allowClear
-                                />
-                            </Form.Item>
+                        <Form.Item
+                            label="允许使用的模型"
+                            name="allowedModels"
+                            tooltip="测试连接后可从列表中选择，也可以手动输入"
+                        >
+                            <Select
+                                mode="tags"
+                                placeholder="选择或输入模型名称"
+                                options={modelOptions}
+                                allowClear
+                            />
+                        </Form.Item>
 
-                            <Form.Item
-                                label="默认模型"
-                                name="defaultModel"
-                                tooltip="用于 AI 学习和助手默认调用"
-                            >
-                                <Select
-                                    placeholder="选择默认模型"
-                                    options={modelOptions}
-                                    allowClear
-                                />
-                            </Form.Item>
+                        <Form.Item
+                            label="默认模型"
+                            name="defaultModel"
+                            tooltip="用于 AI 学习和助手默认调用"
+                        >
+                            <Select
+                                placeholder="选择默认模型"
+                                options={modelOptions}
+                                allowClear
+                            />
+                        </Form.Item>
 
-                            <Form.Item
-                                label="系统提示词 (System Prompt)"
-                                name="systemPrompt"
-                                tooltip="会作为系统提示词注入到 AI 助手和学习任务中"
-                            >
-                                <TextArea
-                                    rows={5}
-                                    placeholder="你是一个专业的系统架构师..."
-                                    allowClear
-                                />
-                            </Form.Item>
+                        <Form.Item
+                            label="系统提示词 (System Prompt)"
+                            name="systemPrompt"
+                            tooltip="会作为系统提示词注入到 AI 助手和学习任务中"
+                        >
+                            <TextArea
+                                rows={5}
+                                placeholder="你是一个专业的系统架构师..."
+                                allowClear
+                            />
+                        </Form.Item>
 
-                            <Text type="secondary">
-                                填写后点击"测试连接"以验证密钥是否有效，再"保存AI配置"即可保存生效。
-                            </Text>
-                        </Form>
-                    </Spin>
-                </Card>
+                        <Text type="secondary">
+                            填写后点击“测试连接”以验证密钥是否有效，再“保存AI配置”即可保存生效。
+                        </Text>
+                    </Form>
+                </Spin>
+            </Card>
 
             <Card
                 title={
@@ -453,7 +454,7 @@ export default function AiHelperConfigSection() {
                     </Button>
                 }
             >
-                 <Spin spinning={loading}>
+                <Spin spinning={loading}>
                     <Form
                         layout="vertical"
                         form={architectForm}
@@ -468,18 +469,18 @@ export default function AiHelperConfigSection() {
                             showIcon
                             style={{ marginBottom: 16 }}
                         />
-                         <Form.Item
+                        <Form.Item
                             label="Architect Model"
                             name="AI_ARCHITECT_MODEL"
                             tooltip="用于生成流水线 JSON 的模型"
                             rules={[{ required: true }]}
                         >
-                             <Select
+                            <Select
                                 placeholder="选择模型"
                                 options={modelOptions}
                                 showSearch
                                 allowClear
-                             />
+                            />
                         </Form.Item>
                     </Form>
                 </Spin>

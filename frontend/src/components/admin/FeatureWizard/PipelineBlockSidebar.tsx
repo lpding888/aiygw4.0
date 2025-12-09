@@ -14,7 +14,8 @@ import {
     RobotOutlined,
     SearchOutlined,
     ExperimentOutlined,
-    MoreOutlined
+    MoreOutlined,
+    SyncOutlined
 } from '@ant-design/icons';
 import { api, type APIResponse } from '@/lib/api';
 import { adminProviders } from '@/lib/services/adminProviders';
@@ -166,6 +167,33 @@ export default function PipelineBlockSidebar() {
                     defaultConfig: { strategy: 'ALL' }
                 },
                 {
+                    type: 'loop',
+                    providerRef: 'system_loop',
+                    label: '循环控制',
+                    icon: <SyncOutlined />,
+                    category: 'tools',
+                    description: '遍历数组或循环',
+                    defaultConfig: { loopType: 'forEach' }
+                },
+                {
+                    type: 'http_api',
+                    providerRef: 'system_http_api',
+                    label: 'HTTP 请求',
+                    icon: <ApiOutlined />,
+                    category: 'tools',
+                    description: '调用外部API',
+                    defaultConfig: { method: 'GET' }
+                },
+                {
+                    type: 'kb_retrieve',
+                    providerRef: 'system_kb_retrieve',
+                    label: '知识库检索',
+                    icon: <SearchOutlined />,
+                    category: 'tools',
+                    description: 'RAG知识库检索',
+                    defaultConfig: { topK: 3 }
+                },
+                {
                     type: 'end',
                     providerRef: 'system_end',
                     label: '结束输出',
@@ -175,6 +203,7 @@ export default function PipelineBlockSidebar() {
                     defaultConfig: {}
                 }
             ];
+
 
             systemTools.forEach(tool => uniqueBlocks.set(tool.providerRef, tool));
         }
