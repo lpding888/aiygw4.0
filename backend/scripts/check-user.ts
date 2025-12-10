@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import knex from 'knex';
-import { knexConfig } from '../src/config/knex-config';
+import { knexConfig } from '../src/config/knex-config.js';
 
 async function main() {
   const email = process.argv[2];
@@ -14,7 +14,7 @@ async function main() {
   const db = knex(config);
 
   try {
-    console.log(`Checking user ${email} in ${environment} mode...`);
+    console.log(`Checking user ${email} in ${String(environment)} mode...`);
     const user = await db('users').whereRaw('LOWER(email) = ?', [email.toLowerCase()]).first();
 
     if (user) {

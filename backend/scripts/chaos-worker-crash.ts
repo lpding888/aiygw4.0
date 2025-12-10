@@ -9,7 +9,7 @@
 
 import { Worker, Job, Queue } from 'bullmq';
 import { v4 as uuidv4 } from 'uuid';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import { StateManager, PipelineStatus } from '../src/engine/runner/StateManager.js';
 import { PIPELINE_QUEUE_NAME } from '../src/engine/queue/PipelineQueue.js';
 
@@ -385,8 +385,8 @@ async function testStalledJobRecovery() {
         await new Promise(resolve => setTimeout(resolve, 8000));
 
         console.log('\n📋 Checking for stalled jobs');
-        const stalledJobs = await queue.getJobCounts('stalled');
-        console.log(`   Stalled jobs count: ${stalledJobs}`);
+        const jobCounts = await queue.getJobCounts();
+        console.log(`   Stalled jobs count: ${jobCounts.stalled || 0}`);
 
         // 启动恢复 Worker
         console.log('\n📋 Starting recovery worker');

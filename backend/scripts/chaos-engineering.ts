@@ -13,7 +13,7 @@
 
 import fetch from 'node-fetch';
 import { v4 as uuidv4 } from 'uuid';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import { TopologySorter, TopologyErrorType } from '../src/engine/runner/TopologySorter.js';
 import { StateManager, PipelineStatus } from '../src/engine/runner/StateManager.js';
 import { ProtocolValidator } from '../src/engine/protocol.js';
@@ -103,7 +103,7 @@ async function testCycleDetection() {
             label: 'Node A',
             type: 'llm' as const,
             position: { x: 0, y: 0 },
-            data: { model: 'gpt-4', prompt: 'test' }
+            data: { model: 'gpt-4', prompt: 'test', temperature: 0.7 }
         };
 
         const nodeB = {
@@ -111,7 +111,7 @@ async function testCycleDetection() {
             label: 'Node B',
             type: 'llm' as const,
             position: { x: 100, y: 0 },
-            data: { model: 'gpt-4', prompt: 'test' }
+            data: { model: 'gpt-4', prompt: 'test', temperature: 0.7 }
         };
 
         const pipeline = {
@@ -121,7 +121,8 @@ async function testCycleDetection() {
             edges: [
                 { id: 'e1', source: nodeA.id, target: nodeB.id },
                 { id: 'e2', source: nodeB.id, target: nodeA.id } // 环！
-            ]
+            ],
+            config: { max_duration_seconds: 600, concurrency_limit: 1 }
         };
 
         try {
@@ -142,7 +143,7 @@ async function testCycleDetection() {
             label: `Node ${String.fromCharCode(65 + i)}`,
             type: 'llm' as const,
             position: { x: i * 100, y: 0 },
-            data: { model: 'gpt-4', prompt: 'test' }
+            data: { model: 'gpt-4', prompt: 'test', temperature: 0.7 }
         }));
 
         const pipeline = {
@@ -154,7 +155,8 @@ async function testCycleDetection() {
                 { id: 'e2', source: nodes[1].id, target: nodes[2].id },
                 { id: 'e3', source: nodes[2].id, target: nodes[3].id },
                 { id: 'e4', source: nodes[3].id, target: nodes[1].id } // 环！
-            ]
+            ],
+            config: { max_duration_seconds: 600, concurrency_limit: 1 }
         };
 
         try {
@@ -179,11 +181,12 @@ async function testCycleDetection() {
                 label: 'Node A',
                 type: 'llm' as const,
                 position: { x: 0, y: 0 },
-                data: { model: 'gpt-4', prompt: 'test' }
+                data: { model: 'gpt-4', prompt: 'test', temperature: 0.7 }
             }],
             edges: [
                 { id: 'e1', source: nodeId, target: nodeId } // 自环！
-            ]
+            ],
+            config: { max_duration_seconds: 600, concurrency_limit: 1 }
         };
 
         try {
@@ -204,7 +207,7 @@ async function testCycleDetection() {
             label: `Node ${String.fromCharCode(65 + i)}`,
             type: 'llm' as const,
             position: { x: i * 100, y: 0 },
-            data: { model: 'gpt-4', prompt: 'test' }
+            data: { model: 'gpt-4', prompt: 'test', temperature: 0.7 }
         }));
 
         const pipeline = {
@@ -214,7 +217,8 @@ async function testCycleDetection() {
             edges: [
                 { id: 'e1', source: nodes[0].id, target: nodes[1].id }
                 // nodes[2] 是孤立的
-            ]
+            ],
+            config: { max_duration_seconds: 600, concurrency_limit: 1 }
         };
 
         try {
@@ -371,7 +375,7 @@ async function testResourceExhaustion() {
             label: `Node ${i}`,
             type: 'llm' as const,
             position: { x: i * 50, y: 0 },
-            data: { model: 'gpt-4', prompt: `step ${i}` }
+            data: { model: 'gpt-4', prompt: `step ${i}`, temperature: 0.7 }
         }));
 
         const edges = nodes.slice(0, -1).map((node, i) => ({
@@ -384,7 +388,8 @@ async function testResourceExhaustion() {
             version: '1.0' as const,
             meta: { name: 'Large Linear DAG' },
             nodes,
-            edges
+            edges,
+            config: { max_duration_seconds: 600, concurrency_limit: 1 }
         };
 
         // 验证拓扑排序
@@ -405,7 +410,7 @@ async function testResourceExhaustion() {
             label: 'Root',
             type: 'llm' as const,
             position: { x: 0, y: 0 },
-            data: { model: 'gpt-4', prompt: 'root' }
+            data: { model: 'gpt-4', prompt: 'root', temperature: 0.7 }
         };
 
         const parallelNodes = Array.from({ length: 50 }, (_, i) => ({
@@ -413,7 +418,7 @@ async function testResourceExhaustion() {
             label: `Parallel ${i}`,
             type: 'llm' as const,
             position: { x: (i % 10) * 100, y: Math.floor(i / 10) * 100 + 100 },
-            data: { model: 'gpt-4', prompt: `parallel ${i}` }
+            data: { model: 'gpt-4', prompt: `parallel ${i}`, temperature: 0.7 }
         }));
 
         const edges = parallelNodes.map((node, i) => ({
@@ -426,7 +431,8 @@ async function testResourceExhaustion() {
             version: '1.0' as const,
             meta: { name: 'Fan-out DAG' },
             nodes: [rootNode, ...parallelNodes],
-            edges
+            edges,
+            config: { max_duration_seconds: 600, concurrency_limit: 1 }
         };
 
         const batches = TopologySorter.sort(pipeline);
@@ -481,14 +487,14 @@ async function testDataFlowAnomalies() {
                 label: 'Node A',
                 type: 'llm' as const,
                 position: { x: 0, y: 0 },
-                data: { model: 'gpt-4', prompt: 'test' }
+                data: { model: 'gpt-4', prompt: 'test', temperature: 0.7 }
             },
             {
                 id: uuidv4(),
                 label: 'Node B',
                 type: 'llm' as const,
                 position: { x: 100, y: 0 },
-                data: { model: 'gpt-4', prompt: 'test' },
+                data: { model: 'gpt-4', prompt: 'test', temperature: 0.7 },
                 bindings: {
                     prompt: {
                         sourceNode: nonexistentNodeId, // 有效 UUID 格式但节点不存在！

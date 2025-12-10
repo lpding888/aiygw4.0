@@ -614,7 +614,7 @@ class PromptTemplateService {
       metadata.last_protocol_sync = new Date().toISOString();
 
       await this.updateTemplate(
-        systemTemplate.id,
+        String(systemTemplate.id),
         { metadata: metadata as TemplateMetadata },
         userId
       );
@@ -771,7 +771,7 @@ class PromptTemplateService {
       .where({ template_id: id })
       .avg<{ avg: number }>('rating as avg')
       .count<{ count: string }>('* as count')
-      .first();
+      .first() as { avg: number; count: string } | undefined;
 
     const avgRating = stats?.avg ? Number(stats.avg) : 0;
     const ratingCount = stats?.count ? Number(stats.count) : 0;

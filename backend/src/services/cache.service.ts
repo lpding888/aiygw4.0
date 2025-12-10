@@ -44,7 +44,7 @@ type CacheSetOptions = {
 class CacheService {
   private readonly redis: RedisInstance;
 
-  private readonly memoryCache: LRUCache<string, unknown>;
+  private readonly memoryCache: LRUCache<string, any>;
 
   private memoryCacheMaxSize: number;
 
@@ -78,7 +78,7 @@ class CacheService {
     // 内存缓存（L1缓存）- 使用LRU缓存库优化性能
     this.memoryCacheMaxSize = 1000;
     this.memoryCacheTTL = 60000; // 1分钟
-    this.memoryCache = new LRUCache<string, unknown>({
+    this.memoryCache = new LRUCache<string, any>({
       max: this.memoryCacheMaxSize,
       ttl: this.memoryCacheTTL,
       updateAgeOnGet: true, // LRU策略：访问时更新年龄

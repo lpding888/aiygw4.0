@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import knex from 'knex';
-import { knexConfig } from '../src/config/knex-config';
+import { knexConfig } from '../src/config/knex-config.js';
 
 async function main() {
   const email = process.argv[2];

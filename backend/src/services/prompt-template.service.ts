@@ -1426,12 +1426,14 @@ class PromptTemplateService {
       // 更新系统提示词的元数据
       const systemTemplate = await this.getTemplate('ai_architect_system');
       if (systemTemplate && systemTemplate.metadata) {
-        const metadata = JSON.parse(systemTemplate.metadata);
-        metadata.last_protocol_sync = new Date().toISOString();
+        const metadata = typeof systemTemplate.metadata === 'string'
+          ? JSON.parse(systemTemplate.metadata)
+          : systemTemplate.metadata;
+        (metadata as any).last_protocol_sync = new Date().toISOString();
 
         await this.updateTemplate(
           systemTemplate.id,
-          { metadata: JSON.stringify(metadata) },
+          { metadata: metadata as any },
           userId
         );
       }

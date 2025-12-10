@@ -4,7 +4,7 @@
  */
 
 import * as snapshotService from '../../../src/services/configSnapshot.service.js';
-import db from '../../../src/db/index.js';
+import { db } from '../../../src/db/index.js';
 
 // Mock db
 jest.mock('../../../src/db/index.js', () => {

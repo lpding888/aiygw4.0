@@ -66,7 +66,7 @@ class AgentMemoryService {
 
         if (!shortTerm) {
             // 尝试从 Redis 恢复
-            shortTerm = await this.loadShortTermFromRedis(sessionId);
+            shortTerm = await this.loadShortTermFromRedis(sessionId) ?? undefined;
 
             if (!shortTerm) {
                 // 创建新的短期记忆

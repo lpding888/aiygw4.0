@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 
 // Explicitly load .env from backend root (assuming running from project root)
 dotenv.config({ path: 'backend/.env' });
@@ -30,8 +30,9 @@ const checkConnections = async () => {
     const info = await redis.info();
     const version = info.match(/redis_version:([0-9.]+)/)?.[1];
     console.log(`   Redis 版本: ${version}`);
-  } catch (error) {
-    console.error('❌ Redis 连接失败:', error.message);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error('❌ Redis 连接失败:', err.message);
   } finally {
     redis.disconnect();
   }
@@ -60,8 +61,9 @@ const checkConnections = async () => {
     // @ts-ignore
     console.log(`   MySQL 版本: ${rows[0].version}`);
     await connection.end();
-  } catch (error) {
-    console.error('❌ MySQL 连接失败:', error.message);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error('❌ MySQL 连接失败:', err.message);
   }
 
   console.log('\n--- 检查结束 ---');

@@ -247,11 +247,11 @@ class PipelineGeneratorService {
                 }
 
                 // Add error feedback for next attempt (Auto-Fix) - 使用动态提示词
-                const errorFeedback = await promptTemplateService.generateErrorFeedback(lastError);
+                const errorFeedback = await promptTemplateService.generateErrorFeedback(lastError || '未知错误');
 
                 conversation.push({
                     role: 'user',
-                    content: errorFeedback
+                    content: errorFeedback || `请修复以下错误:\n${lastError || '未知错误'}`
                 });
 
                 // Small delay before retry
