@@ -12,7 +12,7 @@ interface PipelineState {
     // Actions
     initNewPipeline: (name: string) => void;
     loadPipeline: (json: any) => Promise<boolean>; // Returns success/fail
-    addNode: (type: 'llm' | 'image_gen' | 'code', position: { x: number, y: number }) => void;
+    addNode: (type: 'llm' | 'image_gen' | 'code' | 'agent', position: { x: number, y: number }) => void;
     updateNodeData: (id: string, data: any) => void;
     updateNodeBindings: (id: string, bindings: Record<string, { sourceNode: string, sourceOutput: string }>) => void;
     updateNodePosition: (id: string, position: { x: number, y: number }) => void;
@@ -88,6 +88,22 @@ export const usePipelineStore = create<PipelineState>()(
                     position,
                     data: { model: 'flux-pro', prompt: '', aspect_ratio: '1:1' } as any
                 };
+            } else if (type === 'agent') {
+                newNode = {
+                    id: newNodeId,
+                    type: 'agent',
+                    label: 'New Agent Node',
+                    position,
+                    data: {
+                        model: 'deepseek-chat',
+                        system_prompt: 'You are a helpful assistant.',
+                        max_iterations: 10,
+                        temperature: 0.7,
+                        tools: [],
+                        parallel_tool_calls: false,
+                        memory_enabled: false
+                    } as any
+                };
             } else {
                 newNode = {
                     id: newNodeId,
@@ -118,6 +134,8 @@ export const usePipelineStore = create<PipelineState>()(
                     } else if (node.type === 'image_gen') {
                         node.data = { ...node.data, ...data };
                     } else if (node.type === 'code') {
+                        node.data = { ...node.data, ...data };
+                    } else if (node.type === 'agent') {
                         node.data = { ...node.data, ...data };
                     }
                     state.isDirty = true;

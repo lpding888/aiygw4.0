@@ -58,11 +58,33 @@ const CodeNodeSchema = BaseNodeSchema.extend({
     }).strict(),
 });
 
+// Agent Node for autonomous LLM with tool calling
+const AgentNodeSchema = BaseNodeSchema.extend({
+    type: z.literal('agent'),
+    data: z.object({
+        model: z.string(), // e.g. "deepseek-chat", "gpt-4o"
+        system_prompt: z.string().optional(),
+        max_iterations: z.number().min(1).max(50).default(10),
+        temperature: z.number().min(0).max(2).default(0.7),
+        tools: z.array(z.object({
+            type: z.enum(['kb_retrieve', 'mcp_tool_call', 'code_execute', 'http_request']),
+            kb_id: z.string().optional(),
+            mcp_endpoint_id: z.string().optional(),
+            tool_name: z.string().optional(),
+        })).optional().default([]),
+        parallel_tool_calls: z.boolean().optional().default(false),
+        memory_enabled: z.boolean().optional().default(false),
+        token_budget: z.number().optional(),
+        timeout_ms: z.number().optional(),
+    }),
+});
+
 // Union of all possible node types
 const PipelineNodeSchema = z.discriminatedUnion('type', [
     LLMNodeSchema,
     ImageGenNodeSchema,
     CodeNodeSchema,
+    AgentNodeSchema,
 ]);
 
 // --- 2. Edge Definition ---

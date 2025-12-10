@@ -15,7 +15,7 @@ export default function PipelineBuilderPage() {
         initNewPipeline("New V1 Pipeline");
     }, []);
 
-    const handleAddNode = (type: 'llm' | 'image_gen' | 'code') => {
+    const handleAddNode = (type: 'llm' | 'image_gen' | 'code' | 'agent') => {
         // Random position for now
         addNode(type, { x: Math.random() * 400 + 100, y: Math.random() * 400 + 100 });
     };
@@ -67,6 +67,9 @@ export default function PipelineBuilderPage() {
                     </button>
                     <button className="neonButton" onClick={() => handleAddNode('code')} style={{ padding: 12, textAlign: 'left', borderRadius: 8 }}>
                         <span className="type-code">⌨</span> Custom Code
+                    </button>
+                    <button className="neonButton" onClick={() => handleAddNode('agent')} style={{ padding: 12, textAlign: 'left', borderRadius: 8 }}>
+                        <span className="type-agent">🤖</span> Agent (Tool Use)
                     </button>
 
                     {validationErrors.length > 0 && (

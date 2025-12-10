@@ -55,6 +55,29 @@ export interface ProviderInput {
 }
 
 /**
+ * Provider 模型能力
+ */
+export interface ProviderCapabilities {
+  tool_use: boolean;
+  parallel_tool_use: boolean;
+  vision: boolean;
+  streaming: boolean;
+  json_mode: boolean;
+  max_context: number;
+  max_output: number;
+}
+
+/**
+ * 能力探测结果
+ */
+export interface DetectionResult {
+  success: boolean;
+  capabilities: Partial<ProviderCapabilities>;
+  errors: string[];
+  duration_ms: number;
+}
+
+/**
  * Provider列表查询参数
  */
 export interface ProviderListParams {
@@ -84,7 +107,7 @@ export interface TestConnectionResponse {
   models?: ProviderModelInfo[];
 }
 
-export interface PreviewConnectionResponse extends TestConnectionResponse {}
+export interface PreviewConnectionResponse extends TestConnectionResponse { }
 
 /**
  * Provider管理API类
@@ -167,6 +190,30 @@ export const adminProviders = {
     const response = await api.client.patch<any>(`/admin/providers/${providerRef}/toggle`, {
       enabled,
     });
+    return response.data;
+  },
+
+  /**
+   * 获取Provider能力
+   */
+  async getCapabilities(providerRef: string): Promise<ProviderCapabilities | null> {
+    const response = await api.client.get<any>(`/admin/providers/${providerRef}/capabilities`);
+    return response.data;
+  },
+
+  /**
+   * 手动触发能力探测
+   */
+  async detectCapabilities(providerRef: string): Promise<DetectionResult> {
+    const response = await api.client.post<any>(`/admin/providers/${providerRef}/detect-capabilities`);
+    return response.data;
+  },
+
+  /**
+   * 批量探测所有LLM Provider能力
+   */
+  async detectAllCapabilities(): Promise<Record<string, DetectionResult>> {
+    const response = await api.client.post<any>('/admin/providers/detect-all-capabilities');
     return response.data;
   },
 };

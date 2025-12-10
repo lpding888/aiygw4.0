@@ -34,6 +34,7 @@ import {
   BulbOutlined, // 艹！智能解析图标
   ReloadOutlined,
   CopyOutlined,
+  RadarChartOutlined, // 能力探测图标
 } from '@ant-design/icons';
 import api from '@/lib/api';
 import type { ColumnType } from 'antd/es/table';
@@ -50,6 +51,7 @@ import {
   Provider,
   ProviderInput,
   QualityTier,
+  ProviderCapabilities,
 } from '@/lib/services/adminProviders';
 
 /**
@@ -185,6 +187,10 @@ export default function ProvidersPage() {
   const [autoTestEnabled, setAutoTestEnabled] = useState(true);
   const autoTestTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+
+  // 模型能力缓存（艹！存储已探测的能力信息）
+  const [capabilitiesMap, setCapabilitiesMap] = useState<Record<string, ProviderCapabilities | null>>({});
+  const [detectingProviders, setDetectingProviders] = useState<Set<string>>(new Set());
 
   /**
    * 加载Provider健康状态
@@ -348,6 +354,58 @@ export default function ProvidersPage() {
       ),
     },
     {
+      title: '模型能力',
+      key: 'capabilities',
+      width: 200,
+      render: (_: any, record: Provider) => {
+        const isLLM = record.provider_ref.startsWith('llm_') ||
+          record.provider_name.toLowerCase().includes('deepseek') ||
+          record.provider_name.toLowerCase().includes('openai') ||
+          record.provider_name.toLowerCase().includes('qwen');
+        if (!isLLM) return <Tag color="default">非LLM</Tag>;
+
+        const caps = capabilitiesMap[record.provider_ref];
+        const isDetecting = detectingProviders.has(record.provider_ref);
+
+        if (isDetecting) {
+          return <Spin size="small" />;
+        }
+
+        if (!caps) {
+          return (
+            <Tooltip title="点击探测能力">
+              <Button
+                size="small"
+                type="link"
+                icon={<RadarChartOutlined />}
+                onClick={() => handleDetectCapabilities(record.provider_ref)}
+              >
+                未探测
+              </Button>
+            </Tooltip>
+          );
+        }
+
+        return (
+          <Space size={2} wrap>
+            {caps.tool_use && <Tag color="blue" style={{ margin: 1 }}>工具</Tag>}
+            {caps.parallel_tool_use && <Tag color="cyan" style={{ margin: 1 }}>并行</Tag>}
+            {caps.vision && <Tag color="green" style={{ margin: 1 }}>视觉</Tag>}
+            {caps.json_mode && <Tag color="purple" style={{ margin: 1 }}>JSON</Tag>}
+            <Tooltip title="重新探测">
+              <Button
+                size="small"
+                type="text"
+                icon={<ReloadOutlined />}
+                onClick={() => handleDetectCapabilities(record.provider_ref)}
+                style={{ padding: 0, height: 'auto' }}
+              />
+            </Tooltip>
+          </Space>
+        );
+      },
+    },
+    {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
@@ -506,6 +564,65 @@ export default function ProvidersPage() {
       tableData.refresh();
     }
   };
+
+  /**
+   * 加载单个Provider的能力信息
+   */
+  const loadCapabilities = async (providerRef: string) => {
+    try {
+      const caps = await adminProviders.getCapabilities(providerRef);
+      setCapabilitiesMap(prev => ({ ...prev, [providerRef]: caps }));
+    } catch (error) {
+      console.warn(`加载能力失败: ${providerRef}`, error);
+    }
+  };
+
+  /**
+   * 手动触发能力探测
+   * 艹！探测 LLM 模型的 tool_use / vision / json_mode 等能力！
+   */
+  const handleDetectCapabilities = async (providerRef: string) => {
+    setDetectingProviders(prev => new Set(prev).add(providerRef));
+    const hide = message.loading(`正在探测 ${providerRef} 的能力...`, 0);
+
+    try {
+      const result = await adminProviders.detectCapabilities(providerRef);
+      hide();
+
+      if (result.success) {
+        message.success(`探测完成 (${result.duration_ms}ms)`);
+        setCapabilitiesMap(prev => ({ ...prev, [providerRef]: result.capabilities as ProviderCapabilities }));
+      } else {
+        message.warning(`部分探测失败: ${result.errors.join(', ')}`);
+        setCapabilitiesMap(prev => ({ ...prev, [providerRef]: result.capabilities as ProviderCapabilities }));
+      }
+    } catch (error: any) {
+      hide();
+      message.error(`探测失败: ${error.message}`);
+    } finally {
+      setDetectingProviders(prev => {
+        const next = new Set(prev);
+        next.delete(providerRef);
+        return next;
+      });
+    }
+  };
+
+  // 页面加载时获取所有 LLM Provider 的能力
+  useEffect(() => {
+    if (tableData.data) {
+      tableData.data.forEach((provider: Provider) => {
+        if (provider.provider_ref.startsWith('llm_') ||
+          provider.provider_name.toLowerCase().includes('deepseek') ||
+          provider.provider_name.toLowerCase().includes('openai') ||
+          provider.provider_name.toLowerCase().includes('qwen')) {
+          if (!capabilitiesMap[provider.provider_ref]) {
+            loadCapabilities(provider.provider_ref);
+          }
+        }
+      });
+    }
+  }, [tableData.data]);
 
   /**
    * 打开API Key更新Modal

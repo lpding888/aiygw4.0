@@ -92,7 +92,7 @@ class ConfigManager {
       try {
         const dynamicValue = await systemConfigService.get<T>(key as string);
         if (dynamicValue !== null && dynamicValue !== undefined) {
-          return dynamicValue;
+          return dynamicValue as T | undefined;
         }
       } catch (error) {
         logger.debug(`[ConfigManager] 动态配置获取失败: ${String(key)}`, error);
@@ -143,7 +143,7 @@ class ConfigManager {
    * 获取布尔配置
    */
   async getBoolean(key: keyof AppConfig, defaultValue = false, useDynamic = true): Promise<boolean> {
-    const value = await this.get(key, defaultValue, useDynamic);
+    const value = await this.get(key, defaultValue, useDynamic) as unknown;
     if (typeof value === 'boolean') return value;
     if (typeof value === 'string') {
       return value.toLowerCase() === 'true' || value === '1';
@@ -223,14 +223,14 @@ class ConfigManager {
    */
   private handleValidationError(error: z.ZodError): void {
     logger.error('[ConfigManager] 配置验证失败:');
-    error.errors.forEach((err) => {
+    error.issues.forEach((err: z.ZodIssue) => {
       logger.error(`  - ${err.path.join('.')}: ${err.message}`);
     });
 
     // 列出缺失的必需字段
-    const missingFields = error.errors
-      .filter((err) => err.code === 'invalid_type' && err.received === 'undefined')
-      .map((err) => err.path.join('.'));
+    const missingFields = error.issues
+      .filter((err: z.ZodIssue) => err.code === 'invalid_type' && (err as any).received === 'undefined')
+      .map((err: z.ZodIssue) => err.path.join('.'));
 
     if (missingFields.length > 0) {
       logger.error('[ConfigManager] 缺失的必需配置:', missingFields);
