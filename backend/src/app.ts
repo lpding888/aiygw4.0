@@ -23,6 +23,7 @@ import metricsMiddleware from './middlewares/metrics.middleware.js';
 import metricsService from './services/metrics.service.js';
 import queueService from './services/queue.service.js';
 import providerRegistryService from './services/provider-registry.service.js';
+import kmsService from './services/kms.service.js';
 
 type RouterModule = { default?: express.Router } | express.Router;
 
@@ -84,7 +85,10 @@ const routeDefinitions: RouteDefinition[] = [
   { mountPath: '/api/pipeline-schemas', modulePath: './routes/pipelineSchemas.routes.js' },
   { mountPath: '/api/pipeline-executions', modulePath: './routes/pipelineExecution.routes.js' },
   { mountPath: '/api/mcp-endpoints', modulePath: './routes/mcpEndpoints.routes.js' },
-  { mountPath: '/api/prompt-templates', modulePath: './routes/promptTemplates.routes.js' }
+  { mountPath: '/api/prompt-templates', modulePath: './routes/promptTemplates.routes.js' },
+  // 多租户
+  { mountPath: '/api/tenants', modulePath: './routes/tenants.routes.js' },
+  { mountPath: '/api/admin/tenants', modulePath: './routes/admin/tenants.routes.js' }
 ];
 
 const normalizeOrigin = (origin: string): string | null => {
@@ -178,7 +182,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Express
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'Accept', 'Origin'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Tenant-ID', 'Accept', 'Origin'],
       exposedHeaders: ['X-Request-ID'],
       maxAge: 600
     })
@@ -269,6 +273,13 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Express
     await providerRegistryService.initialize();
   } catch (error) {
     logger.error('[App] Provider Registry初始化失败', { error });
+  }
+
+  // 初始化KMS（MCP/Provider 等需要加解密的模块依赖）
+  try {
+    await kmsService.initialize();
+  } catch (error) {
+    logger.error('[App] KMS初始化失败', { error });
   }
 
   await registerRoutes(app);
