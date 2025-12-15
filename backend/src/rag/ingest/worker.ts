@@ -162,12 +162,48 @@ async function processIngestJob(job: JobProcessor) {
 async function scheduleEmbedding(documentId: string, chunks: Chunk[]): Promise<void> {
   logger.info(`[IngestWorker] 调度向量化: documentId=${documentId} chunks=${chunks.length}`);
 
-  interface AiGatewayWithEmbed {
-    embed?: (data: unknown) => unknown;
-  }
+  try {
+    const texts = chunks.map(c => c.text);
 
-  if (aiGateway && typeof (aiGateway as unknown as AiGatewayWithEmbed).embed === 'function') {
-    logger.debug('[IngestWorker] aiGateway embed 能力已注册，等待后续实现');
+    // 1. 调用 AI Gateway 获取向量
+    // 注意：embedDocuments 是刚刚加上的，TS 类型可能需更新或以此处为准
+    const vectors = await (aiGateway as any).embedDocuments(texts);
+
+    if (vectors.length !== chunks.length) {
+      throw new Error(`Embedding count mismatch: expected ${chunks.length}, got ${vectors.length}`);
+    }
+
+    // 2. 批量更新数据库 (MySQL JSON 存储)
+    // 由于 update 通常是单行的，这里我们为了性能可能通过事务或者 case when 批量更新
+    // 但 knex 批量更新比较复杂的 case when，简单起见我们并行更新 (并发限制)
+
+    // 限制并发数
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+      const batch = chunks.slice(i, i + BATCH_SIZE);
+      const batchVectors = vectors.slice(i, i + BATCH_SIZE);
+
+      await Promise.all(batch.map(async (chunk, idx) => {
+        const embedding = batchVectors[idx];
+        await db('kb_chunks')
+          .where({
+            document_id: documentId,
+            chunk_index: chunk.index
+          })
+          .update({
+            embedding: JSON.stringify(embedding), // MySQL JSON
+            embedding_status: 'completed',
+            updated_at: new Date()
+          });
+      }));
+    }
+
+    logger.info(`[IngestWorker] 向量化完成并保存: documentId=${documentId}`);
+
+  } catch (error) {
+    logger.error(`[IngestWorker] 向量化失败: documentId=${documentId}`, error);
+    // 更新 Chunks 状态为 failed? 或者只让 Job 失败重试
+    throw error;
   }
 }
 

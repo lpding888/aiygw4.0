@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Layout, Menu, Breadcrumb, Avatar, Dropdown, Space, Button, theme } from 'antd';
+import { Layout, Menu, Breadcrumb, Avatar, Dropdown, Space, Button, theme, Input, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import { useRouter, usePathname } from 'next/navigation';
 import {
@@ -13,15 +13,36 @@ import {
     MenuFoldOutlined,
     MenuUnfoldOutlined,
     SafetyCertificateOutlined,
-    ApartmentOutlined,
-    FormOutlined,
     DollarOutlined,
     RocketOutlined,
     FileTextOutlined,
-    CloudServerOutlined
+    ToolOutlined,
+    ShopOutlined,
+    ApiOutlined,
+    DatabaseOutlined,
+    ScheduleOutlined,
+    BgColorsOutlined,
+    LinkOutlined,
+    ExperimentOutlined,
+    CodeOutlined,
+    BarChartOutlined,
+    FunnelPlotOutlined,
+    MessageOutlined,
+    NotificationOutlined,
+    PictureOutlined,
+    SoundOutlined,
+    NodeIndexOutlined,
+    GiftOutlined,
+    HddOutlined,
+    BugOutlined,
+    KeyOutlined,
+    ReadOutlined,
+    SearchOutlined,
+    ThunderboltOutlined
 } from '@ant-design/icons';
 import { useAuthStore } from '@/store/authStore';
 import { ADMIN_BRAND, getBreadcrumbItems, getMenuOpenKeys } from '@/config/admin';
+import CommandPalette, { useCommandPalette } from '../admin/CommandPalette';
 
 const { Header, Sider, Content } = Layout;
 
@@ -29,7 +50,30 @@ interface ProAdminLayoutProps {
     children: React.ReactNode;
 }
 
+// Search Trigger Component to use CommandPalette Context
+const SearchTrigger = () => {
+    const { openPalette } = useCommandPalette();
+    return (
+        <div
+            onClick={openPalette}
+            className="flex items-center bg-gray-100/50 hover:bg-gray-100 transition-colors px-3 py-1.5 rounded-lg cursor-pointer text-gray-500 w-48 border border-transparent hover:border-gray-200"
+        >
+            <SearchOutlined className="mr-2" />
+            <span className="text-sm">搜索...</span>
+            <span className="ml-auto text-xs bg-white px-1.5 rounded border border-gray-200">⌘K</span>
+        </div>
+    );
+};
+
 export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
+    return (
+        <CommandPalette>
+            <AdminLayoutContent>{children}</AdminLayoutContent>
+        </CommandPalette>
+    );
+}
+
+function AdminLayoutContent({ children }: ProAdminLayoutProps) {
     const router = useRouter();
     const pathname = usePathname();
     const { user, logout } = useAuthStore();
@@ -50,42 +94,121 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
         }
     }, [user, router]);
 
-    // 菜单配置
+    // 菜单配置 (重构后)
     const menuItems = [
         {
             key: '/admin/dashboard',
             icon: <DashboardOutlined />,
             label: '仪表盘',
         },
+        // AI 智能工厂 (AI Factory)
         {
-            key: 'app-management',
-            icon: <AppstoreOutlined />,
-            label: '应用管理',
+            key: 'ai-factory',
+            icon: <ThunderboltOutlined />,
+            label: 'AI 智能工厂',
             children: [
                 {
-                    key: '/admin/features',
-                    label: '功能列表',
-                },
-                {
-                    key: '/admin/features/new',
-                    label: '新建AI应用',
-                },
-            ],
-        },
-        {
-            key: 'core-engine',
-            icon: <RocketOutlined />,
-            label: '核心引擎',
-            children: [
-                {
-                    key: '/admin/forms/builder',
-                    icon: <FormOutlined />,
-                    label: '表单设计器',
+                    key: '/admin/architect',
+                    icon: <ThunderboltOutlined />,
+                    label: 'AI Architect (智能生成)',
                 },
                 {
                     key: '/admin/pipelines/editor',
-                    icon: <ApartmentOutlined />,
-                    label: '流程编辑器',
+                    icon: <RocketOutlined />,
+                    label: '积木编排 (Pipeline)',
+                },
+                {
+                    key: '/admin/providers',
+                    icon: <ToolOutlined />,
+                    label: '技能管理 (Providers)',
+                },
+                {
+                    key: '/admin/mcp',
+                    icon: <ApiOutlined />,
+                    label: 'MCP 服务 (Endpoints)',
+                },
+                {
+                    key: '/admin/prompts',
+                    icon: <FileTextOutlined />,
+                    label: '提示词 (Prompts)',
+                },
+                {
+                    key: '/admin/kb',
+                    icon: <DatabaseOutlined />,
+                    label: '知识库 (RAG)',
+                },
+                {
+                    key: '/admin/style-kits',
+                    icon: <BgColorsOutlined />,
+                    label: '风格包 (Style Kits)',
+                },
+            ],
+        },
+        // 数据洞察 (Data & Insights)
+        {
+            key: 'data-insights',
+            icon: <BarChartOutlined />,
+            label: '数据洞察',
+            children: [
+                {
+                    key: '/admin/analytics/funnel',
+                    icon: <FunnelPlotOutlined />,
+                    label: '转化漏斗',
+                },
+                {
+                    key: '/admin/feedback',
+                    icon: <MessageOutlined />,
+                    label: '用户反馈',
+                },
+            ],
+        },
+        // 运营中心 (Marketing & Ops)
+        {
+            key: 'marketing-ops',
+            icon: <NotificationOutlined />,
+            label: '运营中心',
+            children: [
+                {
+                    key: '/admin/invite-codes',
+                    icon: <GiftOutlined />,
+                    label: '邀请码管理',
+                },
+                {
+                    key: '/admin/experiments',
+                    icon: <ExperimentOutlined />,
+                    label: 'A/B 实验',
+                },
+                {
+                    key: '/admin/catalog',
+                    icon: <ShopOutlined />,
+                    label: '类目管理',
+                },
+                {
+                    key: '/admin/banners',
+                    icon: <PictureOutlined />,
+                    label: 'Banner 管理',
+                },
+                {
+                    key: '/admin/announcements',
+                    icon: <SoundOutlined />,
+                    label: '公告管理',
+                },
+            ],
+        },
+        // 应用管理 (App Store)
+        {
+            key: 'app-management',
+            icon: <AppstoreOutlined />,
+            label: '应用商店',
+            children: [
+                {
+                    key: '/admin/features',
+                    icon: <ShopOutlined />,
+                    label: '已上架应用',
+                },
+                {
+                    key: '/admin/features/new',
+                    label: '应用上架',
                 },
             ],
         },
@@ -115,8 +238,43 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
             label: '系统运维',
             children: [
                 {
+                    key: '/admin/system/circuit-breaker',
+                    icon: <ThunderboltOutlined />,
+                    label: '熔断器监控',
+                },
+                {
+                    key: '/admin/system/cache',
+                    icon: <HddOutlined />,
+                    label: '缓存管理',
+                },
+                {
                     key: '/admin/system/config',
                     label: '系统配置',
+                },
+                {
+                    key: '/admin/system/errors',
+                    icon: <BugOutlined />,
+                    label: '错误日志',
+                },
+                {
+                    key: '/admin/system/kms',
+                    icon: <KeyOutlined />,
+                    label: '密钥管理',
+                },
+                {
+                    key: '/admin/system/docs',
+                    icon: <ReadOutlined />,
+                    label: '接口文档',
+                },
+                {
+                    key: '/admin/rules',
+                    icon: <NodeIndexOutlined />,
+                    label: '规则引擎',
+                },
+                {
+                    key: '/admin/webhooks',
+                    icon: <LinkOutlined />,
+                    label: 'Webhooks',
                 },
                 {
                     key: '/admin/system/audit',
@@ -124,24 +282,14 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
                     label: '审计日志',
                 },
                 {
-                    key: '/admin/providers',
-                    icon: <CloudServerOutlined />,
-                    label: '模型服务商',
-                },
-            ],
-        },
-        {
-            key: 'content-ops',
-            icon: <FileTextOutlined />,
-            label: '内容运营',
-            children: [
-                {
-                    key: '/admin/announcements',
-                    label: '公告管理',
+                    key: '/admin/queues',
+                    icon: <ScheduleOutlined />,
+                    label: '消息队列',
                 },
                 {
-                    key: '/admin/banners',
-                    label: 'Banner管理',
+                    key: '/admin/template-tester',
+                    icon: <CodeOutlined />,
+                    label: '模板调试器',
                 },
             ],
         },
@@ -173,16 +321,16 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
     // 获取当前选中的菜单键
     const getSelectedKeys = () => {
         if (!pathname) return [];
-        // 精确匹配
         if (pathname === '/admin/dashboard') return ['/admin/dashboard'];
-
-        // 模糊匹配（例如 /admin/features/new 应该高亮 /admin/features）
-        // 这里简单处理，直接返回pathname
         return [pathname];
     };
 
     // 获取当前展开的菜单键 - 使用配置
-    const getOpenKeys = () => getMenuOpenKeys(pathname);
+    const getOpenKeys = () => {
+        // 如果在编辑器页面，自动展开 AI 工厂
+        if (pathname.startsWith('/admin/pipelines')) return ['ai-factory'];
+        return getMenuOpenKeys(pathname);
+    };
 
     if (!user || user.role !== 'admin') return null;
 
@@ -194,8 +342,15 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
                 collapsed={collapsed}
                 width={260}
                 style={{
-                    background: '#000000', // 纯黑背景，对比度更高
-                    borderRight: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(0, 0, 0, 0.85)', // Dark Glassmorphism 
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)',
+                    borderRight: '1px solid rgba(255,255,255,0.08)',
+                    position: 'fixed',
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    zIndex: 200,
                 }}
             >
                 <div style={{
@@ -205,7 +360,8 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
                     justifyContent: collapsed ? 'center' : 'flex-start',
                     padding: collapsed ? '0' : '0 24px',
                     overflow: 'hidden',
-                    transition: 'all 0.3s ease'
+                    transition: 'all 0.3s ease',
+                    borderBottom: '1px solid rgba(255,255,255,0.05)'
                 }}>
                     <div style={{
                         width: 32,
@@ -235,22 +391,24 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
                         </span>
                     )}
                 </div>
-                <Menu
-                    theme="dark"
-                    mode="inline"
-                    defaultSelectedKeys={getSelectedKeys()}
-                    defaultOpenKeys={getOpenKeys()}
-                    selectedKeys={getSelectedKeys()}
-                    items={menuItems}
-                    onClick={({ key }) => router.push(key)}
-                    style={{
-                        background: 'transparent',
-                        borderRight: 'none',
-                        padding: '0 12px'
-                    }}
-                />
+                <div className="custom-scrollbar" style={{ height: 'calc(100vh - 80px)', overflowY: 'auto', overflowX: 'hidden' }}>
+                    <Menu
+                        theme="dark"
+                        mode="inline"
+                        defaultSelectedKeys={getSelectedKeys()}
+                        defaultOpenKeys={getOpenKeys()}
+                        selectedKeys={getSelectedKeys()}
+                        items={menuItems}
+                        onClick={({ key }) => router.push(key)}
+                        style={{
+                            background: 'transparent',
+                            borderRight: 'none',
+                            padding: '12px'
+                        }}
+                    />
+                </div>
             </Sider>
-            <Layout style={{ background: 'var(--bg-secondary)' }}>
+            <Layout className="mesh-bg" style={{ marginLeft: collapsed ? 80 : 260, transition: 'all 0.2s' }}>
                 <Header style={{
                     padding: '0 24px',
                     background: 'rgba(255, 255, 255, 0.8)',
@@ -266,17 +424,20 @@ export default function ProAdminLayout({ children }: ProAdminLayoutProps) {
                     zIndex: 100,
                     transition: 'all 0.3s ease'
                 }}>
-                    <Button
-                        type="text"
-                        icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                        onClick={() => setCollapsed(!collapsed)}
-                        style={{
-                            fontSize: '16px',
-                            width: 40,
-                            height: 40,
-                            borderRadius: 12,
-                        }}
-                    />
+                    <Space>
+                        <Button
+                            type="text"
+                            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                            onClick={() => setCollapsed(!collapsed)}
+                            style={{
+                                fontSize: '16px',
+                                width: 40,
+                                height: 40,
+                                borderRadius: 12,
+                            }}
+                        />
+                        <SearchTrigger />
+                    </Space>
 
                     <Space size="large">
                         <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">

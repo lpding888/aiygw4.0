@@ -268,7 +268,9 @@ export default function FormDesignStep({
     <div className="animate-fade-up">
       <div style={{ textAlign: 'center', marginBottom: 40 }}>
         <Title level={2} style={{ marginBottom: 8 }}>设计您的表单</Title>
-        <Text type="secondary">选择一个预设模板快速开始，或者自定义设计您的表单结构。</Text>
+        <Text type="secondary">
+          表单就是用户下单时看到的界面。您可以选择一个模板，或者自己设计用户需要填哪些信息（比如上传图片、输入提示词）。
+        </Text>
       </div>
 
       {/* 模式选择 */}

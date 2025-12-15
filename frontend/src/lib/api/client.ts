@@ -1,4 +1,15 @@
 /**
+ * ⚠️ 警告：此文件仅供@/lib/api.ts内部使用，不要直接导入！
+ *
+ * ❌ 错误用法: import { api } from '@/lib/api/client';
+ * ✅ 正确用法: import api from '@/lib/api';
+ *
+ * 原因：此文件导出的api缺少认证拦截器（Authorization header），
+ *      会导致401 Unauthorized错误。
+ *
+ * 如需调用API，请使用 @/lib/api，它包含完整的认证逻辑。
+ *
+ * ---
  * 统一axios客户端出口
  * 艹，这个tm是所有API请求的基础！错误体规范必须统一！
  *

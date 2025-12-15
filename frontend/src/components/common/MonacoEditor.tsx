@@ -268,7 +268,9 @@ export default function MonacoEditor({
             height: showActions ? 'calc(100% - 40px)' : '100%',
           }}
         >
-          <Spin tip="Monaco编辑器加载中..." />
+          <Spin tip="Monaco编辑器加载中...">
+            <div style={{ height: 50, width: 50 }} />
+          </Spin>
         </div>
       )}
 

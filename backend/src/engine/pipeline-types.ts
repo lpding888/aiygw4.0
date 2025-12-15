@@ -49,7 +49,8 @@ export type NodeConfig =
   | ConditionNodeConfig
   | LoopNodeConfig
   | ParallelNodeConfig
-  | MergeNodeConfig;
+  | MergeNodeConfig
+  | AgentNodeConfig;
 
 /**
  * Input 节点配置
@@ -174,6 +175,24 @@ export interface MergeNodeConfig {
   merge_config?: {
     strategy?: 'concat' | 'merge' | 'reduce'; // 合并策略
     reducer?: string; // reduce函数表达式
+  };
+  dependencies?: string[]; // 依赖的其他节点ID
+}
+
+/**
+ * Agent 节点配置
+ */
+export interface AgentNodeConfig {
+  node_type: 'agent';
+  agent_config?: {
+    goal?: string; // 目标
+    role?: string; // 角色设置
+    tools?: string[]; // 可用工具列表 (MCP Tool defined names)
+    max_steps?: number; // 最大思考步数
+    memory_window?: number; // 记忆窗口大小
+    provider_type?: string; // LLM Provider
+    provider_ref?: string; // LLM Provider Instance
+    parameters?: Record<string, unknown>; // LLM Params (model, temp, etc.)
   };
   dependencies?: string[]; // 依赖的其他节点ID
 }
@@ -317,6 +336,11 @@ export interface PipelineExecution {
   error_details: ErrorDetails | null; // 错误详情
 }
 
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
 /**
  * 执行上下文
  */
@@ -324,6 +348,7 @@ export interface ExecutionContext {
   mode: ExecutionMode; // 执行模式
   variables: Record<string, unknown>; // 变量存储
   state: Record<string, unknown>; // 状态存储
+  history: ChatMessage[]; // 聊天历史记录
   user_id?: string; // 用户ID
   trace_id?: string; // 追踪ID
   parent_execution_id?: string; // 父执行ID（用于子流程）
@@ -454,15 +479,15 @@ export interface ParallelBranchResult {
  */
 export interface ExecutionEvent {
   event_type:
-    | 'execution:started'
-    | 'execution:completed'
-    | 'execution:failed'
-    | 'execution:cancelled'
-    | 'step:started'
-    | 'step:completed'
-    | 'step:failed'
-    | 'loop:iteration'
-    | 'parallel:branch_completed';
+  | 'execution:started'
+  | 'execution:completed'
+  | 'execution:failed'
+  | 'execution:cancelled'
+  | 'step:started'
+  | 'step:completed'
+  | 'step:failed'
+  | 'loop:iteration'
+  | 'parallel:branch_completed';
   execution_id: string;
   timestamp: string;
   data: Record<string, unknown>;
@@ -542,4 +567,8 @@ export function isParallelNodeConfig(config: NodeConfig): config is ParallelNode
 
 export function isMergeNodeConfig(config: NodeConfig): config is MergeNodeConfig {
   return config.node_type === 'merge';
+}
+
+export function isAgentNodeConfig(config: NodeConfig): config is AgentNodeConfig {
+  return config.node_type === 'agent';
 }

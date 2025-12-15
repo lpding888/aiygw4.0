@@ -37,6 +37,9 @@ class CircuitBreakerService {
 
   private defaultConfig: Required<CircuitBreakerConfig>;
 
+  // 性能优化：防止内存泄漏，限制最大熔断器数量
+  private readonly maxCircuitBreakers: number = 100;
+
   constructor() {
     this.circuitBreakers = new Map();
     this.metrics = {
@@ -62,9 +65,23 @@ class CircuitBreakerService {
    * @param {string} name - 熔断器名称
    * @param {Object} config - 配置参数
    * @returns {CircuitBreaker} 熔断器实例
+   * 性能优化：限制Map大小，防止内存泄漏
    */
   getCircuitBreaker(name: string, config: CircuitBreakerConfig = {}): CircuitBreaker {
     if (!this.circuitBreakers.has(name)) {
+      // 性能优化：检查Map大小限制
+      if (this.circuitBreakers.size >= this.maxCircuitBreakers) {
+        // 删除最早创建的熔断器（FIFO策略）
+        const firstKey = this.circuitBreakers.keys().next().value as string;
+        if (firstKey) {
+          logger.warn(
+            `[CircuitBreaker] 达到最大熔断器数量限制(${this.maxCircuitBreakers})，删除最旧的: ${firstKey}`
+          );
+          this.circuitBreakers.delete(firstKey);
+          this.metrics.totalCircuitBreakers--;
+        }
+      }
+
       const { batchSize: _batchSize, ...breakerOverrides } = config;
       const circuitBreaker = new CircuitBreaker(name, {
         ...this.defaultConfig,

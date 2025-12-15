@@ -2,31 +2,27 @@
 
 import { io, Socket } from 'socket.io-client';
 
-type TaskUpdatePayload = {
-  taskId: string;
-  status: 'pending' | 'running' | 'failed' | 'completed';
-  resultUrls?: string[];
-  error_msg?: string;
-};
-
-type OrderPaidPayload = {
-  orderId: string;
-  channel: 'wx' | 'alipay';
+export type ExecutionEvent = {
+  type: string;
+  execution_id: string;
+  timestamp: string;
+  [key: string]: unknown;
 };
 
 class RealtimeClient {
   private socket: Socket | null = null;
   private userId: string | null = null;
 
-  connect(userId: string, token?: string | null) {
-    if (!userId) return;
-    if (this.socket?.connected && this.userId === userId) {
+  connect(userId: string | null = null, token?: string | null) {
+    if (this.socket?.connected) {
       return;
     }
 
     this.userId = userId;
-    this.socket = io(process.env.NEXT_PUBLIC_WS_URL || '', {
-      path: '/ws',
+    // Connect to default namespace / path or configured URL
+    const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
+    this.socket = io(url, {
       transports: ['websocket'],
       auth: token ? { token } : undefined,
       reconnection: true,
@@ -35,24 +31,56 @@ class RealtimeClient {
     });
 
     this.socket.on('connect', () => {
-      this.socket?.emit('join', userId);
+      console.log('[Socket] Connected:', this.socket?.id);
+      if (userId) {
+        this.socket?.emit('join', userId);
+      }
+    });
+
+    this.socket.on('disconnect', () => {
+      console.log('[Socket] Disconnected');
+    });
+
+    this.socket.on('connect_error', (err) => {
+      console.error('[Socket] Connection Error:', err);
     });
   }
 
-  onTaskUpdated(handler: (payload: TaskUpdatePayload) => void) {
-    this.socket?.on('task:updated', handler);
+  joinExecution(executionId: string) {
+    if (this.socket?.connected) {
+      this.socket.emit('join_execution', executionId);
+    } else {
+      // Retry once connected? Not handling queueing for now.
+      // It's better to ensure connection first.
+      const onConnect = () => {
+        this.socket?.emit('join_execution', executionId);
+        this.socket?.off('connect', onConnect);
+      }
+      this.socket?.on('connect', onConnect);
+    }
   }
 
-  offTaskUpdated(handler: (payload: TaskUpdatePayload) => void) {
-    this.socket?.off('task:updated', handler);
+  leaveExecution(executionId: string) {
+    this.socket?.emit('leave_execution', executionId);
   }
 
-  onOrderPaid(handler: (payload: OrderPaidPayload) => void) {
-    this.socket?.on('order:paid', handler);
+  onExecutionEvent(handler: (event: ExecutionEvent) => void) {
+    this.socket?.on('execution:event', handler);
+    // Also listen to specific legacy events if backend emits them separately
+    // But backend now emits execution:event for all.
   }
 
-  offOrderPaid(handler: (payload: OrderPaidPayload) => void) {
-    this.socket?.off('order:paid', handler);
+  offExecutionEvent(handler: (event: ExecutionEvent) => void) {
+    this.socket?.off('execution:event', handler);
+  }
+
+  // Generic Listeners for legacy support if needed
+  on(event: string, handler: (...args: any[]) => void) {
+    this.socket?.on(event, handler);
+  }
+
+  off(event: string, handler: (...args: any[]) => void) {
+    this.socket?.off(event, handler);
   }
 
   disconnect() {

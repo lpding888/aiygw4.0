@@ -1,0 +1,80 @@
+    rollbackConfigSnapshot: (snapshotId: string) =>
+      this.client.post<APIResponse>(`/admin/configs/snapshots/${snapshotId}/rollback`),
+
+    getConfigStats: () =>
+      this.client.get<APIResponse>('/admin/configs/stats'),
+
+    // 审计日志
+    getAuditLogs: (params?: {
+      userId?: string;
+      action?: string;
+      startDate?: string;
+      endDate?: string;
+      limit?: number;
+      offset?: number;
+    }) => this.client.get<APIResponse>('/admin/audit-logs', { params }),
+
+    // AI助手
+    chatWithAI: (data: AIChatRequest) =>
+      this.client.post<APIResponse<AIChatResponse>>('/admin/ai/chat', data),
+
+    // 系统初始化
+    initializeSystem: () =>
+      this.client.post<APIResponse>('/admin/system/init'),
+  };
+
+  adminAiHelper = {
+    getConfig: () => this.client.get<APIResponse>('/admin/ai-helper/config'),
+    saveConfig: (data: {
+      enabled?: boolean;
+      apiUrl?: string | null;
+      apiKey?: string;
+      defaultModel?: string | null;
+      allowedModels?: string[];
+      systemPrompt?: string | null;
+      resetApiKey?: boolean;
+    }) => this.client.post<APIResponse>('/admin/ai-helper/config', data),
+    testConnection: (data?: { apiUrl?: string; apiKey?: string }) =>
+      this.client.post<APIResponse>('/admin/ai-helper/test', data),
+    getModels: () => this.client.get<APIResponse>('/admin/ai-helper/models'),
+  };
+
+  // 素材库相关
+  assets = {
+    getAll: (params?: { userId?: string; type?: string }) =>
+      this.client.get<APIResponse>('/assets', { params }),
+
+    delete: (assetId: string, params?: { delete_cos_file?: boolean }) =>
+      this.client.delete<APIResponse>(`/assets/${assetId}`, { params }),
+  };
+
+  // ============ Pipeline相关API ============
+  pipeline = {
+    // Pipeline Schema管理
+    getSchemas: (params?: { category?: string; limit?: number; offset?: number }) =>
+      this.client.get<APIResponse>('/admin/pipeline-schemas', { params }),
+
+    getSchemaById: (id: string) =>
+      this.client.get<APIResponse>(`/admin/pipeline-schemas/${id}`),
+
+    createSchema: (data: {
+      schema_name: string;
+      description?: string;
+      category?: string;
+      nodes: any[];
+      edges: any[];
+      metadata?: Record<string, any>;
+    }) => this.client.post<APIResponse>('/admin/pipeline-schemas', data),
+
+    updateSchema: (id: string, data: {
+      schema_name?: string;
+      description?: string;
+      category?: string;
+      nodes?: any[];
+      edges?: any[];
+      metadata?: Record<string, any>;
+    }) => this.client.put<APIResponse>(`/admin/pipeline-schemas/${id}`, data),
+
+    deleteSchema: (id: string) =>
+      this.client.delete<APIResponse>(`/admin/pipeline-schemas/${id}`),
+

@@ -418,9 +418,13 @@ export class ScfProvider extends BaseProvider {
    * @returns Promise<boolean> - true表示健康
    */
   public async healthCheck(): Promise<boolean> {
-    // TODO: 实现真正的健康检查（可选）
-    // 例如：调用一个预设的健康检查函数
-    return true;
+    const hasCreds =
+      Boolean(process.env.TENCENT_SECRET_ID && process.env.TENCENT_SECRET_KEY) ||
+      Boolean(process.env.SCF_SECRET_ID && process.env.SCF_SECRET_KEY);
+    if (!hasCreds) {
+      this.logger.warn('[SCF] 未配置密钥，健康检查判定为不健康');
+    }
+    return hasCreds;
   }
 }
 

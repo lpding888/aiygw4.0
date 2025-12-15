@@ -5,6 +5,7 @@ import { db } from '../config/database.js';
 import tokenService from './token.service.js';
 import wechatLoginService from './wechat-login.service.js';
 import cacheService from './cache.service.js';
+import smsService from './sms.service.js';
 import type { OAuthCallbackResult, MiniProgramLoginResult } from '../types/wechat-login.types.js';
 
 type WechatLoginResponse = OAuthCallbackResult | MiniProgramLoginResult;
@@ -423,9 +424,7 @@ class UnifiedLoginService {
         attempts: 0
       });
 
-      // TODO: 集成短信服务发送验证码
-      // await smsService.sendVerificationCode(phone, verificationCode);
-      logger.info(`[UnifiedLogin] 模拟发送验证码: phone=${phone}, code=${verificationCode}`);
+      await smsService.sendVerificationCode(phone, verificationCode);
 
       logger.info(`[UnifiedLogin] 验证码发送成功: phone=${phone}`);
 

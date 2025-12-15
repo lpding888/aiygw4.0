@@ -126,7 +126,7 @@ router.get(
       }
 
       const [documents, totalRow] = await Promise.all([
-        query
+        query.clone()
           .select('*')
           .orderBy('created_at', 'desc')
           .limit(parseInt(limit as string))
@@ -214,6 +214,77 @@ router.post(
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       logger.error('[KBRoute] 检索失败:', err);
+      next(err);
+    }
+  }
+);
+
+/**
+ * 获取队列统计
+ * GET /admin/kb/queue-stats
+ */
+/**
+ * 获取知识库统计
+ * GET /admin/kb/stats
+ */
+router.get(
+  '/stats',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { code: 4010, message: '未登录' } });
+        return;
+      }
+
+      // 1. 文档总数
+      const totalDocsResult = await db('kb_documents')
+        .where('user_id', userId)
+        .count<{ count: number }>('* as count')
+        .first();
+      const totalDocuments = Number(totalDocsResult?.count || 0);
+
+      // 2. 切片总数 (关联查询)
+      const totalChunksResult = await db('kb_chunks')
+        .join('kb_documents', 'kb_chunks.document_id', 'kb_documents.id')
+        .where('kb_documents.user_id', userId)
+        .count<{ count: number }>('* as count')
+        .first();
+      const totalChunks = Number(totalChunksResult?.count || 0);
+
+      // 3. 存储空间 (Sum file_size)
+      const storageResult = await db('kb_documents')
+        .where('user_id', userId)
+        .sum<{ totalSize: number }>('file_size as totalSize')
+        .first();
+      const storageSize = Number(storageResult?.totalSize || 0);
+
+      // 4. 状态分布
+      const statusDistribution = await db('kb_documents')
+        .where('user_id', userId)
+        .select('status')
+        .count<{ count: number }>('* as count')
+        .groupBy('status');
+
+      const distribution = (statusDistribution as unknown as any[]).reduce((acc: Record<string, number>, curr) => {
+        acc[curr.status as string] = Number(curr.count);
+        return acc;
+      }, {} as Record<string, number>);
+
+      res.json({
+        success: true,
+        data: {
+          totalDocuments,
+          totalChunks,
+          storageSize, // in bytes
+          documentStats: distribution
+        },
+        requestId: req.id
+      });
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[KBRoute] 获取统计失败:', err);
       next(err);
     }
   }

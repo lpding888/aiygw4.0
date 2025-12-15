@@ -49,7 +49,7 @@ import {
   SettingOutlined
 } from '@ant-design/icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import api from '@/lib/api';
 import { MSWInitializer } from '@/components/MSWInitializer';
 import type { RcFile, UploadProps } from 'antd/es/upload';
 import type { ColumnsType } from 'antd/es/table';
@@ -100,7 +100,7 @@ export default function KBUploadPage() {
   const { data: cosConfig, refetch: refetchCosConfig } = useQuery({
     queryKey: ['cos-config'],
     queryFn: async () => {
-      const response = await api.get('/admin/kb/cos-config');
+      const response = await api.client.get('/admin/kb/cos-config');
       return response.data;
     },
   });
@@ -177,7 +177,7 @@ export default function KBUploadPage() {
       if (!task) return;
 
       // 调用后端API处理上传的文件
-      const response = await api.post('/admin/kb/upload-callback', {
+      const response = await api.client.post('/admin/kb/upload-callback', {
         fileName: task.name,
         fileSize: task.size,
         fileType: task.type,

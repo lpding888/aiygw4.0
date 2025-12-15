@@ -705,7 +705,7 @@ export default function TemplateCenter() {
                         )}
                       </Tooltip>,
                       <Dropdown
-                        overlay={
+                        dropdownRender={() => (
                           <div style={{ background: 'white', borderRadius: 6, boxShadow: '0 3px 6px -4px rgba(0,0,0,.12)' }}>
                             <div
                               style={{ padding: '8px 12px', cursor: 'pointer' }}
@@ -724,7 +724,7 @@ export default function TemplateCenter() {
                               </div>
                             )}
                           </div>
-                        }
+                        )}
                         trigger={['click']}
                       >
                         <MoreOutlined />
@@ -887,7 +887,7 @@ export default function TemplateCenter() {
                       </Tooltip>
                       <Tooltip title="更多">
                         <Dropdown
-                          overlay={
+                          dropdownRender={() => (
                             <div style={{ background: 'white', borderRadius: 6, boxShadow: '0 3px 6px -4px rgba(0,0,0,.12)' }}>
                               <div
                                 style={{ padding: '8px 12px', cursor: 'pointer' }}
@@ -906,7 +906,7 @@ export default function TemplateCenter() {
                                 </div>
                               )}
                             </div>
-                          }
+                          )}
                           trigger={['click']}
                         >
                           <Button type="text" size="small" icon={<MoreOutlined />} />

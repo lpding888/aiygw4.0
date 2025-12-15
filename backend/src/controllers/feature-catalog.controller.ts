@@ -589,7 +589,8 @@ class FeatureCatalogController {
         { value: 'file_management', label: '文件管理', description: '文件上传、存储、转换等' },
         { value: 'user_management', label: '用户管理', description: '用户认证、权限管理等' },
         { value: 'payment', label: '支付功能', description: '支付处理、订单管理等' },
-        { value: 'integration', label: '集成功能', description: '第三方服务集成、API对接等' }
+        { value: 'integration', label: '集成功能', description: '第三方服务集成、API对接等' },
+        { value: 'provider', label: '服务商', description: '第三方服务集成' }
       ];
 
       respondGenericSuccess(res, categories);

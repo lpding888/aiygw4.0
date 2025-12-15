@@ -236,6 +236,12 @@ export class AppError extends Error {
   }
 
   public getLocalizedMessage(language: SupportedLanguageCode): string {
+    // 如果当前消息与默认消息不同（说明是自定义消息），则优先返回当前消息
+    // 否则尝试获取本地化的默认消息
+    const defaultMsg = this.getDefaultMessage(DEFAULT_LANGUAGE as SupportedLanguageCode);
+    if (this.message && this.message !== defaultMsg && this.message !== '未知错误') {
+      return this.message;
+    }
     return this.getDefaultMessage(language);
   }
 

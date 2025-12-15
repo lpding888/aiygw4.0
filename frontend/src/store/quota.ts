@@ -13,6 +13,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { api, type APIResponse } from '@/lib/api';
 
 const DEFAULT_MEMBER_QUOTA = Number(process.env.NEXT_PUBLIC_PLAN_MONTHLY_QUOTA ?? '100');
 
@@ -146,23 +147,13 @@ export const useQuotaStore = create<QuotaState>()(
         set({ isLoading: true, error: null });
 
         try {
-          const response = await fetch('/api/account/quota', {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          });
+          const payload = await api.client.get<APIResponse<ServerQuotaPayload>>('/account/quota');
 
-          if (!response.ok) {
-            throw new Error(`获取配额失败: ${response.status} ${response.statusText}`);
+          if (!payload.data?.success || !payload.data?.data) {
+            throw new Error(payload.data?.message || '获取配额失败');
           }
 
-          const payload = await response.json();
-          if (!payload?.success || !payload?.data) {
-            throw new Error(payload?.message || '获取配额失败');
-          }
-
-          const normalized = normalizeQuotaPayload(payload.data as ServerQuotaPayload);
+          const normalized = normalizeQuotaPayload(payload.data.data);
 
           set({
             quota: normalized,
@@ -215,27 +206,16 @@ export const useQuotaStore = create<QuotaState>()(
 
         try {
           // 2. 调用后端API消费配额
-          const response = await fetch('/api/account/quota/consume', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              action_type: actionType,
-              quota_cost: cost,
-            }),
+          const payload = await api.client.post<APIResponse>('/account/quota/consume', {
+            action_type: actionType,
+            quota_cost: cost,
           });
 
-          if (!response.ok) {
-            throw new Error(`消费配额失败: ${response.status} ${response.statusText}`);
+          if (!payload?.data?.success) {
+            throw new Error(payload.data?.message || '消费配额失败');
           }
 
-          const payload = await response.json();
-          if (!payload?.success) {
-            throw new Error(payload?.message || '消费配额失败');
-          }
-
-          const remaining = payload?.data?.remaining;
+          const remaining = (payload.data.data as any)?.remaining;
           if (typeof remaining === 'number' && quota) {
             set({
               quota: {

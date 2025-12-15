@@ -1,4 +1,19 @@
 /**
+ * ⚠️ 警告：此文件仅供多租户场景使用，不要在管理后台页面中导入！
+ *
+ * ❌ 错误用法（管理后台）: import { apiClient } from '@/shared/api/client';
+ * ✅ 正确用法（管理后台）: import api from '@/lib/api';
+ *
+ * 原因：此文件导出的apiClient只有x-tenant-id拦截器，
+ *      缺少认证拦截器（Authorization header），会导致401错误。
+ *
+ * 适用场景：
+ * - ✅ 多租户相关的API调用（需要x-tenant-id）
+ * - ❌ 管理后台API调用（需要认证token）
+ *
+ * 如果你不确定是否需要多租户功能，请使用 @/lib/api
+ *
+ * ---
  * Axios客户端实例
  * 艹，这个tm是所有API请求的基础！
  *

@@ -5,9 +5,11 @@
  */
 
 import axios from 'axios';
+import { spawn, ChildProcess } from 'child_process';
+import * as readline from 'readline';
 import { db as knex } from '../db/index.js';
 import logger from '../utils/logger.js';
-const kmsService = require('./kms.service.js');
+import kmsService from './kms.service.js';
 import configCacheService from '../cache/config-cache.js';
 
 interface MCPEndpoint {
@@ -80,6 +82,14 @@ class MCPEndpointsService {
   private readonly CACHE_SCOPE = 'mcp_endpoints';
   private readonly DEFAULT_VERSION = '1.0.0';
 
+  // In-memory cache for Stdio processes: endpointId -> Process Info
+  private static activeProcesses = new Map<string, {
+    process: ChildProcess;
+    pendingRequests: Map<number, (response: any) => void>;
+    requestCounter: number;
+    errorHandler: (err: Error) => void;
+  }>();
+
   /**
    * 创建MCP端点
    */
@@ -90,6 +100,7 @@ class MCPEndpointsService {
     },
     createdBy: string
   ): Promise<MCPEndpoint> {
+    this.assertStdioAllowed(endpointData.endpointUrl);
     const endpointId = this.generateId();
 
     try {
@@ -170,6 +181,9 @@ class MCPEndpointsService {
     if (!existingEndpoint) {
       throw new Error('MCP端点不存在');
     }
+    if (updateData.endpointUrl) {
+      this.assertStdioAllowed(updateData.endpointUrl);
+    }
 
     try {
       const now = new Date();
@@ -230,10 +244,13 @@ class MCPEndpointsService {
       throw new Error('MCP端点不存在');
     }
 
+    let apiKeyToDelete: string | null = null;
     try {
       await knex.transaction(async (trx) => {
-        // 删除相关的API密钥
-        await kmsService.delete(endpoint.apiKeyId);
+        // 延迟删除API密钥，避免事务回滚导致不一致
+        if (endpoint.apiKeyId) {
+          apiKeyToDelete = endpoint.apiKeyId;
+        }
 
         // 软删除端点
         await trx('mcp_endpoints').where('id', endpointId).update({
@@ -243,6 +260,16 @@ class MCPEndpointsService {
           updated_at: new Date()
         });
       });
+
+      // 事务提交后再删除密钥
+      if (apiKeyToDelete) {
+        try {
+          await kmsService.deleteKey(apiKeyToDelete, { force: true });
+          logger.info('MCP端点API密钥已删除', { endpointId, apiKeyId: apiKeyToDelete });
+        } catch (error: unknown) {
+          logger.warn('删除API密钥失败(可能已不存在),继续删除端点', { error });
+        }
+      }
 
       // 失效缓存
       await this.invalidateCache();
@@ -344,6 +371,11 @@ class MCPEndpointsService {
     try {
       // 获取API密钥
       const apiKey = await kmsService.decrypt(endpoint.apiKeyId);
+
+      // Stdio Support
+      if (endpoint.endpointUrl.startsWith('stdio:')) {
+        return this.testStdioEndpoint(endpoint);
+      }
 
       // 执行MCP协议握手
       const response = await axios.post(
@@ -465,6 +497,7 @@ class MCPEndpointsService {
     parameters: Record<string, unknown>,
     userId: string
   ): Promise<unknown> {
+    const startTime = Date.now();
     const endpoint = await this.getEndpoint(endpointId);
     if (!endpoint) {
       throw new Error('MCP端点不存在');
@@ -477,6 +510,11 @@ class MCPEndpointsService {
     try {
       // 获取API密钥
       const apiKey = await kmsService.decrypt(endpoint.apiKeyId);
+
+      // Stdio Support
+      if (endpoint.endpointUrl.startsWith('stdio:')) {
+        return this.executeStdioTool(endpoint, toolName, parameters);
+      }
 
       // 验证工具是否存在
       const tool = endpoint.supportedTools.find((t) => t.name === toolName);
@@ -507,11 +545,12 @@ class MCPEndpointsService {
       );
 
       if (response.status === 200) {
+        const duration = Date.now() - startTime;
         logger.info('MCP工具执行成功', {
           endpointId,
           toolName,
           userId,
-          duration: Date.now() - Date.now()
+          duration
         });
 
         return response.data as unknown;
@@ -519,7 +558,10 @@ class MCPEndpointsService {
         throw new Error(`工具执行失败: ${response.status}`);
       }
     } catch (error: unknown) {
-      logger.error(`执行MCP工具失败: ${endpointId}/${toolName}`, error);
+      logger.error(`执行MCP工具失败: ${endpointId}/${toolName}`, {
+        error,
+        duration: Date.now() - startTime
+      });
       throw error;
     }
   }
@@ -561,17 +603,17 @@ class MCPEndpointsService {
       result.status === 'fulfilled'
         ? result.value
         : {
-            id: 'unknown',
-            name: 'unknown',
-            result: {
-              success: false,
-              latency: 0,
-              toolsCount: 0,
-              sampleTools: [],
-              capabilities: [],
-              error: 'Test failed'
-            }
+          id: 'unknown',
+          name: 'unknown',
+          result: {
+            success: false,
+            latency: 0,
+            toolsCount: 0,
+            sampleTools: [],
+            capabilities: [],
+            error: 'Test failed'
           }
+        }
     );
 
     // 统计结果
@@ -816,6 +858,195 @@ class MCPEndpointsService {
    */
   private generateId(): string {
     return `mcp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * stdio 端点高危：仅在显式允许时才接受
+   */
+  private assertStdioAllowed(endpointUrl?: string) {
+    if (endpointUrl && endpointUrl.startsWith('stdio:')) {
+      const allowed = process.env.ALLOW_MCP_STDIO === 'true';
+      if (!allowed) {
+        throw new Error('Stdio MCP 端点已禁用，请设置 ALLOW_MCP_STDIO=true 后再试');
+      }
+    }
+  }
+
+  /**
+   * ==========================================
+   * Stdio Transport Support (Local Processes)
+   * ==========================================
+   */
+
+  private async connectStdio(endpoint: MCPEndpoint): Promise<void> {
+    if (MCPEndpointsService.activeProcesses.has(endpoint.id)) return;
+
+    // Format: "stdio:command arg1 arg2"
+    const cmdStr = endpoint.endpointUrl.replace('stdio:', '');
+    const parts = cmdStr.split(' ');
+    const command = parts[0];
+    const args = parts.slice(1);
+
+    logger.info(`[MCP] Spawning Stdio process: ${command} ${args.join(' ')}`);
+
+    const child = spawn(command, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      shell: process.platform === 'win32' // Use shell on Windows for npx capability
+    });
+
+    const pendingRequests = new Map<number, (response: any) => void>();
+
+    if (!child.stdin || !child.stdout) {
+      throw new Error('Failed to spawn process with stdin/stdout');
+    }
+
+    const rl = readline.createInterface({ input: child.stdout });
+
+    rl.on('line', (line) => {
+      try {
+        if (!line.trim()) return;
+        const json = JSON.parse(line);
+
+        // Response to request
+        if (json.id !== undefined && pendingRequests.has(json.id)) {
+          const resolve = pendingRequests.get(json.id);
+          pendingRequests.delete(json.id);
+          resolve && resolve(json);
+        } else if (json.method === 'notifications/message') {
+          logger.info('[MCP Notification]', json.params);
+        }
+      } catch (e) {
+        // Ignore JSON parse errors from partial lines or stdout noise
+      }
+    });
+
+    child.stderr?.on('data', (data) => {
+      logger.warn(`[MCP Stderr] (${endpoint.name}): ${data}`);
+    });
+
+    child.on('error', (err) => {
+      logger.error(`[MCP Process Error] (${endpoint.name}):`, err);
+      MCPEndpointsService.activeProcesses.delete(endpoint.id);
+    });
+
+    child.on('exit', (code) => {
+      logger.info(`[MCP Process Exited] (${endpoint.name}): ${code}`);
+      MCPEndpointsService.activeProcesses.delete(endpoint.id);
+    });
+
+    MCPEndpointsService.activeProcesses.set(endpoint.id, {
+      process: child,
+      pendingRequests,
+      requestCounter: 0,
+      errorHandler: (err) => logger.error('MCP Error', err)
+    });
+
+    // Give it a moment to boot
+    await new Promise(r => setTimeout(r, 1000));
+  }
+
+  private async sendStdioRequest(endpointId: string, method: string, params?: any): Promise<any> {
+    const state = MCPEndpointsService.activeProcesses.get(endpointId);
+    if (!state) throw new Error('Not connected to Stdio process');
+
+    const id = ++state.requestCounter;
+    const request = { jsonrpc: '2.0', id, method, params };
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        state.pendingRequests.delete(id);
+        reject(new Error('MCP Request timeout'));
+      }, 30000);
+
+      state.pendingRequests.set(id, (response) => {
+        clearTimeout(timeout);
+        if (response.error) reject(new Error(response.error.message || 'MCP Error'));
+        else resolve(response.result);
+      });
+
+      try {
+        state.process.stdin!.write(JSON.stringify(request) + '\n');
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  private async testStdioEndpoint(endpoint: MCPEndpoint): Promise<MCPTestResult> {
+    const startTime = Date.now();
+    try {
+      await this.connectStdio(endpoint);
+
+      // 1. Initialize
+      await this.sendStdioRequest(endpoint.id, 'initialize', {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: { name: 'AIPlatform', version: '1.0' }
+      });
+
+      // 2. Initialized Notification
+      const state = MCPEndpointsService.activeProcesses.get(endpoint.id);
+      state?.process.stdin!.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
+
+      // 3. List Tools
+      const toolsRes = await this.sendStdioRequest(endpoint.id, 'tools/list');
+
+      const tools = (toolsRes.tools || []).map((t: any) => ({
+        name: t.name,
+        description: t.description || '',
+        inputSchema: t.inputSchema || {},
+        category: 'general', // Default category
+        enabled: true,
+        parameters: this.parseToolParameters(t.inputSchema || {})
+      }));
+
+      await this.updateEndpointStatus(endpoint.id, {
+        status: 'active',
+        healthy: true,
+        lastSyncAt: new Date(),
+        supportedTools: tools,
+        capabilities: []
+      });
+
+      return {
+        success: true,
+        latency: Date.now() - startTime,
+        toolsCount: tools.length,
+        sampleTools: tools.slice(0, 5).map((t: any) => t.name),
+        capabilities: []
+      };
+
+    } catch (error: any) {
+      logger.error('Stdio Test Failed', error);
+
+      // Cleanup on failure
+      MCPEndpointsService.activeProcesses.get(endpoint.id)?.process.kill();
+      MCPEndpointsService.activeProcesses.delete(endpoint.id);
+
+      await this.updateEndpointStatus(endpoint.id, {
+        status: 'error',
+        healthy: false,
+        lastError: error.message
+      });
+
+      return {
+        success: false,
+        latency: 0,
+        toolsCount: 0,
+        sampleTools: [],
+        capabilities: [],
+        error: error.message
+      };
+    }
+  }
+
+  private async executeStdioTool(endpoint: MCPEndpoint, toolName: string, args: any): Promise<any> {
+    await this.connectStdio(endpoint);
+    const res = await this.sendStdioRequest(endpoint.id, 'tools/call', {
+      name: toolName,
+      arguments: args
+    });
+    return res;
   }
 
   /**

@@ -1,95 +1,93 @@
 /**
- * RunningHubProvider - RunningHub工作流Provider
- *
- * 职责：
- * - 触发RunningHub工作流
- * - 轮询工作流状态
- * - 获取工作流结果
- *
- * TODO: 实现具体的RunningHub API调用逻辑
- * 艹，这个需要对接RunningHub的API，目前是符合IProvider规范的占位实现！
+ * RunningHub Provider
+ * 艹，用于调用 RunningHub 工作流平台的 Provider！
+ * 当前为占位实现，等待后续完善
  */
 
 import { BaseProvider } from '../base/base-provider.js';
-import { ExecContext, ExecResult, ProviderErrorCode } from '../types.js';
+import { ExecContext, ExecResult, ProviderErrorCode, ProviderError } from '../types.js';
 
 /**
- * RunningHub Provider输入格式
+ * RunningHub 输入参数接口
  */
 export interface RunningHubInput {
-  /** 工作流ID（必填） */
+  /** 工作流ID */
   workflowId: string;
 
-  /** API密钥（必填） */
+  /** API密钥 */
   apiKey: string;
 
-  /** 工作流输入参数（必填） */
+  /** 工作流参数 */
   params: Record<string, unknown>;
 
-  /** 轮询间隔（可选，毫秒，默认5000ms） */
+  /** 轮询间隔（毫秒，默认5000，最小1000） */
   pollInterval?: number;
 
-  /** 最大轮询时间（可选，毫秒，默认300000ms = 5分钟） */
+  /** 最大轮询超时（毫秒，默认300000 - 5分钟，最小10000） */
   maxPollTime?: number;
 
-  /** API基础URL（可选，默认使用环境变量或固定值） */
+  /** 自定义 API 基础URL（可选） */
   baseUrl?: string;
 }
 
 /**
- * RunningHubProvider实现
- * 继承BaseProvider，自动获得重试、超时控制、日志等能力
- *
- * 艹，这个Provider遵循SOLID原则！
+ * RunningHub 结果数据接口
+ */
+export interface RunningHubResultPayload {
+  message: string;
+  workflowId: string;
+  params: Record<string, unknown>;
+  pollInterval: number;
+  maxPollTime: number;
+}
+
+/**
+ * RunningHub Provider 实现
  */
 export class RunningHubProvider extends BaseProvider {
-  public readonly key = 'runninghub';
-  public readonly name = 'RunningHub Workflow Provider';
+  public readonly key: string = 'runninghub';
+  public readonly name: string = 'RunningHub工作流';
 
-  /** 默认轮询间隔（毫秒） */
-  private readonly DEFAULT_POLL_INTERVAL = 5000;
-
-  /** 默认最大轮询时间（毫秒） */
-  private readonly DEFAULT_MAX_POLL_TIME = 300000;
+  constructor(retryPolicy?: any, logger?: any) {
+    super(retryPolicy, logger);
+  }
 
   /**
    * 参数校验
-   * 艹，这个方法必须严格校验所有参数！
-   * @param input - 输入数据
-   * @returns 校验错误信息，null表示校验通过
    */
-  public validate(input: unknown): string | null {
+  validate(input: unknown): string | null {
+    // 检查输入是否为对象
     if (!input || typeof input !== 'object') {
       return '输入参数必须是对象';
     }
 
-    const payload = input as RunningHubInput;
-    const { workflowId, apiKey, params, pollInterval, maxPollTime } = payload;
+    const data = input as any;
 
-    // 校验workflowId
-    if (!workflowId || typeof workflowId !== 'string') {
+    // 检查必填字段：workflowId
+    if (!data.workflowId || typeof data.workflowId !== 'string') {
       return '缺少或无效的workflowId字段';
     }
 
-    // 校验apiKey
-    if (!apiKey || typeof apiKey !== 'string') {
+    // 检查必填字段：apiKey
+    if (!data.apiKey || typeof data.apiKey !== 'string') {
       return '缺少或无效的apiKey字段';
     }
 
-    // 校验params
-    if (!params || typeof params !== 'object') {
+    // 检查必填字段：params
+    if (!data.params || typeof data.params !== 'object' || Array.isArray(data.params)) {
       return '缺少或无效的params字段';
     }
 
-    // 校验轮询配置（可选）
-    if (pollInterval !== undefined) {
-      if (typeof pollInterval !== 'number' || pollInterval < 1000) {
+    // 检查可选字段：pollInterval
+    if (data.pollInterval !== undefined) {
+      if (typeof data.pollInterval !== 'number' || data.pollInterval < 1000) {
         return 'pollInterval必须是数字且不小于1000ms';
       }
     }
 
-    if (maxPollTime !== undefined) {
-      if (typeof maxPollTime !== 'number' || maxPollTime < 10000) {
+    // 检查可选字段：maxPollTime
+    if (data.maxPollTime !== undefined) {
+      if (typeof data.maxPollTime !== 'number' || data.maxPollTime < 10000) {
         return 'maxPollTime必须是数字且不小于10000ms';
       }
     }
@@ -98,103 +96,60 @@ export class RunningHubProvider extends BaseProvider {
   }
 
   /**
-   * 执行RunningHub工作流
-   * 艹，这个方法才是真正干活的地方！
-   * @param context - 执行上下文
-   * @returns Promise<ExecResult> - 执行结果
+   * 执行工作流（占位实现）
    */
-  protected async doExecute(context: ExecContext): Promise<ExecResult> {
-    const input = context.input as RunningHubInput;
-    const {
-      workflowId,
-      apiKey,
-      params,
-      pollInterval = this.DEFAULT_POLL_INTERVAL,
-      maxPollTime = this.DEFAULT_MAX_POLL_TIME,
-      baseUrl
-    } = input;
+  protected async doExecute(context: ExecContext): Promise<ExecResult<RunningHubResultPayload>> {
+    const { taskId, input } = context;
+    const data = input as RunningHubInput;
+    const { workflowId, params, pollInterval = 5000, maxPollTime = 300000 } = data;
 
     try {
-      this.logger.info(`[${this.key}] 准备执行RunningHub工作流`, {
-        taskId: context.taskId,
+      this.logger.info('[RunningHub] RunningHub工作流执行（占位）', {
+        taskId,
+        workflowId
+      });
+
+      // 警告：当前为占位实现
+      this.logger.warn('[RunningHub] RunningHubProvider尚未实现，返回占位数据', {
+        taskId,
+        workflowId
+      });
+
+      // 返回占位结果
+      const resultPayload: RunningHubResultPayload = {
+        message: 'RunningHubProvider尚未实现，这是占位返回数据',
         workflowId,
+        params,
         pollInterval,
         maxPollTime
-      });
+      };
 
-      // TODO: 实现RunningHub API调用
-      //
-      // 实现步骤：
-      // 1. 触发工作流
-      //    POST {baseUrl}/api/workflows/{workflowId}/trigger
-      //    Headers: { 'Authorization': `Bearer ${apiKey}` }
-      //    Body: { params }
-      //
-      // 2. 获取runId
-      //    响应: { runId: string, status: 'running' }
-      //
-      // 3. 轮询状态（直到完成或超时）
-      //    GET {baseUrl}/api/workflows/runs/{runId}/status
-      //    响应: { status: 'running' | 'completed' | 'failed' }
-      //
-      // 4. 获取结果
-      //    GET {baseUrl}/api/workflows/runs/{runId}/result
-      //    响应: { result: any, error?: string }
-
-      this.logger.warn(`[${this.key}] RunningHubProvider尚未实现，返回占位结果`, {
-        taskId: context.taskId
-      });
-
-      // 艹，占位实现（返回成功但提示未实现）
       return {
         success: true,
-        data: {
-          message: 'RunningHubProvider尚未实现，请先实现RunningHub API集成',
-          workflowId,
-          params,
-          pollInterval,
-          maxPollTime
-          // TODO: 实现后应该返回真实的工作流结果
-          // 例如：runId, status, result, duration等
-        }
+        data: resultPayload
       };
-    } catch (error: unknown) {
-      // 艹，RunningHub工作流失败了！
-      const err = error instanceof Error ? error : new Error(String(error));
-      this.logger.error(`[${this.key}] RunningHub工作流失败`, {
-        taskId: context.taskId,
+    } catch (error: any) {
+      this.logger.error('[RunningHub] 执行失败', {
+        taskId,
         workflowId,
-        error: err.message
+        error: error.message
       });
 
       return {
         success: false,
         error: {
           code: ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED,
-          message: `RunningHub工作流失败: ${err.message}`,
-          details: {
-            taskId: context.taskId,
-            workflowId,
-            originalError: err.message,
-            stack: err instanceof Error ? err.stack : undefined
-          }
+          message: `RunningHub执行失败: ${error.message}`
         }
       };
     }
   }
 
   /**
-   * 健康检查（可选）
-   * 艹，这里可以检查RunningHub API是否可达
-   * @returns Promise<boolean> - true表示健康
+   * 健康检查
    */
-  public async healthCheck(): Promise<boolean> {
-    // TODO: 实现真正的健康检查（可选）
-    // 例如：调用RunningHub的health端点
-    // GET {baseUrl}/api/health
+  async healthCheck(): Promise<boolean> {
+    // 占位实现：始终返回健康
     return true;
   }
 }
-
-// 导出默认实例（兼容ProviderLoader）
-export default RunningHubProvider;

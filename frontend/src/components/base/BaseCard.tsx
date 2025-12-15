@@ -242,7 +242,7 @@ export function BaseCard({
       const visibleActions = actionItems.slice(0, 2);
       const moreActions = actionItems.slice(2);
 
-      const moreMenu = (
+      const moreMenuRender = () => (
         <div className="base-card-dropdown">
           {moreActions.map(action => (
             <div
@@ -271,7 +271,7 @@ export function BaseCard({
               />
             </Tooltip>
           ))}
-          <Dropdown overlay={moreMenu} trigger={['click']} placement="bottomRight">
+          <Dropdown dropdownRender={moreMenuRender} trigger={['click']} placement="bottomRight">
             <Button type="text" size="small" icon={<MoreOutlined />} />
           </Dropdown>
         </Space>

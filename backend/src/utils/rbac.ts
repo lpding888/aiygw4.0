@@ -60,6 +60,9 @@ const VIEWER_PERMISSIONS: Record<Resource, Action[]> = {
   'prompts:list': ['read'],
   'prompts:view': ['read'],
 
+  // Prompt Templates - 只读
+  prompt_templates: ['read'],
+
   // UI配置 - 只读
   ui: ['read'],
   'ui:menus': ['read'],
@@ -115,7 +118,10 @@ export const PERMISSION_MATRIX: Record<UserRole, Record<Resource, Action[]>> = {
     'prompts:view': ['read', 'update'],
     'prompts:create': ['create'],
     'prompts:update': ['update'],
-    'prompts:preview': ['test'] // 可以预览
+    'prompts:preview': ['test'], // 可以预览
+
+    // Prompt Templates - 编辑权限
+    prompt_templates: ['read', 'create', 'update', 'rate']
   },
 
   admin: {
@@ -160,6 +166,9 @@ export const PERMISSION_MATRIX: Record<UserRole, Record<Resource, Action[]>> = {
     'prompts:update': ['update'],
     'prompts:delete': ['delete'],
     'prompts:preview': ['test'],
+
+    // Prompt Templates - 完全控制
+    prompt_templates: ['read', 'create', 'update', 'delete', 'publish', 'rollback', 'rate'],
 
     ui: ['read', 'create', 'update'],
     'ui:menus': ['read', 'update'],

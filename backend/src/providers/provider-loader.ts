@@ -17,11 +17,6 @@ const ALLOW_LIST: Record<string, () => Promise<Record<string, unknown>>> = {
   TENCENT_CI: () => import('./handlers/tencentCi.handler.js'),
 
   /**
-   * RunningHub工作流Provider - 第三方工作流编排
-   */
-  RUNNINGHUB: () => import('./handlers/runninghub.handler.js'),
-
-  /**
    * 腾讯云云函数（SCF）Provider - Serverless函数调用
    */
   SCF: () => import('./handlers/scf.handler.js')

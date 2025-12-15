@@ -219,18 +219,16 @@ async function rollbackProviderConfig(snapshot: ConfigSnapshot): Promise<Rollbac
  * 回滚公告配置
  */
 async function rollbackAnnouncementConfig(snapshot: ConfigSnapshot): Promise<RollbackResult> {
-  // TODO: 实现公告回滚（CMS-401实现后集成）
-  console.log('[SNAPSHOT] 公告回滚功能待实现');
-  return snapshot.config_data as RollbackResult;
+  // 公告回滚尚未接入具体公告表，这里明确抛出可追踪的异常避免静默
+  throw new Error('公告回滚未启用：缺少公告数据表集成');
 }
 
 /**
  * 回滚轮播图配置
  */
 async function rollbackBannerConfig(snapshot: ConfigSnapshot): Promise<RollbackResult> {
-  // TODO: 实现轮播图回滚（CMS-402实现后集成）
-  console.log('[SNAPSHOT] 轮播图回滚功能待实现');
-  return snapshot.config_data as RollbackResult;
+  // 轮播图回滚尚未接入具体数据表，这里明确抛出可追踪的异常避免静默
+  throw new Error('轮播图回滚未启用：缺少轮播图数据表集成');
 }
 
 /**

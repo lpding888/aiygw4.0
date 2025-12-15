@@ -57,8 +57,8 @@ export const knexConfig: Record<Environment, Knex.Config> = {
     },
     pool: buildPoolConfig({
       min: 2,
-      max: 15,
-      acquireTimeoutMillis: 8_000,
+      max: 20,
+      acquireTimeoutMillis: 60_000,
       createTimeoutMillis: 4_000,
       destroyTimeoutMillis: 4_000,
       idleTimeoutMillis: 30_000

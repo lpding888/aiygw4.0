@@ -120,7 +120,7 @@ export default function TemplateGrid({
               </Tooltip>,
               <Dropdown
                 key="more"
-                overlay={
+                dropdownRender={() => (
                   <div style={{ background: 'white', borderRadius: 6, boxShadow: '0 3px 6px -4px rgba(0,0,0,.12)' }}>
                     <div
                       style={{ padding: '8px 12px', cursor: 'pointer' }}
@@ -139,7 +139,7 @@ export default function TemplateGrid({
                       </div>
                     )}
                   </div>
-                }
+                )}
                 trigger={['click']}
               >
                 <MoreOutlined />

@@ -224,15 +224,16 @@ export class FeatureService {
    * @returns 是否有权限
    */
   checkPlanAccess(user: User, planRequired: string): boolean {
-    // 如果不是会员,无法访问
-    if (!user.isMember) {
-      return false;
+    // planRequired 约定: free | member | admin | vip
+    const plan = (planRequired || 'free').toLowerCase();
+    if (plan === 'free') {
+      return true;
     }
-
-    // TODO: 这里可以根据实际的套餐等级进行更精细的判断
-    // 目前简化处理:只要是会员就可以访问
-    // 未来可以扩展: 基础会员/PRO会员/企业会员等
-    return true;
+    if (plan === 'admin') {
+      return user.role === 'admin' || user.role === 'superadmin';
+    }
+    // 会员/VIP 统一要求 isMember=true，未来可按字段扩展等级
+    return user.isMember === true;
   }
 
   /**

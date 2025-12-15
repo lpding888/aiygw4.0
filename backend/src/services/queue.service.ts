@@ -2,8 +2,13 @@ import { Queue, QueueEvents, type JobsOptions, type BulkJobOptions, Worker, Job 
 import { Redis as IORedis } from 'ioredis';
 import pLimit from 'p-limit';
 import logger from '../utils/logger.js';
-import type { QueuesHealthReport } from './health.service.js';
-import { bullJobDefaults, bullQueueSettings, createBullConnection } from '../config/bullmq.js';
+import type { QueuesHealthReport } from './types/queue.types.js';
+import {
+  bullJobDefaults,
+  bullQueueSettings,
+  createBullConnection,
+  loadBullmqConfig
+} from '../config/bullmq.js';
 import metricsService from './metrics.service.js';
 
 interface JobData {
@@ -30,6 +35,8 @@ class QueueService {
 
   private defaultConcurrency = 5;
   private maxConcurrency = 20;
+  private initialized = false;
+  private initializing: Promise<void> | null = null;
 
   public stats = {
     totalQueued: 0,
@@ -40,9 +47,7 @@ class QueueService {
     waitingJobs: 0
   };
 
-  constructor() {
-    this.initializeQueues();
-  }
+  constructor() {}
 
   private buildConnection(role: string, queueName: string): IORedis {
     return createBullConnection({
@@ -186,10 +191,20 @@ class QueueService {
     }
   }
 
-  private initializeQueues() {
+  private async ensureInitialized(): Promise<void> {
+    if (this.initialized) return;
+    if (!this.initializing) {
+      this.initializing = this.initializeQueues();
+    }
+    await this.initializing;
+  }
+
+  private async initializeQueues() {
     try {
+      await loadBullmqConfig();
+
       // 与旧实现保持一致的默认队列集合
-      this.createQueue('task_processing', {
+      this.ensureQueueInfrastructure('task_processing', {
         defaultJobOptions: {
           removeOnComplete: 10,
           removeOnFail: 50,
@@ -197,7 +212,7 @@ class QueueService {
           backoff: { type: 'exponential', delay: 2000 }
         }
       });
-      this.createQueue('image_processing', {
+      this.ensureQueueInfrastructure('image_processing', {
         defaultJobOptions: {
           removeOnComplete: 5,
           removeOnFail: 20,
@@ -205,7 +220,7 @@ class QueueService {
           backoff: { type: 'fixed', delay: 5000 }
         }
       });
-      this.createQueue('ai_processing', {
+      this.ensureQueueInfrastructure('ai_processing', {
         defaultJobOptions: {
           removeOnComplete: 5,
           removeOnFail: 20,
@@ -213,7 +228,7 @@ class QueueService {
           backoff: { type: 'fixed', delay: 10000 }
         }
       });
-      this.createQueue('notifications', {
+      this.ensureQueueInfrastructure('notifications', {
         defaultJobOptions: {
           removeOnComplete: 20,
           removeOnFail: 10,
@@ -221,28 +236,37 @@ class QueueService {
           backoff: { type: 'exponential', delay: 1000 }
         }
       });
-      this.createQueue('cleanup', {
+      this.ensureQueueInfrastructure('cleanup', {
         defaultJobOptions: {
           removeOnComplete: 5,
           removeOnFail: 5,
           attempts: 1
         }
       });
+
+      this.initialized = true;
     } catch (error) {
       logger.error('[QueueService] 队列初始化失败', error);
     }
   }
 
-  public createQueue(name: string, options?: { defaultJobOptions?: JobsOptions }) {
+  public async initialize(): Promise<void> {
+    await this.ensureInitialized();
+  }
+
+  public async createQueue(name: string, options?: { defaultJobOptions?: JobsOptions }) {
+    await this.ensureInitialized();
     this.ensureQueueInfrastructure(name, { defaultJobOptions: options?.defaultJobOptions });
   }
 
   // 给队列监控面板用的访问器，这个SB方法只读队列实例，别在外面乱关连接
-  public getQueue(name: string): Queue | undefined {
+  public async getQueue(name: string): Promise<Queue | undefined> {
+    await this.ensureInitialized();
     return this.queues.get(name);
   }
 
-  public getAllQueues(): Queue[] {
+  public async getAllQueues(): Promise<Queue[]> {
+    await this.ensureInitialized();
     return Array.from(this.queues.values());
   }
 
@@ -252,6 +276,7 @@ class QueueService {
     data: JobData,
     options: JobsOptions = {}
   ) {
+    await this.ensureInitialized();
     const queue = this.queues.get(queueName);
     if (!queue) throw new Error(`队列不存在: ${queueName}`);
     const jobOptions = this.mergeJobDefaults({
@@ -290,6 +315,7 @@ class QueueService {
     queueName: string,
     jobs: Array<{ name: string; data: JobData; options?: JobsOptions }>
   ) {
+    await this.ensureInitialized();
     const queue = this.queues.get(queueName);
     if (!queue) throw new Error(`队列不存在: ${queueName}`);
     const bulk: Array<{ name: string; data: JobData; opts: JobsOptions }> = jobs.map((j) => ({
@@ -303,12 +329,13 @@ class QueueService {
     return added;
   }
 
-  public registerProcessor(
+  public async registerProcessor(
     queueName: string,
     jobName: string,
     processor: ProcessorFn,
     options: { concurrency?: number } = {}
   ) {
+    await this.ensureInitialized();
     this.ensureQueueInfrastructure(queueName);
     const concurrency = options.concurrency || this.defaultConcurrency;
     this.concurrencyLimits.set(queueName, concurrency);
@@ -318,11 +345,12 @@ class QueueService {
     logger.info(`[QueueService] 处理器注册成功: ${key}, 并发: ${concurrency}`);
   }
 
-  public registerUniversalProcessor(
+  public async registerUniversalProcessor(
     queueName: string,
     processor: ProcessorFn,
     options: { concurrency?: number } = {}
   ) {
+    await this.ensureInitialized();
     this.ensureQueueInfrastructure(queueName);
     const concurrency = options.concurrency || this.defaultConcurrency;
     this.concurrencyLimits.set(queueName, concurrency);
@@ -332,6 +360,7 @@ class QueueService {
   }
 
   public async getJobStatus(queueName: string, jobId: string) {
+    await this.ensureInitialized();
     const queue = this.queues.get(queueName);
     if (!queue) throw new Error(`队列不存在: ${queueName}`);
     const job = await queue.getJob(jobId);
@@ -355,6 +384,7 @@ class QueueService {
   }
 
   public async getQueueStats(queueName: string) {
+    await this.ensureInitialized();
     const queue = this.queues.get(queueName);
     if (!queue) throw new Error(`队列不存在: ${queueName}`);
     const counts = await queue.getJobCounts('waiting', 'active', 'completed', 'failed', 'delayed');
@@ -375,6 +405,7 @@ class QueueService {
   }
 
   public async getAllQueueStats() {
+    await this.ensureInitialized();
     const names = Array.from(this.queues.keys());
     const stats: Record<string, unknown> = {};
     for (const name of names) {
@@ -390,6 +421,7 @@ class QueueService {
   }
 
   public async pauseQueue(queueName: string) {
+    await this.ensureInitialized();
     const queue = this.queues.get(queueName);
     if (!queue) throw new Error(`队列不存在: ${queueName}`);
     await queue.pause();
@@ -397,6 +429,7 @@ class QueueService {
   }
 
   public async resumeQueue(queueName: string) {
+    await this.ensureInitialized();
     const queue = this.queues.get(queueName);
     if (!queue) throw new Error(`队列不存在: ${queueName}`);
     await queue.resume();
@@ -404,6 +437,7 @@ class QueueService {
   }
 
   public async cleanQueue(queueName: string) {
+    await this.ensureInitialized();
     const queue = this.queues.get(queueName);
     if (!queue) throw new Error(`队列不存在: ${queueName}`);
     // BullMQ 建议使用 drain + removeJobs pattern

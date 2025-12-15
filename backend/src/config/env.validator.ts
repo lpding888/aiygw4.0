@@ -67,12 +67,58 @@ interface EnvironmentValidation {
   isValid: boolean;
   missing: string[];
   warnings: string[];
+  errors: string[];
   message: string;
 }
+
+/**
+ * 功能组依赖配置
+ * 启用某功能时，其依赖的配置都必须存在
+ */
+const FEATURE_DEPENDENCIES: Record<string, { trigger: string; triggerValue?: string; requires: string[] }> = {
+  // BullBoard启用时需要账号密码
+  BULL_BOARD: {
+    trigger: 'ENABLE_BULL_BOARD',
+    triggerValue: 'true',
+    requires: ['BULL_BOARD_USERNAME', 'BULL_BOARD_PASSWORD']
+  },
+  // 邮件验证启用时需要SMTP配置
+  EMAIL_VERIFICATION: {
+    trigger: 'ENABLE_EMAIL_VERIFICATION',
+    triggerValue: 'true',
+    requires: ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD']
+  },
+  // Sentry监控启用时需要DSN
+  SENTRY: {
+    trigger: 'SENTRY_DSN',
+    requires: ['SENTRY_ENVIRONMENT']
+  },
+  // 微信登录启用时需要完整配置
+  WECHAT_LOGIN: {
+    trigger: 'WECHAT_APP_ID',
+    requires: ['WECHAT_APP_SECRET']
+  },
+  // 微信支付启用时需要完整配置
+  WECHAT_PAY: {
+    trigger: 'WECHAT_PAY_MCH_ID',
+    requires: ['WECHAT_PAY_API_KEY']
+  }
+};
+
+/**
+ * 生产环境额外必需配置
+ */
+const PRODUCTION_REQUIRED_VARS = [
+  'ENCRYPTION_KEY_V1',
+  'REDIS_PASSWORD',
+  'SENTRY_DSN'
+];
 
 export function validateEnvironment(): EnvironmentValidation {
   const missing: string[] = [];
   const warnings: string[] = [];
+  const errors: string[] = [];
+  const isProduction = process.env.NODE_ENV === 'production';
 
   // 检查必需的环境变量
   REQUIRED_ENV_VARS.forEach((envVar) => {
@@ -81,30 +127,99 @@ export function validateEnvironment(): EnvironmentValidation {
     }
   });
 
+  // 生产环境额外检查
+  if (isProduction) {
+    PRODUCTION_REQUIRED_VARS.forEach((envVar) => {
+      if (!process.env[envVar]) {
+        errors.push(`生产环境必需配置缺失: ${envVar}`);
+      }
+    });
+  }
+
+  // 功能组依赖检查
+  Object.entries(FEATURE_DEPENDENCIES).forEach(([featureName, config]) => {
+    const triggerValue = process.env[config.trigger];
+    const isTriggerActive = config.triggerValue
+      ? triggerValue === config.triggerValue
+      : !!triggerValue;
+
+    if (isTriggerActive) {
+      const missingDeps = config.requires.filter((dep) => !process.env[dep]);
+      if (missingDeps.length > 0) {
+        const message = `${featureName} 功能已启用，但缺少依赖配置: ${missingDeps.join(', ')}`;
+        if (isProduction) {
+          errors.push(message);
+        } else {
+          warnings.push(message);
+        }
+      }
+    }
+  });
+
   // 检查敏感配置的默认值
   const sensitiveDefaults = [
     'your_random_secret_key_change_this_in_production_min_32_chars',
     'your_tencent_secret_id_here',
     'your_tencent_secret_key_here',
-    'your_database_password_here'
+    'your_database_password_here',
+    'change_this_secret',
+    'your_secret'
   ];
 
   Object.entries(process.env).forEach(([key, value]) => {
-    if (value && sensitiveDefaults.includes(value)) {
-      warnings.push(`环境变量 ${key} 使用了默认值，请修改为实际配置`);
+    if (value) {
+      const lowerValue = value.toLowerCase();
+      for (const dangerous of sensitiveDefaults) {
+        if (lowerValue.includes(dangerous.toLowerCase())) {
+          const message = `环境变量 ${key} 使用了示例值，请修改为实际配置`;
+          if (isProduction) {
+            errors.push(message);
+          } else {
+            warnings.push(message);
+          }
+          break;
+        }
+      }
     }
   });
 
   // 检查JWT密钥长度
   if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
-    warnings.push('JWT_SECRET 长度建议至少32个字符以保证安全性');
+    const message = 'JWT_SECRET 长度建议至少32个字符以保证安全性';
+    if (isProduction) {
+      errors.push(message);
+    } else {
+      warnings.push(message);
+    }
   }
 
+  // 检查加密密钥长度
+  if (process.env.ENCRYPTION_KEY_V1 && process.env.ENCRYPTION_KEY_V1.length < 32) {
+    const message = 'ENCRYPTION_KEY_V1 长度必须至少32个字符';
+    if (isProduction) {
+      errors.push(message);
+    } else {
+      warnings.push(message);
+    }
+  }
+
+  // 数据库连接池配置合理性检查
+  const poolMin = parseInt(process.env.DATABASE_POOL_MIN || '5', 10);
+  const poolMax = parseInt(process.env.DATABASE_POOL_MAX || '20', 10);
+  if (poolMin > poolMax) {
+    errors.push(`DATABASE_POOL_MIN (${poolMin}) 不能大于 DATABASE_POOL_MAX (${poolMax})`);
+  }
+
+  const hasErrors = missing.length > 0 || errors.length > 0;
+
   return {
-    isValid: missing.length === 0,
+    isValid: !hasErrors,
     missing,
     warnings,
-    message: missing.length > 0 ? `缺少必需的环境变量: ${missing.join(', ')}` : '环境变量验证通过'
+    errors,
+    message: hasErrors
+      ? `配置验证失败: ${missing.length} 个必需配置缺失, ${errors.length} 个错误`
+      : '环境变量验证通过'
   };
 }
 
@@ -132,9 +247,20 @@ export function printEnvironmentStatus(): EnvironmentValidation {
     console.log('✅ 所有必需的环境变量已配置');
   } else {
     console.log('❌', validation.message);
-    validation.missing.forEach((envVar) => {
-      console.log(`   - ${envVar}`);
-    });
+
+    if (validation.missing.length > 0) {
+      console.log('\n📋 缺失的必需配置:');
+      validation.missing.forEach((envVar) => {
+        console.log(`   - ${envVar}`);
+      });
+    }
+
+    if (validation.errors.length > 0) {
+      console.log('\n🚨 配置错误:');
+      validation.errors.forEach((error) => {
+        console.log(`   - ${error}`);
+      });
+    }
   }
 
   if (validation.warnings.length > 0) {
@@ -163,14 +289,17 @@ export function checkEnvironmentOnStart(): void {
   // 打印状态
   printEnvironmentStatus();
 
-  // 如果有缺失的必需变量，阻止启动
+  // 如果有缺失的必需变量或错误，阻止启动
   if (!validation.isValid) {
     const error = new Error('环境变量验证失败，服务无法启动') as Error & {
       code: string;
-      details: string[];
+      details: { missing: string[]; errors: string[] };
     };
     error.code = 'ENV_VALIDATION_ERROR';
-    error.details = validation.missing;
+    error.details = {
+      missing: validation.missing,
+      errors: validation.errors
+    };
     throw error;
   }
 

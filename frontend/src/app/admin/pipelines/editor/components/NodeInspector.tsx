@@ -6,7 +6,8 @@
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Card, Form, Input, Select, Button, Space, message, Divider, Spin } from 'antd';
+import { Card, Form, Input, Select, Button, Space, message, Divider, Spin, Switch } from 'antd';
+import { CodeOutlined } from '@ant-design/icons';
 import { VarPicker, buildDefaultVarTree, validateVarReferences } from '@/components/flow/VarPicker';
 import type { VarNode } from '@/components/flow/VarPicker';
 import type { VarNode as MonacoVarNode } from '@/components/common/MonacoEditor';
@@ -70,6 +71,7 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
   const [showVarPicker, setShowVarPicker] = useState(false);
   const [currentField, setCurrentField] = useState<string>('');
   const [providers, setProviders] = useState<string[]>([]);
+  const [mcpTools, setMcpTools] = useState<Array<{ label: string; value: string; group: string }>>([]);
   const [loadingProviders, setLoadingProviders] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<string>('');
 
@@ -88,28 +90,45 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
 
   const monacoVars = useMemo(() => mapVarsToMonaco(availableVars), [availableVars]);
 
-  /**
-   * 加载已注册的Provider列表
-   */
   useEffect(() => {
-    const fetchProviders = async () => {
+    const fetchData = async () => {
       try {
         setLoadingProviders(true);
-        const response = await api.provider.getRegisteredProviders();
-        if (response.data.success && response.data.data) {
-          // response.data.data 是一个字符串数组，包含所有已注册的provider名称
-          setProviders(response.data.data);
+
+        // 1. Fetch Providers
+        const pRes = await api.provider.getRegisteredProviders();
+        if (pRes.data.success && pRes.data.data) {
+          setProviders(pRes.data.data);
         }
+
+        // 2. Fetch MCP Tools (for Agent Node)
+        if (nodeType === 'agent') {
+          const mRes = await api.mcp.listEndpoints({ enabled: true, healthy: true });
+          if ((mRes as any).success && mRes.data) {
+            const toolsOptions: Array<{ label: string; value: string; group: string }> = [];
+            ((mRes.data as any).data || []).forEach((ep: any) => {
+              (ep.supportedTools || []).forEach((t: any) => {
+                toolsOptions.push({
+                  label: `${t.name} (${ep.name})`,
+                  value: `${ep.id}:${t.name}`,
+                  group: ep.name
+                });
+              });
+            });
+            setMcpTools(toolsOptions);
+          }
+        }
+
       } catch (error) {
-        console.error('[NodeInspector] 加载Provider列表失败:', error);
-        message.error('加载Provider列表失败');
+        console.error('[NodeInspector] 加载失败:', error);
+        message.error('加载依赖数据失败');
       } finally {
         setLoadingProviders(false);
       }
     };
 
-    fetchProviders();
-  }, []);
+    fetchData();
+  }, [nodeType]);
 
   /**
    * 处理变量选择
@@ -179,177 +198,353 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
           initialValues={nodeData}
           onFinish={handleSave}
         >
-          {/* Provider类型 */}
-          <Form.Item
-            label="Provider类型"
-            name="providerType"
-            rules={[{ required: true, message: '请选择Provider类型' }]}
-          >
-            <Select
-              placeholder="选择Provider类型"
-              loading={loadingProviders}
-              notFoundContent={loadingProviders ? <Spin size="small" /> : '暂无可用Provider'}
-              onChange={(value) => setSelectedProvider(value)}
-            >
-              {providers.map((provider) => (
-                <Select.Option key={provider} value={provider}>
-                  {provider}
-                </Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
-
-          {/* Provider引用 */}
-          <Form.Item
-            label="Provider引用"
-            name="providerRef"
-            tooltip="从Provider管理中选择已配置的Provider实例"
-          >
-            <Input placeholder="provider-ref-id" />
-          </Form.Item>
-
-          {/* 超时时间 */}
-          <Form.Item label="超时时间 (ms)" name="timeout" initialValue={30000}>
-            <Input type="number" placeholder="30000" />
-          </Form.Item>
-
-          {/* LLM Provider专用配置 */}
-          {selectedProvider?.startsWith('llm_') && (
+          {/* Agent Node Config */}
+          {nodeType === 'agent' && (
             <>
-              <Divider>LLM配置</Divider>
-
-              {/* Model选择 */}
               <Form.Item
-                label="模型"
-                name={['parameters', 'model']}
-                tooltip="选择要使用的AI模型"
+                label="目标 (Goal)"
+                name={['agent_config', 'goal']}
+                rules={[{ required: true, message: '请输入Agent目标' }]}
+                tooltip="Agent需要完成的具体任务"
               >
-                <Select placeholder="选择模型">
-                  {selectedProvider === 'llm_openai' && (
-                    <>
-                      <Select.Option value="gpt-4">GPT-4</Select.Option>
-                      <Select.Option value="gpt-4o">GPT-4o</Select.Option>
-                      <Select.Option value="gpt-3.5-turbo">GPT-3.5 Turbo</Select.Option>
-                    </>
-                  )}
-                  {selectedProvider === 'llm_claude' && (
-                    <>
-                      <Select.Option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</Select.Option>
-                      <Select.Option value="claude-3-opus-20240229">Claude 3 Opus</Select.Option>
-                      <Select.Option value="claude-3-haiku-20240307">Claude 3 Haiku</Select.Option>
-                    </>
-                  )}
-                  {selectedProvider === 'llm_qwen' && (
-                    <>
-                      <Select.Option value="qwen-max">通义千问 Max</Select.Option>
-                      <Select.Option value="qwen-plus">通义千问 Plus</Select.Option>
-                      <Select.Option value="qwen-turbo">通义千问 Turbo</Select.Option>
-                      <Select.Option value="qwen-vl-plus">通义千问 VL Plus (多模态)</Select.Option>
-                    </>
-                  )}
-                </Select>
+                <TextArea rows={3} placeholder="例如: 搜索关于DeepSeek的最新新闻并总结" />
               </Form.Item>
 
-              {/* Prompt */}
               <Form.Item
-                label="提示词 (Prompt)"
-                name={['parameters', 'prompt']}
-                rules={[{ required: true, message: '请输入提示词' }]}
-                tooltip="AI的任务指令，支持变量引用 {{variableName}}"
+                label="角色 (Role)"
+                name={['agent_config', 'role']}
+                initialValue="You are a helpful AI assistant."
+                tooltip="设定Agent的人设"
               >
-                <Input.TextArea
-                  rows={4}
-                  placeholder="例如: 请分析这张图片的内容，描述其中的主要元素..."
+                <TextArea rows={2} />
+              </Form.Item>
+
+              <Form.Item
+                label="可用工具 (Tools)"
+                name={['agent_config', 'tools']}
+                tooltip="选择Agent可以调用的工具"
+              >
+                <Select
+                  mode="multiple"
+                  placeholder="选择工具"
+                  options={mcpTools.map(t => ({ label: t.label, value: t.value }))}
                 />
               </Form.Item>
 
-              {/* System Prompt */}
-              <Form.Item
-                label="系统提示词 (System Prompt)"
-                name={['parameters', 'systemPrompt']}
-                tooltip="定义AI的角色和行为方式"
-              >
-                <Input.TextArea
-                  rows={2}
-                  placeholder="例如: 你是一个专业的图片分析助手..."
-                />
-              </Form.Item>
+              <Space>
+                <Form.Item label="最大步数" name={['agent_config', 'max_steps']} initialValue={10}>
+                  <Input type="number" style={{ width: 100 }} />
+                </Form.Item>
+                <Form.Item label="记忆窗口" name={['agent_config', 'memory_window']} initialValue={10}>
+                  <Input type="number" style={{ width: 100 }} />
+                </Form.Item>
+              </Space>
 
-              {/* Temperature */}
-              <Form.Item
-                label={`创造性 (Temperature): ${form.getFieldValue(['parameters', 'temperature']) || 0.7}`}
-                name={['parameters', 'temperature']}
-                initialValue={0.7}
-                tooltip="0=严格确定性输出, 2=高度创造性输出"
-              >
-                <Input
-                  type="range"
-                  min="0"
-                  max="2"
-                  step="0.1"
-                  onChange={(e) => {
-                    const value = parseFloat(e.target.value);
-                    form.setFieldValue(['parameters', 'temperature'], value);
-                  }}
-                />
-              </Form.Item>
-
-              {/* Max Tokens */}
-              <Form.Item
-                label="最大Token数"
-                name={['parameters', 'maxTokens']}
-                initialValue={2000}
-                tooltip="限制AI响应的长度"
-              >
-                <Input type="number" placeholder="2000" />
-              </Form.Item>
-
-              {/* Image URL (可选) */}
-              <Form.Item
-                label="图片URL (可选)"
-                name={['parameters', 'imageUrl']}
-                tooltip="用于多模态模型，支持变量引用 {{form.imageUrl}}"
-              >
-                <Input placeholder="{{nodeId.imageUrl}}" />
+              <Divider>模型设置</Divider>
+              <Form.Item label="Provider" name={['agent_config', 'provider_type']} initialValue="llm_deepseek">
+                <Select options={providers.map(p => ({ label: p, value: p }))} />
               </Form.Item>
             </>
           )}
 
-          <Divider>输入映射</Divider>
 
-          {/* 输入映射 */}
-          <Form.Item
-            label={
+          {/* HTTP API Node Config */}
+          {nodeType === 'http_api' && (
+            <>
+              <Form.Item name="method" label="请求方法" initialValue="GET">
+                <Select options={[
+                  { label: 'GET', value: 'GET' },
+                  { label: 'POST', value: 'POST' },
+                  { label: 'PUT', value: 'PUT' },
+                  { label: 'DELETE', value: 'DELETE' },
+                  { label: 'PATCH', value: 'PATCH' }
+                ]} />
+              </Form.Item>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Form.Item name="url" label="请求URL" style={{ flex: 1 }} rules={[{ required: true }]}>
+                  <Input placeholder="https://api.example.com/data" />
+                </Form.Item>
+                <Button onClick={() => openVarPicker('url')} icon={<CodeOutlined />} style={{ marginTop: 30 }} />
+              </div>
+
+              <Divider>请求参数</Divider>
+              <Form.Item label="Headers (JSON)" name="headers">
+                <MonacoEditor
+                  value={form.getFieldValue('headers') || '{}'}
+                  onChange={(value) => form.setFieldValue('headers', value)}
+                  language="json"
+                  height={150}
+                  availableVars={monacoVars}
+                />
+              </Form.Item>
+
+              <Form.Item label="Body (JSON)" name="body">
+                <MonacoEditor
+                  value={form.getFieldValue('body') || '{}'}
+                  onChange={(value) => form.setFieldValue('body', value)}
+                  language="json"
+                  height={200}
+                  availableVars={monacoVars}
+                />
+              </Form.Item>
+
+              <Form.Item label="输出字段名" name="outputKey" initialValue="result">
+                <Input />
+              </Form.Item>
+            </>
+          )}
+
+          {/* Loop Node Config */}
+          {nodeType === 'loop' && (
+            <>
+              <Form.Item name="loopType" label="循环类型" initialValue="forEach">
+                <Select options={[
+                  { label: '遍历数组 (ForEach)', value: 'forEach' },
+                  { label: '数值范围 (Range)', value: 'range' },
+                  { label: '条件循环 (While)', value: 'while' }
+                ]} />
+              </Form.Item>
+
+              <Form.Item
+                noStyle
+                shouldUpdate={(prev, curr) => prev.loopType !== curr.loopType}
+              >
+                {({ getFieldValue }) => {
+                  const type = getFieldValue('loopType') || 'forEach';
+                  return type === 'forEach' ? (
+                    <Form.Item label="目标数组" name="items" tooltip="例如 {{node1.data.list}}">
+                      <Space.Compact style={{ width: '100%' }}>
+                        <Input placeholder="{{array_variable}}" />
+                        <Button icon={<CodeOutlined />} onClick={() => openVarPicker('items')} />
+                      </Space.Compact>
+                    </Form.Item>
+                  ) : type === 'range' ? (
+                    <Space>
+                      <Form.Item label="开始" name={['range', 'start']} initialValue={0}><Input type="number" /></Form.Item>
+                      <Form.Item label="结束" name={['range', 'end']} initialValue={10}><Input type="number" /></Form.Item>
+                      <Form.Item label="步长" name={['range', 'step']} initialValue={1}><Input type="number" /></Form.Item>
+                    </Space>
+                  ) : (
+                    <Form.Item label="退出条件" name="condition" tooltip="当条件为 false 时退出">
+                      <Input placeholder="i < 100" />
+                    </Form.Item>
+                  );
+                }}
+              </Form.Item>
+            </>
+          )}
+
+          {/* KB Retrieve Node Config */}
+          {nodeType === 'kb_retrieve' && (
+            <>
+              <Form.Item label="检索查询" name="query" rules={[{ required: true }]}>
+                <Space.Compact style={{ width: '100%' }}>
+                  <Input.TextArea rows={2} placeholder="输入查询词或引用变量" />
+                  <Button icon={<CodeOutlined />} onClick={() => openVarPicker('query')} style={{ height: 'auto' }} />
+                </Space.Compact>
+              </Form.Item>
+
               <Space>
-                <span>输入映射 (JSON)</span>
-                <Button size="small" onClick={() => openVarPicker('inputMapping')}>
-                  选择变量
-                </Button>
+                <Form.Item label="Top K" name="topK" initialValue={3}>
+                  <Input type="number" />
+                </Form.Item>
+                <Form.Item label="最低匹配度" name="minScore" initialValue={0.7}>
+                  <Input type="number" step={0.1} />
+                </Form.Item>
               </Space>
-            }
-            name="inputMapping"
-            tooltip="使用{{}}占位符引用变量，输入{{自动补全可用变量"
-          >
-            <MonacoEditor
-              value={form.getFieldValue('inputMapping') || '{\n  "url": "{{form.imageUrl}}",\n  "userId": "{{system.userId}}"\n}'}
-              onChange={(value) => form.setFieldValue('inputMapping', value)}
-              language="json"
-              height={250}
-              theme="vs-dark"
-              showActions={true}
-              enableVarCompletion={true}
-              availableVars={monacoVars}
-            />
-          </Form.Item>
 
-          {/* 输出映射 */}
-          <Form.Item
-            label="输出字段名"
-            name="outputKey"
-            tooltip="定义此节点的输出字段名，可被下游节点引用"
-          >
-            <Input placeholder="result" />
-          </Form.Item>
+              <Form.Item label="知识库ID" name="kbId">
+                <Input placeholder="留空则搜索所有知识库" />
+              </Form.Item>
+            </>
+          )}
+
+          {/* Regular Provider/Transform Node Config */}
+          {!['agent', 'http_api', 'loop', 'kb_retrieve'].includes(nodeType || '') && (
+            <>
+              {/* Provider类型 */}
+              <Form.Item
+                label="Provider类型"
+                name="providerType"
+                rules={[{ required: true, message: '请选择Provider类型' }]}
+              >
+                <Select
+                  placeholder="选择Provider类型"
+                  loading={loadingProviders}
+                  notFoundContent={loadingProviders ? <Spin size="small" /> : '暂无可用Provider'}
+                  onChange={(value) => setSelectedProvider(value)}
+                >
+                  {providers.map((provider) => (
+                    <Select.Option key={provider} value={provider}>
+                      {provider}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+
+              {/* Provider引用 */}
+              <Form.Item
+                label="Provider引用"
+                name="providerRef"
+                tooltip="从Provider管理中选择已配置的Provider实例"
+              >
+                <Input placeholder="provider-ref-id" />
+              </Form.Item>
+
+              {/* 超时时间 */}
+              <Form.Item label="超时时间 (ms)" name="timeout" initialValue={30000}>
+                <Input type="number" placeholder="30000" />
+              </Form.Item>
+
+              {/* LLM Provider专用配置 */}
+              {selectedProvider && selectedProvider.startsWith('llm_') && (
+                <>
+                  <Divider>LLM配置</Divider>
+
+                  {/* Model选择 */}
+                  <Form.Item
+                    label="模型"
+                    name={['parameters', 'model']}
+                    tooltip="选择要使用的AI模型"
+                  >
+                    <Select placeholder="选择模型">
+                      {selectedProvider === 'llm_openai' && (
+                        <>
+                          <Select.Option value="gpt-4">GPT-4</Select.Option>
+                          <Select.Option value="gpt-4o">GPT-4o</Select.Option>
+                          <Select.Option value="gpt-3.5-turbo">GPT-3.5 Turbo</Select.Option>
+                        </>
+                      )}
+                      {selectedProvider === 'llm_claude' && (
+                        <>
+                          <Select.Option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</Select.Option>
+                          <Select.Option value="claude-3-opus-20240229">Claude 3 Opus</Select.Option>
+                          <Select.Option value="claude-3-haiku-20240307">Claude 3 Haiku</Select.Option>
+                        </>
+                      )}
+                      {selectedProvider === 'llm_qwen' && (
+                        <>
+                          <Select.Option value="qwen-max">通义千问 Max</Select.Option>
+                          <Select.Option value="qwen-plus">通义千问 Plus</Select.Option>
+                          <Select.Option value="qwen-turbo">通义千问 Turbo</Select.Option>
+                          <Select.Option value="qwen-vl-plus">通义千问 VL Plus (多模态)</Select.Option>
+                        </>
+                      )}
+                    </Select>
+                  </Form.Item>
+
+                  {/* Prompt */}
+                  <Form.Item
+                    label="提示词 (Prompt)"
+                    name={['parameters', 'prompt']}
+                    rules={[{ required: true, message: '请输入提示词' }]}
+                    tooltip="AI的任务指令，支持变量引用 {{variableName}}"
+                  >
+                    <Input.TextArea
+                      rows={4}
+                      placeholder="例如: 请分析这张图片的内容，描述其中的主要元素..."
+                    />
+                  </Form.Item>
+
+                  {/* System Prompt */}
+                  <Form.Item
+                    label="系统提示词 (System Prompt)"
+                    name={['parameters', 'systemPrompt']}
+                    tooltip="定义AI的角色和行为方式"
+                  >
+                    <Input.TextArea
+                      rows={2}
+                      placeholder="例如: 你是一个专业的图片分析助手..."
+                    />
+                  </Form.Item>
+
+                  {/* Temperature */}
+                  <Form.Item
+                    label={`创造性 (Temperature): ${form.getFieldValue(['parameters', 'temperature']) || 0.7}`}
+                    name={['parameters', 'temperature']}
+                    initialValue={0.7}
+                    tooltip="0=严格确定性输出, 2=高度创造性输出"
+                  >
+                    <Input
+                      type="range"
+                      min="0"
+                      max="2"
+                      step="0.1"
+                      onChange={(e) => {
+                        const value = parseFloat(e.target.value);
+                        form.setFieldValue(['parameters', 'temperature'], value);
+                      }}
+                    />
+                  </Form.Item>
+
+                  {/* Max Tokens */}
+                  <Form.Item
+                    label="最大Token数"
+                    name={['parameters', 'maxTokens']}
+                    initialValue={2000}
+                    tooltip="限制AI响应的长度"
+                  >
+                    <Input type="number" placeholder="2000" />
+                  </Form.Item>
+
+                  <Form.Item
+                    label="图片URL (可选)"
+                    name={['parameters', 'imageUrl']}
+                    tooltip="用于多模态模型，支持变量引用 {{form.imageUrl}}"
+                  >
+                    <Input placeholder="{{nodeId.imageUrl}}" />
+                  </Form.Item>
+
+                  {/* 记忆 (Context) */}
+                  <Form.Item
+                    label="包含上下文记忆 (Memory)"
+                    name="include_memory"
+                    valuePropName="checked"
+                    tooltip="若开启，此节点将自动携带并更新当前对话历史"
+                  >
+                    <Switch />
+                  </Form.Item>
+                </>
+              )}
+
+              <Divider>输入映射</Divider>
+
+              {/* 输入映射 */}
+              <Form.Item
+                label={
+                  <Space>
+                    <span>输入映射 (JSON)</span>
+                    <Button size="small" onClick={() => openVarPicker('inputMapping')}>
+                      选择变量
+                    </Button>
+                  </Space>
+                }
+                name="inputMapping"
+                tooltip="使用{{}}占位符引用变量，输入{{自动补全可用变量"
+              >
+                <MonacoEditor
+                  value={form.getFieldValue('inputMapping') || '{\n  "url": "{{form.imageUrl}}",\n  "userId": "{{system.userId}}"\n}'}
+                  onChange={(value) => form.setFieldValue('inputMapping', value)}
+                  language="json"
+                  height={250}
+                  theme="vs-dark"
+                  availableVars={monacoVars}
+                  enableVarCompletion={true}
+                />
+              </Form.Item>
+
+              {/* 输出映射 */}
+              <Form.Item
+                label="输出字段名"
+                name="outputKey"
+                tooltip="定义此节点的输出字段名，可被下游节点引用"
+              >
+                <Input placeholder="result" />
+              </Form.Item>
+
+            </>
+          )}
 
           {/* 保存按钮 */}
           <Form.Item>

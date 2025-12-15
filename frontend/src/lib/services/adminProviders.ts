@@ -14,6 +14,13 @@ export type QualityTier = 'low' | 'medium' | 'high';
 /**
  * Provider端点数据结构
  */
+export interface ProviderModelInfo {
+  id: string;
+  object?: string;
+  owned_by?: string;
+  [key: string]: any;
+}
+
 export interface Provider {
   provider_ref: string;
   provider_name: string;
@@ -24,6 +31,8 @@ export interface Provider {
   weight?: number; // 路由权重（1-100），权重越高，被选中概率越大
   cost_per_1k_tokens?: number; // 每1K tokens成本（美元）
   enabled?: boolean; // 是否启用
+  default_model?: string | null;
+  model_catalog?: ProviderModelInfo[] | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -41,6 +50,31 @@ export interface ProviderInput {
   weight?: number; // 路由权重（1-100）
   cost_per_1k_tokens?: number; // 每1K tokens成本（美元）
   enabled?: boolean; // 是否启用
+  default_model?: string | null;
+  model_catalog?: ProviderModelInfo[] | null;
+}
+
+/**
+ * Provider 模型能力
+ */
+export interface ProviderCapabilities {
+  tool_use: boolean;
+  parallel_tool_use: boolean;
+  vision: boolean;
+  streaming: boolean;
+  json_mode: boolean;
+  max_context: number;
+  max_output: number;
+}
+
+/**
+ * 能力探测结果
+ */
+export interface DetectionResult {
+  success: boolean;
+  capabilities: Partial<ProviderCapabilities>;
+  errors: string[];
+  duration_ms: number;
 }
 
 /**
@@ -69,7 +103,11 @@ export interface TestConnectionResponse {
   healthy: boolean;
   message: string;
   tested_at: string;
+  latency?: number;
+  models?: ProviderModelInfo[];
 }
+
+export interface PreviewConnectionResponse extends TestConnectionResponse { }
 
 /**
  * Provider管理API类
@@ -81,7 +119,16 @@ export const adminProviders = {
    */
   async list(params?: ProviderListParams): Promise<ProviderListResponse> {
     const response = await api.client.get<any>('/admin/providers', { params });
-    return response.data;
+    // api.client有response拦截器，自动提取response.data，所以response直接是{success, data, ...}
+    const data = response.data || {};
+
+    // 后端controller返回的data是{items, total, limit, offset}
+    return {
+      items: data.items || [],
+      total: data.total || 0,
+      limit: data.limit || params?.limit || 20,
+      offset: data.offset || params?.offset || 0,
+    };
   },
 
   /**
@@ -120,6 +167,53 @@ export const adminProviders = {
    */
   async testConnection(providerRef: string): Promise<TestConnectionResponse> {
     const response = await api.client.post<any>(`/admin/providers/${providerRef}/test-connection`);
+    return response.data;
+  },
+
+  /**
+   * 未保存前预检Provider配置
+   */
+  async previewConfig(data: {
+    endpoint_url: string;
+    auth_type: string;
+    credentials: Record<string, any>;
+    provider_name?: string;
+  }): Promise<PreviewConnectionResponse> {
+    const response = await api.client.post<any>('/admin/providers/test-config', data);
+    return response.data;
+  },
+
+  /**
+   * 切换Provider启用/禁用状态
+   */
+  async toggle(providerRef: string, enabled: boolean): Promise<Provider> {
+    const response = await api.client.patch<any>(`/admin/providers/${providerRef}/toggle`, {
+      enabled,
+    });
+    return response.data;
+  },
+
+  /**
+   * 获取Provider能力
+   */
+  async getCapabilities(providerRef: string): Promise<ProviderCapabilities | null> {
+    const response = await api.client.get<any>(`/admin/providers/${providerRef}/capabilities`);
+    return response.data;
+  },
+
+  /**
+   * 手动触发能力探测
+   */
+  async detectCapabilities(providerRef: string): Promise<DetectionResult> {
+    const response = await api.client.post<any>(`/admin/providers/${providerRef}/detect-capabilities`);
+    return response.data;
+  },
+
+  /**
+   * 批量探测所有LLM Provider能力
+   */
+  async detectAllCapabilities(): Promise<Record<string, DetectionResult>> {
+    const response = await api.client.post<any>('/admin/providers/detect-all-capabilities');
     return response.data;
   },
 };

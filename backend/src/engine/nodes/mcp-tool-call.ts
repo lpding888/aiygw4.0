@@ -10,9 +10,8 @@
  * - 完善的错误处理
  */
 
-import axios, { AxiosInstance } from 'axios';
-import { db } from '../../db/index.js';
 import logger from '../../utils/logger.js';
+import mcpEndpointsService from '../../services/mcp-endpoints.service.js';
 import {
   NodeExecutor,
   NodeExecutionContext,
@@ -26,7 +25,7 @@ import {
  * MCP工具调用配置
  */
 interface MCPToolCallConfig {
-  mcpEndpointRef: string; // MCP端点引用
+  mcpEndpointRef: string; // MCP端点引用（使用端点ID）
   toolName: string; // 工具名称
   parameters: Record<string, unknown>; // 工具参数（支持变量模板）
   outputKey?: string; // 输出键名（默认使用工具名称）
@@ -34,16 +33,18 @@ interface MCPToolCallConfig {
 }
 
 /**
- * MCP端点信息
+ * MCP端点信息（与 mcp-endpoints.service 输出对齐）
  */
 interface MCPEndpoint {
   id: string;
   name: string;
-  endpoint_url: string;
-  auth_token?: string;
-  transport_type: 'http' | 'ws' | 'stdio';
-  timeout_ms: number;
-  max_retries: number;
+  endpointUrl: string;
+  supportedTools: MCPToolSchema[];
+  status: 'active' | 'inactive' | 'error';
+  healthy: boolean;
+  timeoutMs: number;
+  maxRetries: number;
+  enabled: boolean;
 }
 
 /**
@@ -51,29 +52,19 @@ interface MCPEndpoint {
  */
 interface MCPToolSchema {
   name: string;
-  description: string;
-  parameters: {
-    type: 'object';
-    properties: Record<string, unknown>;
-    required?: string[];
-  };
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+  parameters?: {
+    name: string;
+    required?: boolean;
+    description?: string;
+  }[];
 }
 
 /**
  * MCP工具调用节点执行器
  */
 class MCPToolCallNodeExecutor implements NodeExecutor {
-  private axiosClient: AxiosInstance;
-
-  constructor() {
-    this.axiosClient = axios.create({
-      timeout: 30000,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
-  }
-
   /**
    * 执行MCP工具调用节点
    */
@@ -89,13 +80,12 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
           `nodeId=${context.node.id} tool=${config.toolName}`
       );
 
-      // 2. 获取MCP端点配置
-      const endpoint = await this.getMCPEndpoint(config.mcpEndpointRef);
-
+      // 2. 获取并验证MCP端点配置
+      const endpoint = await this.ensureEndpointReady(config.mcpEndpointRef);
       if (!endpoint) {
         throw this.createError(
           'MCP_ENDPOINT_NOT_FOUND',
-          `MCP endpoint not found: ${config.mcpEndpointRef}`,
+          `MCP endpoint not found or unavailable: ${config.mcpEndpointRef}`,
           NodeErrorType.INVALID_CONFIG
         );
       }
@@ -165,17 +155,41 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
    */
 
   /**
+   * 获取MCP端点配置（若状态不可用则尝试测试刷新）
+   * @private
+   */
+  private async ensureEndpointReady(endpointRef: string): Promise<MCPEndpoint | null> {
+    const endpoint = await this.getMCPEndpoint(endpointRef);
+    if (!endpoint) return null;
+
+    if (endpoint.enabled && endpoint.status === 'active' && endpoint.healthy) {
+      return endpoint;
+    }
+
+    // 尝试执行一次测试刷新状态
+    await mcpEndpointsService.testEndpoint(endpoint.id);
+    return await this.getMCPEndpoint(endpointRef);
+  }
+
+  /**
    * 获取MCP端点配置
    * @private
    */
   private async getMCPEndpoint(endpointRef: string): Promise<MCPEndpoint | null> {
     try {
-      const endpoint = await db('mcp_endpoints')
-        .where('endpoint_ref', endpointRef)
-        .andWhere('is_active', true)
-        .first();
-
-      return endpoint || null;
+      const endpoint = await mcpEndpointsService.getEndpoint(endpointRef);
+      if (!endpoint) return null;
+      return {
+        id: endpoint.id,
+        name: endpoint.name,
+        endpointUrl: endpoint.endpointUrl,
+        supportedTools: endpoint.supportedTools as unknown as MCPToolSchema[],
+        status: endpoint.status,
+        healthy: endpoint.healthy,
+        timeoutMs: endpoint.timeoutMs,
+        maxRetries: endpoint.maxRetries,
+        enabled: endpoint.enabled
+      };
     } catch (error) {
       logger.error('[MCPToolCall] 获取MCP端点失败:', error);
       throw error;
@@ -298,17 +312,19 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
     params: Record<string, unknown>
   ): Promise<void> {
     try {
-      // 从MCP端点获取工具Schema
       const schema = await this.getToolSchema(endpoint, toolName);
 
-      if (!schema) {
+      if (!schema || !schema.parameters) {
         logger.warn(`[MCPToolCall] 工具Schema不存在: ${toolName}`);
         return;
       }
 
       // 验证必需参数
-      const required = schema.parameters.required || [];
-      for (const field of required) {
+      const reqFields: string[] = Array.isArray((schema as any)?.inputSchema?.required)
+        ? ((schema as any).inputSchema.required as string[])
+        : (schema.parameters || []).filter((p) => p.required).map((p) => p.name);
+
+      for (const field of reqFields) {
         if (!(field in params) || params[field] === undefined) {
           throw this.createError(
             'MISSING_REQUIRED_PARAM',
@@ -317,8 +333,6 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
           );
         }
       }
-
-      // 这里可以添加更复杂的Schema验证（使用Zod或Joi）
     } catch (error) {
       logger.error('[MCPToolCall] 参数验证失败:', error);
       throw error;
@@ -334,20 +348,9 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
     toolName: string
   ): Promise<MCPToolSchema | null> {
     try {
-      // 调用MCP端点的discover接口获取工具列表
-      const response = await this.axiosClient.post(
-        `${endpoint.endpoint_url}/discover`,
-        {},
-        {
-          headers: this.getAuthHeaders(endpoint),
-          timeout: endpoint.timeout_ms
-        }
-      );
-
-      const tools = response.data.tools || [];
-      const tool = tools.find((t: { name: string }) => t.name === toolName);
-
-      return tool || null;
+      const tool = endpoint.supportedTools?.find((t) => t.name === toolName);
+      if (!tool) return null;
+      return tool;
     } catch (error) {
       logger.error('[MCPToolCall] 获取工具Schema失败:', error);
       return null;
@@ -364,7 +367,7 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
     params: Record<string, unknown>,
     context: NodeExecutionContext
   ): Promise<unknown> {
-    const maxRetries = context.node.retryPolicy?.maxRetries || endpoint.max_retries || 0;
+    const maxRetries = context.node.retryPolicy?.maxRetries || endpoint.maxRetries || 0;
     const retryDelay = context.node.retryPolicy?.retryDelay || 1000;
 
     let lastError: Error | null = null;
@@ -378,19 +381,14 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
           await this.sleep(retryDelay * attempt);
         }
 
-        const response = await this.axiosClient.post(
-          `${endpoint.endpoint_url}/execute`,
-          {
-            tool: toolName,
-            parameters: params
-          },
-          {
-            headers: this.getAuthHeaders(endpoint),
-            timeout: context.node.timeout || endpoint.timeout_ms
-          }
+        const result = await mcpEndpointsService.executeTool(
+          endpoint.id,
+          toolName,
+          params,
+          context.flowContext.userId || 'system'
         );
 
-        return response.data.result;
+        return result;
       } catch (error: unknown) {
         lastError = error as Error;
 
@@ -402,20 +400,6 @@ class MCPToolCallNodeExecutor implements NodeExecutor {
     }
 
     throw lastError;
-  }
-
-  /**
-   * 获取认证头
-   * @private
-   */
-  private getAuthHeaders(endpoint: MCPEndpoint): Record<string, string> {
-    const headers: Record<string, string> = {};
-
-    if (endpoint.auth_token) {
-      headers['Authorization'] = `Bearer ${endpoint.auth_token}`;
-    }
-
-    return headers;
   }
 
   /**

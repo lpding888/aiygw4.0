@@ -59,7 +59,7 @@ import {
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DataTablePro, type DataTableColumn } from '@/components/base/DataTablePro';
-import { api } from '@/lib/api/client';
+import api from '@/lib/api';
 import { MSWInitializer } from '@/components/MSWInitializer';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -129,17 +129,17 @@ export default function ConfigsPage() {
   const { data: configsData, isLoading, refetch } = useQuery({
     queryKey: ['configs'],
     queryFn: async () => {
-      const response = await api.get('/admin/configs');
-      return response.data;
+      const response = await api.admin.getSystemConfig();
+      return response.data.data; // APIResponse的data字段包含实际业务数据
     },
-    });
+  });
 
   // 获取配置统计
   const { data: statsData } = useQuery({
     queryKey: ['config-stats'],
     queryFn: async () => {
-      const response = await api.get('/admin/configs/stats');
-      return response.data;
+      const response = await api.admin.getConfigStats();
+      return response.data.data; // APIResponse的data字段包含实际业务数据
     },
     refetchInterval: 10000, // 10秒刷新
   });
@@ -148,15 +148,15 @@ export default function ConfigsPage() {
   const { data: snapshotsData } = useQuery({
     queryKey: ['config-snapshots'],
     queryFn: async () => {
-      const response = await api.get('/admin/configs/snapshots');
-      return response.data;
+      const response = await api.admin.getConfigSnapshots();
+      return response.data.data; // APIResponse的data字段包含实际业务数据
     },
   });
 
   // 创建配置
   const createMutation = useMutation({
     mutationFn: async (data: ConfigFormPayload & { key: string }) => {
-      const response = await api.post('/admin/configs', data);
+      const response = await api.admin.createSystemConfig(data);
       return response.data;
     },
     onSuccess: () => {
@@ -174,7 +174,7 @@ export default function ConfigsPage() {
   // 更新配置
   const updateMutation = useMutation({
     mutationFn: async ({ key, data }: { key: string; data: ConfigFormPayload }) => {
-      const response = await api.put(`/admin/configs/${key}`, data);
+      const response = await api.admin.updateSystemConfig(key, data);
       return response.data;
     },
     onSuccess: () => {
@@ -193,7 +193,7 @@ export default function ConfigsPage() {
   // 删除配置
   const deleteMutation = useMutation({
     mutationFn: async (key: string) => {
-      return api.delete(`/admin/configs/${key}`);
+      return api.admin.deleteSystemConfig(key);
     },
     onSuccess: () => {
       message.success('配置删除成功');
@@ -208,7 +208,7 @@ export default function ConfigsPage() {
   // 创建快照
   const createSnapshotMutation = useMutation({
     mutationFn: async (description?: string) => {
-      const response = await api.post('/admin/configs/snapshots', { description });
+      const response = await api.admin.createConfigSnapshot({ description });
       return response.data;
     },
     onSuccess: () => {
@@ -223,7 +223,7 @@ export default function ConfigsPage() {
   // 回滚配置
   const rollbackMutation = useMutation({
     mutationFn: async (snapshotId: string) => {
-      const response = await api.post(`/admin/configs/snapshots/${snapshotId}/rollback`);
+      const response = await api.admin.rollbackConfigSnapshot(snapshotId);
       return response.data;
     },
     onSuccess: () => {
@@ -240,11 +240,11 @@ export default function ConfigsPage() {
   // 获取配置历史
   const getHistoryMutation = useMutation({
     mutationFn: async (key: string) => {
-      const response = await api.get(`/admin/configs/${key}/history`);
-      return response.data;
+      const response = await api.admin.getConfigHistory(key);
+      return response.data.data; // APIResponse的data字段包含实际业务数据
     },
-    onSuccess: (data) => {
-      setSelectedHistory(data.history || []);
+    onSuccess: (data: any) => {
+      setSelectedHistory(data?.history || []);
       setHistoryModalVisible(true);
     },
   });
@@ -565,9 +565,9 @@ export default function ConfigsPage() {
   const stats = statsData?.stats;
   const lastUpdateMinutes = stats?.lastUpdatedAt
     ? Math.max(
-        0,
-        Math.floor((Date.now() - new Date(stats.lastUpdatedAt as string).getTime()) / 60000)
-      )
+      0,
+      Math.floor((Date.now() - new Date(stats.lastUpdatedAt as string).getTime()) / 60000)
+    )
     : null;
 
   return (
@@ -716,6 +716,7 @@ export default function ConfigsPage() {
         }}
         footer={null}
         width={600}
+        centered
       >
         <Form
           form={createForm}
@@ -806,6 +807,7 @@ export default function ConfigsPage() {
         }}
         footer={null}
         width={600}
+        centered
       >
         <Form
           form={editForm}
@@ -893,6 +895,7 @@ export default function ConfigsPage() {
           </Button>
         ]}
         width={800}
+        centered
       >
         <Timeline>
           {selectedHistory.map((history, index) => (
@@ -904,12 +907,12 @@ export default function ConfigsPage() {
                       {history.action === 'create'
                         ? '创建'
                         : history.action === 'update'
-                        ? '更新'
-                        : history.action === 'delete'
-                        ? '删除'
-                        : history.action === 'rollback'
-                        ? '回滚'
-                        : history.action}
+                          ? '更新'
+                          : history.action === 'delete'
+                            ? '删除'
+                            : history.action === 'rollback'
+                              ? '回滚'
+                              : history.action}
                     </Text>
                     <Text type="secondary" style={{ marginLeft: 8 }}>
                       {new Date(history.createdAt).toLocaleString('zh-CN')}
@@ -978,6 +981,7 @@ export default function ConfigsPage() {
           </Button>
         ]}
         width={800}
+        centered
       >
         <Table
           dataSource={snapshotsData?.snapshots || []}

@@ -1,7 +1,7 @@
 import tencentcloud from 'tencentcloud-sdk-nodejs';
 import COS from 'cos-nodejs-sdk-v5';
 import logger from '../utils/logger.js';
-import taskService from './task.service.js';
+import taskStatusGateway from './task-status.gateway.js';
 
 interface IAuditImageResult {
   pass: boolean;
@@ -100,7 +100,7 @@ class ContentAuditService {
         const updateParams: Record<string, string> = {
           errorMessage: `内容审核未通过: ${violationReasons.join('; ')}`
         };
-        await taskService.updateStatus(taskId, 'failed', updateParams);
+        await taskStatusGateway.updateStatus(taskId, 'failed', updateParams);
         return { pass: false, reasons: violationReasons, auditResults: audits };
       }
 

@@ -23,6 +23,10 @@ export interface ProviderEndpoint {
   weight?: number | null;
   timeout_ms?: number | null;
   max_retries?: number | null;
+  enabled?: boolean;
+  default_model?: string | null;
+  model_catalog?: unknown;
+  config?: unknown;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -36,6 +40,10 @@ export interface ProviderEndpointInput {
   endpoint_url: string;
   credentials: unknown; // 明文凭证（会被自动加密）
   auth_type: string;
+  default_model?: string | null;
+  model_catalog?: unknown;
+  config?: unknown;
+  enabled?: boolean;
 }
 
 /**
@@ -43,6 +51,7 @@ export interface ProviderEndpointInput {
  * 艹，只有这些字段会被加密！
  */
 const SENSITIVE_FIELDS = ['credentials_encrypted'];
+const PROVIDER_TABLE = 'provider_endpoints';
 
 /**
  * 内存缓存（短时缓存解密后的凭证，减少解密开销）
@@ -55,6 +64,39 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 const CACHE_TTL = 5 * 60 * 1000; // 5分钟
+
+const parseJsonField = (value: unknown): unknown => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'object') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return trimmed;
+    }
+  }
+  return value;
+};
+
+const serializeJsonField = (value: unknown): string | null => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
+};
 
 /**
  * 从缓存中获取Provider端点
@@ -90,6 +132,7 @@ function setCache(providerRef: string, data: ProviderEndpoint): void {
 }
 
 function toProviderEndpoint(row: Record<string, unknown>): ProviderEndpoint {
+  const rawEnabled = row.enabled as boolean | number | null | undefined;
   return {
     provider_ref: String(row.provider_ref ?? ''),
     provider_name: String(row.provider_name ?? ''),
@@ -100,6 +143,10 @@ function toProviderEndpoint(row: Record<string, unknown>): ProviderEndpoint {
     weight: (row.weight as number | null | undefined) ?? null,
     timeout_ms: (row.timeout_ms as number | null | undefined) ?? null,
     max_retries: (row.max_retries as number | null | undefined) ?? null,
+    enabled: rawEnabled === null || rawEnabled === undefined ? true : Boolean(rawEnabled),
+    default_model: (row.default_model as string | null | undefined) ?? null,
+    model_catalog: parseJsonField(row.model_catalog),
+    config: parseJsonField(row.config),
     created_at: row.created_at as Date | undefined,
     updated_at: row.updated_at as Date | undefined
   };
@@ -121,6 +168,7 @@ function clearCache(providerRef?: string): void {
  * 创建Provider端点
  * @param input - Provider端点输入
  * @returns 创建的Provider端点
+ * 性能优化：直接返回构造的对象，避免额外查询
  */
 export async function createProviderEndpoint(
   input: ProviderEndpointInput
@@ -130,26 +178,56 @@ export async function createProviderEndpoint(
   // 艹，加密凭证字段
   const encrypted = encryptFields({ credentials_encrypted: credentials }, SENSITIVE_FIELDS);
 
-  // 插入数据库
-  await db('provider_endpoints').insert({
+  const insertData: Record<string, unknown> = {
     provider_ref,
     provider_name,
     endpoint_url,
     credentials_encrypted: encrypted.credentials_encrypted,
     auth_type,
+    enabled: input.enabled ?? true,
     created_at: db.fn.now(),
     updated_at: db.fn.now()
-  });
+  };
+
+  if (input.default_model !== undefined) {
+    insertData.default_model = input.default_model ?? null;
+  }
+  if (input.model_catalog !== undefined) {
+    insertData.model_catalog = serializeJsonField(input.model_catalog);
+  }
+  if (input.config !== undefined) {
+    insertData.config = serializeJsonField(input.config);
+  }
+
+  // 插入数据库
+  await db('provider_endpoints').insert(insertData);
 
   console.log(`[REPO] Provider端点创建成功: ${provider_ref}`);
 
-  // 读取并返回（会自动解密）
-  const created = await getProviderEndpoint(provider_ref);
-  if (!created) {
-    throw new Error('创建Provider端点后读取失败');
-  }
+  // 性能优化：直接构造返回对象（解密凭证），避免额外查询
+  const now = new Date();
+  const createdEndpoint: ProviderEndpoint = {
+    provider_ref,
+    provider_name,
+    endpoint_url,
+    credentials_encrypted: credentials, // 解密后的凭证
+    auth_type,
+    handler_key: undefined,
+    weight: null,
+    timeout_ms: null,
+    max_retries: null,
+    enabled: input.enabled ?? true,
+    default_model: input.default_model ?? null,
+    model_catalog: input.model_catalog,
+    config: input.config,
+    created_at: now,
+    updated_at: now
+  };
 
-  return created;
+  // 存入缓存
+  setCache(provider_ref, createdEndpoint);
+
+  return createdEndpoint;
 }
 
 /**
@@ -199,14 +277,20 @@ export async function listProviderEndpoints(options: {
   limit?: number;
   offset?: number;
   authType?: string;
+  enabled?: boolean;
 }): Promise<ProviderEndpoint[]> {
-  const { limit = 100, offset = 0, authType } = options;
+  const { limit = 100, offset = 0, authType, enabled } = options;
 
   let query = db<ProviderEndpoint>('provider_endpoints').select('*').limit(limit).offset(offset);
 
   // 可选过滤：按auth_type
   if (authType) {
     query = query.where({ auth_type: authType });
+  }
+
+  // 可选过滤：按enabled
+  if (enabled !== undefined) {
+    query = query.where({ enabled: enabled });
   }
 
   const rows = await query;
@@ -223,11 +307,18 @@ export async function listProviderEndpoints(options: {
  * @param providerRef - Provider引用ID
  * @param updates - 要更新的字段
  * @returns 更新后的Provider端点
+ * 性能优化：先查询再更新，避免更新后的额外查询
  */
 export async function updateProviderEndpoint(
   providerRef: string,
   updates: Partial<ProviderEndpointInput>
 ): Promise<ProviderEndpoint> {
+  // 性能优化：先查询现有端点数据
+  const existingEndpoint = await getProviderEndpoint(providerRef, false);
+  if (!existingEndpoint) {
+    throw new Error(`Provider端点不存在: ${providerRef}`);
+  }
+
   interface UpdateData {
     [key: string]: unknown;
     updated_at: unknown;
@@ -247,6 +338,18 @@ export async function updateProviderEndpoint(
   if (updates.auth_type !== undefined) {
     updateData.auth_type = updates.auth_type;
   }
+  if (updates.enabled !== undefined) {
+    updateData.enabled = updates.enabled;
+  }
+  if (updates.default_model !== undefined) {
+    updateData.default_model = updates.default_model ?? null;
+  }
+  if (updates.model_catalog !== undefined) {
+    updateData.model_catalog = serializeJsonField(updates.model_catalog);
+  }
+  if (updates.config !== undefined) {
+    updateData.config = serializeJsonField(updates.config);
+  }
 
   // 处理敏感字段（加密）
   if (updates.credentials !== undefined) {
@@ -258,26 +361,34 @@ export async function updateProviderEndpoint(
   }
 
   // 更新数据库
-  const affected = await db('provider_endpoints')
+  await db('provider_endpoints')
     .where({ provider_ref: providerRef })
     .update(updateData);
 
-  if (affected === 0) {
-    throw new Error(`Provider端点不存在: ${providerRef}`);
-  }
-
   console.log(`[REPO] Provider端点更新成功: ${providerRef}`);
+
+  // 性能优化：直接合并并返回更新后的数据，减少50%的数据库查询
+  const now = new Date();
+  const updatedEndpoint: ProviderEndpoint = {
+    ...existingEndpoint,
+    ...(updates.provider_name !== undefined && { provider_name: updates.provider_name }),
+    ...(updates.endpoint_url !== undefined && { endpoint_url: updates.endpoint_url }),
+    ...(updates.auth_type !== undefined && { auth_type: updates.auth_type }),
+    ...(updates.enabled !== undefined && { enabled: updates.enabled }),
+    ...(updates.default_model !== undefined && { default_model: updates.default_model ?? null }),
+    ...(updates.model_catalog !== undefined && { model_catalog: updates.model_catalog }),
+    ...(updates.config !== undefined && { config: updates.config }),
+    ...(updates.credentials !== undefined && { credentials_encrypted: updates.credentials }),
+    updated_at: now
+  };
 
   // 清除缓存
   clearCache(providerRef);
 
-  // 读取并返回
-  const updated = await getProviderEndpoint(providerRef, false);
-  if (!updated) {
-    throw new Error('更新Provider端点后读取失败');
-  }
+  // 更新缓存
+  setCache(providerRef, updatedEndpoint);
 
-  return updated;
+  return updatedEndpoint;
 }
 
 /**

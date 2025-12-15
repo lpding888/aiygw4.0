@@ -3,12 +3,20 @@
  */
 
 exports.seed = async function seed(knex) {
-  // 1. 清空现有数据（注意外键顺序）
-  await knex('feature_dependencies').del();
-  await knex('feature_versions').del();
-  await knex('feature_usage_stats').del();
-  await knex('feature_permissions').del();
-  await knex('feature_configurations').del();
+  // 1. 清空现有数据（仅删除存在的表）
+  // 检查表是否存在再删除
+  const hasFeatureDeps = await knex.schema.hasTable('feature_dependencies');
+  const hasFeatureVersions = await knex.schema.hasTable('feature_versions');
+  const hasFeatureStats = await knex.schema.hasTable('feature_usage_stats');
+  const hasFeaturePerms = await knex.schema.hasTable('feature_permissions');
+  const hasFeatureConfigs = await knex.schema.hasTable('feature_configurations');
+
+  if (hasFeatureDeps) await knex('feature_dependencies').del();
+  if (hasFeatureVersions) await knex('feature_versions').del();
+  if (hasFeatureStats) await knex('feature_usage_stats').del();
+  if (hasFeaturePerms) await knex('feature_permissions').del();
+  if (hasFeatureConfigs) await knex('feature_configurations').del();
+
   await knex('feature_definitions').del();
   await knex('form_schemas').del();
   await knex('pipeline_schemas').del();
@@ -188,108 +196,116 @@ exports.seed = async function seed(knex) {
     throw new Error('Feature definitions insert failed');
   }
 
-  // 5. 配置项
-  await knex('feature_configurations').insert([
-    {
-      feature_id: basicFeature.id,
-      config_key: 'output_background',
-      config_value: 'white',
-      data_type: 'string',
-      description: '输出背景颜色',
-      is_required: true,
-      default_value: 'white',
-      sort_order: 1
-    },
-    {
-      feature_id: basicFeature.id,
-      config_key: 'enhance_edges',
-      config_value: 'true',
-      data_type: 'boolean',
-      description: '是否开启边缘优化',
-      is_required: false,
-      default_value: 'true',
-      sort_order: 2
-    },
-    {
-      feature_id: modelFeature.id,
-      config_key: 'pose_count',
-      config_value: '12',
-      data_type: 'number',
-      description: '生成姿势数量',
-      is_required: true,
-      default_value: '12',
-      sort_order: 1
-    },
-    {
-      feature_id: modelFeature.id,
-      config_key: 'model_gender',
-      config_value: 'female',
-      data_type: 'string',
-      description: '默认模特性别',
-      is_required: true,
-      default_value: 'female',
-      enum_values: JSON.stringify([
-        { label: '女', value: 'female' },
-        { label: '男', value: 'male' }
-      ]),
-      sort_order: 2
-    }
-  ]);
+  // 5. 配置项 (仅当表存在时)
+  if (hasFeatureConfigs) {
+    await knex('feature_configurations').insert([
+      {
+        feature_id: basicFeature.id,
+        config_key: 'output_background',
+        config_value: 'white',
+        data_type: 'string',
+        description: '输出背景颜色',
+        is_required: true,
+        default_value: 'white',
+        sort_order: 1
+      },
+      {
+        feature_id: basicFeature.id,
+        config_key: 'enhance_edges',
+        config_value: 'true',
+        data_type: 'boolean',
+        description: '是否开启边缘优化',
+        is_required: false,
+        default_value: 'true',
+        sort_order: 2
+      },
+      {
+        feature_id: modelFeature.id,
+        config_key: 'pose_count',
+        config_value: '12',
+        data_type: 'number',
+        description: '生成姿势数量',
+        is_required: true,
+        default_value: '12',
+        sort_order: 1
+      },
+      {
+        feature_id: modelFeature.id,
+        config_key: 'model_gender',
+        config_value: 'female',
+        data_type: 'string',
+        description: '默认模特性别',
+        is_required: true,
+        default_value: 'female',
+        enum_values: JSON.stringify([
+          { label: '女', value: 'female' },
+          { label: '男', value: 'male' }
+        ]),
+        sort_order: 2
+      }
+    ]);
+  }
 
-  // 6. 权限设置
-  await knex('feature_permissions').insert([
-    {
-      feature_id: basicFeature.id,
-      permission_type: 'membership',
-      permission_value: 'free',
-      access_level: 'read',
-      is_granted: true
-    },
-    {
-      feature_id: modelFeature.id,
-      permission_type: 'membership',
-      permission_value: 'member',
-      access_level: 'read',
-      is_granted: true
-    }
-  ]);
+  // 6. 权限设置 (仅当表存在时)
+  if (hasFeaturePerms) {
+    await knex('feature_permissions').insert([
+      {
+        feature_id: basicFeature.id,
+        permission_type: 'membership',
+        permission_value: 'free',
+        access_level: 'read',
+        is_granted: true
+      },
+      {
+        feature_id: modelFeature.id,
+        permission_type: 'membership',
+        permission_value: 'member',
+        access_level: 'read',
+        is_granted: true
+      }
+    ]);
+  }
 
-  // 7. 版本信息
-  await knex('feature_versions').insert([
-    {
-      feature_id: basicFeature.id,
-      version: '1.0.0',
-      release_type: 'major',
-      changelog: '初始版本',
-      config_changes: JSON.stringify({}),
-      is_current: true,
-      is_stable: true,
-      released_at: now,
-      released_by: 'system'
-    },
-    {
-      feature_id: modelFeature.id,
-      version: '1.0.0',
-      release_type: 'major',
-      changelog: '初始版本',
-      config_changes: JSON.stringify({}),
-      is_current: true,
-      is_stable: true,
-      released_at: now,
-      released_by: 'system'
-    }
-  ]);
+  // 7. 版本信息 (仅当表存在时)
+  if (hasFeatureVersions) {
+    await knex('feature_versions').insert([
+      {
+        feature_id: basicFeature.id,
+        version: '1.0.0',
+        release_type: 'major',
+        changelog: '初始版本',
+        config_changes: JSON.stringify({}),
+        is_current: true,
+        is_stable: true,
+        released_at: now,
+        released_by: 'system'
+      },
+      {
+        feature_id: modelFeature.id,
+        version: '1.0.0',
+        release_type: 'major',
+        changelog: '初始版本',
+        config_changes: JSON.stringify({}),
+        is_current: true,
+        is_stable: true,
+        released_at: now,
+        released_by: 'system'
+      }
+    ]);
+  }
 
-  // 8. 功能依赖（示例：AI模特依赖基础抠图）
-  await knex('feature_dependencies').insert([
-    {
-      feature_id: modelFeature.id,
-      depends_on_feature_id: basicFeature.id,
-      dependency_type: 'suggested',
-      description: '建议先完成基础抠图以获得更好的模特效果',
-      is_active: true
-    }
-  ]);
+  // 8. 功能依赖 (仅当表存在时)
+  if (hasFeatureDeps) {
+    await knex('feature_dependencies').insert([
+      {
+        feature_id: modelFeature.id,
+        depends_on_feature_id: basicFeature.id,
+        dependency_type: 'suggested',
+        description: '建议先完成基础抠图以获得更好的模特效果',
+        is_active: true
+      }
+    ]);
+  }
 
   console.log('✓ 功能目录（含配置/权限）数据初始化完成！');
 };

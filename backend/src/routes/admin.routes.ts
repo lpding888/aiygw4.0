@@ -6,9 +6,12 @@ import { requireAdmin } from '../middlewares/adminAuth.middleware.js';
 
 // 子控制器（JS），以 d.ts 桥接
 import featureWizardController from '../controllers/admin/featureWizard.controller.js';
+import toolGeneratorController from '../controllers/admin/toolGenerator.controller.js';
 import pipelinesValidateController from '../controllers/admin/pipelines-validate.controller.js';
 import formSchemasController from '../controllers/admin/formSchemas.controller.js';
 import promptsController from '../controllers/admin/prompts.controller.js';
+import mcpController from '../controllers/admin/mcp.controller.js';
+import promptTemplatesRouter from './admin/prompt-templates.routes.js';
 
 const router = Router();
 
@@ -39,6 +42,14 @@ router.post(
   requireAdmin,
   featureWizardController.createFeatureFromWizard
 );
+
+// AI Architect
+import aiArchitectController from '../controllers/admin/aiArchitect.controller.js';
+router.post('/architect/generate', authenticate, requireAdmin, aiArchitectController.generate);
+router.post('/architect/modify', authenticate, requireAdmin, aiArchitectController.modify);
+
+// AI 自动导入工具 (AI 读文档)
+router.post('/tools/generate', authenticate, requireAdmin, toolGeneratorController.generate);
 
 // 素材库管理（管理员查看所有用户素材）
 router.get('/assets', authenticate, requireAdmin, assetController.getAllAssets);
@@ -115,8 +126,12 @@ router.post(
   pipelinesValidateController.getTopologicalOrder
 );
 
+// Pipeline 智能生成
+router.post('/pipelines/generate', authenticate, requireAdmin, adminController.generatePipeline);
+
 // Pipeline 测试运行
 router.post('/pipelines/test', authenticate, requireAdmin, adminController.testPipeline);
+router.post('/pipelines/simulate', authenticate, requireAdmin, adminController.simulatePipeline);
 
 // 表单Schema管理
 router.get('/form-schemas', authenticate, requireAdmin, formSchemasController.listFormSchemas);
@@ -158,12 +173,24 @@ router.delete(
   formSchemasController.deleteFormSchema
 );
 
-// Prompt 模板管理（版本管理部分保持注释的历史行为不变）
+// Prompt 模板管理
+router.use('/prompt-templates', promptTemplatesRouter);
 router.post('/prompts/preview', authenticate, requireAdmin, promptsController.previewPrompt);
 router.post('/prompts/validate', authenticate, requireAdmin, promptsController.validatePrompt);
 router.get('/prompts/helpers', authenticate, requireAdmin, promptsController.getHelpers);
 
 // AI助手
 router.post('/ai/chat', authenticate, requireAdmin, adminController.chatWithAI);
+
+// 系统初始化
+router.post('/system/init', authenticate, requireAdmin, adminController.initializeSystem);
+
+// MCP 管理
+router.get('/mcp/endpoints', authenticate, requireAdmin, mcpController.listEndpoints);
+router.post('/mcp/endpoints', authenticate, requireAdmin, mcpController.createEndpoint);
+router.get('/mcp/endpoints/:id', authenticate, requireAdmin, mcpController.getEndpoint);
+router.put('/mcp/endpoints/:id', authenticate, requireAdmin, mcpController.updateEndpoint);
+router.delete('/mcp/endpoints/:id', authenticate, requireAdmin, mcpController.deleteEndpoint);
+router.post('/mcp/endpoints/:id/test', authenticate, requireAdmin, mcpController.testEndpoint);
 
 export default router;

@@ -1,173 +1,277 @@
 'use client';
 
 /**
- * React Flow节点类型定义
- * 艹，定义PROVIDER/CONDITION/POST_PROCESS/END/FORK/JOIN六种节点！
+ * React Flow节点类型定义 (美化版 - n8n style)
  */
 
 import React from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Position, NodeProps } from '@xyflow/react';
 import type { NodeTypes } from '@xyflow/react';
-import { ApiOutlined, BranchesOutlined, ToolOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import {
+  ApiOutlined,
+  BranchesOutlined,
+  ToolOutlined,
+  CheckCircleOutlined,
+  ThunderboltOutlined,
+  MailOutlined,
+  CloudUploadOutlined,
+  FileImageOutlined,
+  PlayCircleFilled
+} from '@ant-design/icons';
+import NodeCard from './NodeCard';
 import ForkNode from './nodes/ForkNode';
 import JoinNode from './nodes/JoinNode';
 
-type BaseNodeData = {
-  label?: React.ReactNode;
-};
-
-type ProviderNodeData = BaseNodeData & {
-  providerRef?: string;
-};
-
-type ConditionNodeData = BaseNodeData & {
-  condition?: string;
-};
-
-type PostProcessNodeData = BaseNodeData & {
-  processor?: string;
-};
-
-type EndNodeData = BaseNodeData;
-
-/**
- * Provider节点（AI Provider调用）
- */
-export function ProviderNode({ data }: NodeProps) {
-  const nodeData = data as ProviderNodeData;
+export function StartNode({ id, data, selected }: NodeProps) {
   return (
-    <div
-      style={{
-        padding: '12px 16px',
-        borderRadius: '8px',
-        border: '2px solid #1890ff',
-        background: '#e6f7ff',
-        minWidth: '180px',
-      }}
-    >
-      <Handle type="target" position={Position.Top} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <ApiOutlined style={{ fontSize: '18px', color: '#1890ff' }} />
-        <div>
-          <div style={{ fontWeight: 600, fontSize: '14px' }}>
-            {nodeData.label || 'Provider节点'}
-          </div>
-          {nodeData.providerRef && (
-            <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-              {nodeData.providerRef}
-            </div>
-          )}
-        </div>
-      </div>
-      <Handle type="source" position={Position.Bottom} />
-    </div>
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="start"
+      label={(data.label as string) || '开始'}
+      status={data.status as any}
+      handles={[{ type: 'source', position: Position.Bottom }]}
+    />
   );
 }
 
-/**
- * Condition节点（条件判断）
- */
-export function ConditionNode({ data }: NodeProps) {
-  const nodeData = data as ConditionNodeData;
+export function ProviderNode({ id, data, selected }: NodeProps) {
+  const paramsCount = data.schema ? (data.schema as any[]).length : 0;
+  const providerRef = data.providerRef as string;
+
+  // 根据providerRef决定图标
+  const getIcon = (ref: string) => {
+    if (!ref) return <ApiOutlined style={{ color: 'white' }} />;
+    if (ref.includes('runninghub')) return <ThunderboltOutlined style={{ color: 'white' }} />;
+    if (ref.includes('deepseek') || ref.includes('llm')) return <span style={{ fontSize: 14, fontWeight: 'bold', color: 'white' }}>AI</span>;
+    if (ref.includes('email') || ref.includes('notification')) return <MailOutlined style={{ color: 'white' }} />;
+    if (ref.includes('storage') || ref.includes('cos')) return <CloudUploadOutlined style={{ color: 'white' }} />;
+    if (ref.includes('image')) return <FileImageOutlined style={{ color: 'white' }} />;
+    return <ApiOutlined style={{ color: 'white' }} />;
+  };
+
+  const stats: Record<string, string | number> = {};
+  if (providerRef) {
+    stats['Provider'] = providerRef.length > 20 ? providerRef.substring(0, 18) + '..' : providerRef;
+  }
+  if (paramsCount > 0) {
+    stats['Params'] = paramsCount;
+  }
+
   return (
-    <div
-      style={{
-        padding: '12px 16px',
-        borderRadius: '8px',
-        border: '2px solid #52c41a',
-        background: '#f6ffed',
-        minWidth: '160px',
-      }}
-    >
-      <Handle type="target" position={Position.Top} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <BranchesOutlined style={{ fontSize: '18px', color: '#52c41a' }} />
-        <div>
-          <div style={{ fontWeight: 600, fontSize: '14px' }}>
-            {nodeData.label || '条件节点'}
-          </div>
-          {nodeData.condition && (
-            <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-              {nodeData.condition}
-            </div>
-          )}
-        </div>
-      </div>
-      <Handle type="source" position={Position.Bottom} id="true" style={{ left: '30%' }} />
-      <Handle type="source" position={Position.Bottom} id="false" style={{ left: '70%' }} />
-    </div>
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="provider"
+      label={(data.label as string) || 'AI 模型'}
+      status={data.status as any}
+      icon={getIcon(providerRef)}
+      stats={stats}
+      handles={[
+        { type: 'target', position: Position.Top },
+        { type: 'source', position: Position.Bottom }
+      ]}
+    />
   );
 }
 
-/**
- * PostProcess节点（后处理）
- */
-export function PostProcessNode({ data }: NodeProps) {
-  const nodeData = data as PostProcessNodeData;
+export function ConditionNode({ id, data, selected }: NodeProps) {
   return (
-    <div
-      style={{
-        padding: '12px 16px',
-        borderRadius: '8px',
-        border: '2px solid #fa8c16',
-        background: '#fff7e6',
-        minWidth: '160px',
-      }}
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="condition"
+      label={(data.label as string) || '条件判断'}
+      status={data.status as any}
+      handles={[
+        { type: 'target', position: Position.Top },
+        { type: 'source', position: Position.Bottom, id: 'true' }, // True path (Left/Center usually, but simpler to stack for now)
+        // For condition nodes, we often want custom handles. 
+        // NodeCard handles prop is flexible, but visual layout of text "True/False" needs to be inside or absolute.
+      ]}
     >
-      <Handle type="target" position={Position.Top} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <ToolOutlined style={{ fontSize: '18px', color: '#fa8c16' }} />
-        <div>
-          <div style={{ fontWeight: 600, fontSize: '14px' }}>
-            {nodeData.label || '后处理'}
-          </div>
-          {nodeData.processor && (
-            <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-              {nodeData.processor}
-            </div>
-          )}
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 10px' }}>
+        <span style={{ color: '#52c41a', fontSize: 12 }}>True ↓</span>
+        <span style={{ color: '#ff4d4f', fontSize: 12 }}>False ↓</span>
       </div>
-      <Handle type="source" position={Position.Bottom} />
-    </div>
+      {/* Custom handles for specific positioning if needed, overriding NodeCard's default strict list if we wanted, 
+             but here passing handles to NodeCard puts them in center. 
+             Let's use a custom implementation for handles here to match the text. */}
+      <div style={{ position: 'absolute', bottom: -6, left: '30%', width: 10, height: 10, background: '#52c41a', borderRadius: '50%' }} />
+      <div style={{ position: 'absolute', bottom: -6, left: '70%', width: 10, height: 10, background: '#ff4d4f', borderRadius: '50%' }} />
+    </NodeCard>
+  );
+}
+// Overriding ConditionNode to match the exact Handle logic of NodeTypes which used custom positioning
+export function ConditionNodeFixed({ id, data, selected }: NodeProps) {
+  return (
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="condition"
+      label={(data.label as string) || '条件判断'}
+      status={data.status as any}
+      handles={[{ type: 'target', position: Position.Top }]} // Only input handle is standard
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+        <span style={{ color: '#52c41a', fontSize: 12, marginLeft: 10 }}>是</span>
+        <span style={{ color: '#ff4d4f', fontSize: 12, marginRight: 10 }}>否</span>
+      </div>
+      {/* Custom Output Handles */}
+      <div className="react-flow__handle react-flow__handle-bottom source" style={{ left: '30%', background: '#52c41a', bottom: -5, position: 'absolute', width: 8, height: 8, borderRadius: '50%' }} data-handleid="true"></div>
+      <div className="react-flow__handle react-flow__handle-bottom source" style={{ left: '70%', background: '#ff4d4f', bottom: -5, position: 'absolute', width: 8, height: 8, borderRadius: '50%' }} data-handleid="false"></div>
+    </NodeCard>
+  )
+}
+
+
+export function PostProcessNode({ id, data, selected }: NodeProps) {
+  return (
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="postProcess"
+      label={(data.label as string) || '数据处理'}
+      status={data.status as any}
+      icon={<ToolOutlined style={{ color: 'white' }} />}
+      stats={{
+        'Processor': (data.processor as string) || 'None'
+      }}
+      handles={[
+        { type: 'target', position: Position.Top },
+        { type: 'source', position: Position.Bottom }
+      ]}
+    />
   );
 }
 
-/**
- * End节点（结束）
- */
-export function EndNode({ data }: NodeProps) {
-  const nodeData = data as EndNodeData;
+export function EndNode({ id, data, selected }: NodeProps) {
   return (
-    <div
-      style={{
-        padding: '12px 16px',
-        borderRadius: '8px',
-        border: '2px solid #722ed1',
-        background: '#f9f0ff',
-        minWidth: '120px',
-      }}
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="end"
+      label={(data.label as string) || '流程结束'}
+      status={data.status as any}
+      icon={<CheckCircleOutlined style={{ color: 'white' }} />}
+      handles={[
+        { type: 'target', position: Position.Top }
+      ]}
     >
-      <Handle type="target" position={Position.Top} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
-        <CheckCircleOutlined style={{ fontSize: '18px', color: '#722ed1' }} />
-        <div style={{ fontWeight: 600, fontSize: '14px' }}>
-          {nodeData.label || '结束'}
-        </div>
+      <div style={{ fontSize: 12, color: '#666' }}>
+        输出变量: <span style={{ fontFamily: 'monospace' }}>{(data.outputKey as string) || 'final_result'}</span>
       </div>
-    </div>
+    </NodeCard>
   );
 }
 
-/**
- * 节点类型映射 (CMS-206: 新增FORK/JOIN并行节点)
- * 艹，这个tm必须稳定引用，不然React Flow会重新渲染！
- */
+export function AgentNode({ id, data, selected }: NodeProps) {
+  const toolCount = data.tools ? (data.tools as any[]).length : 0;
+  const goal = data.goal as string;
+
+  return (
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="agent"
+      label={(data.label as string) || '智能体 (Agent)'}
+      status={data.status as any}
+      icon={<ApiOutlined style={{ color: 'white' }} />}
+      stats={{
+        'Goal': goal ? (goal.length > 15 ? goal.substring(0, 15) + '...' : goal) : 'Pending',
+        'Tools': toolCount
+      }}
+      handles={[
+        { type: 'target', position: Position.Top },
+        { type: 'source', position: Position.Bottom }
+      ]}
+    />
+  );
+}
+
+
+export function HttpApiNode({ id, data, selected }: NodeProps) {
+  return (
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="http_api"
+      label={(data.label as string) || 'HTTP请求'}
+      status={data.status as any}
+      icon={<ApiOutlined style={{ color: 'white' }} />}
+      stats={{
+        'Method': (data.method as string) || 'GET',
+        'URL': (data.url as string) ? ((data.url as string).length > 20 ? (data.url as string).substring(0, 18) + '..' : (data.url as string)) : 'Pending'
+      }}
+      handles={[
+        { type: 'target', position: Position.Top },
+        { type: 'source', position: Position.Bottom }
+      ]}
+    />
+  );
+}
+
+export function LoopNode({ id, data, selected }: NodeProps) {
+  const loopType = (data.loopType as string) || 'forEach';
+  return (
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="loop"
+      label={(data.label as string) || '循环控制'}
+      status={data.status as any}
+      handles={[
+        { type: 'target', position: Position.Top },
+        { type: 'source', position: Position.Right, id: 'body' }, // Loop body
+        { type: 'source', position: Position.Bottom, id: 'next' } // After loop
+      ]}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 8px', marginTop: 4 }}>
+        <span style={{ fontSize: 10, color: '#1890ff' }}>循环体 →</span>
+        <span style={{ fontSize: 10, color: '#666' }}>完成后 ↓</span>
+      </div>
+      <div style={{ fontSize: 11, color: '#888', textAlign: 'center', marginTop: 2 }}>
+        {loopType === 'forEach' ? '遍历数组' : (loopType === 'range' ? '数值范围' : '条件循环')}
+      </div>
+      {/* Custom Handles Visualization */}
+      <div className="react-flow__handle react-flow__handle-right source" style={{ top: '50%', background: '#1890ff', right: -5, position: 'absolute', width: 8, height: 8, borderRadius: '50%' }} data-handleid="body"></div>
+      <div className="react-flow__handle react-flow__handle-bottom source" style={{ left: '50%', background: '#666', bottom: -5, position: 'absolute', width: 8, height: 8, borderRadius: '50%' }} data-handleid="next"></div>
+    </NodeCard>
+  );
+}
+
+export function KbRetrieveNode({ id, data, selected }: NodeProps) {
+  return (
+    <NodeCard
+      id={id}
+      selected={selected}
+      type="kb_retrieve"
+      label={(data.label as string) || '知识库检索'}
+      status={data.status as any}
+      icon={<CloudUploadOutlined style={{ color: 'white' }} />}
+      stats={{
+        'Query': (data.query as string) ? '已配置' : 'Pending',
+        'TopK': (data.topK as number) || 3
+      }}
+      handles={[
+        { type: 'target', position: Position.Top },
+        { type: 'source', position: Position.Bottom }
+      ]}
+    />
+  );
+}
+
 export const nodeTypes: NodeTypes = {
+  start: StartNode,
   provider: ProviderNode as any,
-  condition: ConditionNode as any,
+  condition: ConditionNodeFixed as any,
   postProcess: PostProcessNode as any,
   end: EndNode as any,
   fork: ForkNode,
   join: JoinNode,
+  agent: AgentNode as any,
+  http_api: HttpApiNode as any,
+  loop: LoopNode as any,
+  kb_retrieve: KbRetrieveNode as any
 };
+

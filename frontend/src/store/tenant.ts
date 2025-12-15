@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { mutate } from 'swr';
+import api from '@/lib/api';
 
 /**
  * 租户信息
@@ -103,13 +104,12 @@ export const useTenantStore = create<TenantState>()(
         set({ isLoading: true, error: null });
 
         try {
-          const response = await fetch('/api/tenants');
-          if (!response.ok) {
-            throw new Error('获取租户列表失败');
-          }
+          // 使用正确的API客户端（带认证token）
+          // baseURL已经是'/api'，所以这里只传'/tenants'，最终URL是'/api/tenants'
+          const response = await api.client.get('/tenants');
 
-          const data = await response.json();
-          const tenants = data.tenants || [];
+          // api.client有response拦截器，自动提取response.data，所以response直接是{success, data, ...}
+          const tenants = response.data?.tenants || response.data || [];
 
           set({
             tenants,

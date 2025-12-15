@@ -3,6 +3,7 @@ import logger from '../utils/logger.js';
 import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
 import cmsCacheService from './cmsCache.service.js';
+import protocolAnalyzer from './protocolAnalyzer.service.js';
 import type {
   PromptTemplate,
   TemplateQueryOptions,
@@ -547,6 +548,256 @@ class PromptTemplateService {
       variables: raw.variables ? JSON.parse(raw.variables as string) : null,
       metadata: raw.metadata ? JSON.parse(raw.metadata as string) : null
     } as PromptTemplate;
+  }
+
+  // ========== AI Architect 专用方法 ==========
+
+  /**
+   * 获取 AI Architect 系统提示词（带动态节点类型文档）
+   */
+  async getArchitectSystemPrompt(): Promise<string> {
+    const template = await this.getTemplateByKey('ai_architect_system');
+    const fewShotTemplate = await this.getTemplateByKey('ai_architect_few_shot');
+
+    // 动态注入节点类型文档
+    const nodeDocs = await protocolAnalyzer.generateNodeTypeDocumentation();
+    const supportedTypes = await protocolAnalyzer.getSupportedNodeTypes();
+
+    const variables = {
+      NODE_TYPE_DOCUMENTATION: nodeDocs,
+      SUPPORTED_NODE_TYPES: supportedTypes.join(', ')
+    };
+
+    const systemPrompt = this.replaceVariables(template.content, variables);
+    const fewShot = this.replaceVariables(fewShotTemplate.content, variables);
+
+    return `${systemPrompt}\n\n${fewShot}`;
+  }
+
+  /**
+   * 获取修改 Pipeline 的提示词
+   */
+  async getArchitectModifyPrompt(): Promise<string> {
+    const template = await this.getTemplateByKey('ai_architect_modify');
+    return template.content;
+  }
+
+  /**
+   * 生成错误反馈提示词（用于 Auto-Fix 循环）
+   */
+  async generateErrorFeedback(errorMessage: string): Promise<string> {
+    const template = await this.getTemplateByKey('ai_architect_error_feedback');
+    const supportedTypes = await protocolAnalyzer.getSupportedNodeTypes();
+
+    const variables = {
+      ERROR_MESSAGE: errorMessage,
+      SUPPORTED_NODE_TYPES: supportedTypes.join(', ')
+    };
+
+    return this.replaceVariables(template.content, variables);
+  }
+
+  /**
+   * 刷新 Protocol 文档（当 Protocol 更新时调用）
+   */
+  async refreshProtocolDocumentation(userId: string): Promise<void> {
+    logger.info('[PromptTemplate] Refreshing Protocol documentation...');
+
+    // 重新分析 Protocol
+    await protocolAnalyzer.getAnalysis();
+
+    // 更新系统提示词的元数据
+    const systemTemplate = await this.getTemplateByKey('ai_architect_system');
+
+    if (systemTemplate.metadata) {
+      const metadata = systemTemplate.metadata as any;
+      metadata.last_protocol_sync = new Date().toISOString();
+
+      await this.updateTemplate(
+        String(systemTemplate.id),
+        { metadata: metadata as TemplateMetadata },
+        userId
+      );
+    }
+
+    logger.info('[PromptTemplate] Protocol documentation refreshed successfully');
+  }
+
+  /**
+   * 渲染带协议上下文的模板
+   */
+  async renderWithProtocolContext(
+    key: string,
+    additionalVariables: Record<string, unknown> = {}
+  ): Promise<string> {
+    const template = await this.getTemplateByKey(key);
+
+    // 自动构建 Protocol 上下文
+    const nodeDocs = await protocolAnalyzer.generateNodeTypeDocumentation();
+    const supportedTypes = await protocolAnalyzer.getSupportedNodeTypes();
+
+    const autoContext = {
+      NODE_TYPE_DOCUMENTATION: nodeDocs,
+      SUPPORTED_NODE_TYPES: supportedTypes.join(', '),
+      PROTOCOL_VERSION: '1.0',
+      TIMESTAMP: new Date().toISOString()
+    };
+
+    const mergedVariables = { ...autoContext, ...additionalVariables };
+    return this.replaceVariables(template.content, mergedVariables);
+  }
+
+  // ========== API Compatibility Aliases ==========
+  // These methods provide compatibility with prompt-templates.routes.ts
+
+  /**
+   * Alias for getTemplateById (routes expect 'getTemplate')
+   */
+  async getTemplate(id: string): Promise<PromptTemplate | null> {
+    try {
+      return await this.getTemplateById(id);
+    } catch (error) {
+      // Return null instead of throwing for not found
+      return null;
+    }
+  }
+
+  /**
+   * Alias for getTemplateStats (routes expect 'getStats')
+   */
+  async getStats(): Promise<TemplateStats> {
+    return this.getTemplateStats();
+  }
+
+  /**
+   * Alias for rollbackToVersion (routes expect 'rollbackTemplate')
+   */
+  async rollbackTemplate(
+    id: string,
+    targetVersion: number,
+    userId: string,
+    _reason?: string
+  ): Promise<PromptTemplate> {
+    return this.rollbackToVersion(id, targetVersion, userId);
+  }
+
+  /**
+   * Search templates by query string
+   */
+  async searchTemplates(
+    query: string,
+    filters: { limit?: number; category?: string; tags?: string[] } = {}
+  ): Promise<PromptTemplate[]> {
+    const { limit = 10, category, tags } = filters;
+
+    let dbQuery = db('prompt_templates')
+      .where('status', 'published')
+      .where(function () {
+        this.where('name', 'like', `%${query}%`)
+          .orWhere('description', 'like', `%${query}%`)
+          .orWhere('content', 'like', `%${query}%`);
+      });
+
+    if (category) {
+      dbQuery = dbQuery.where('category', category);
+    }
+
+    const templates = await dbQuery.limit(limit).orderBy('updated_at', 'desc');
+    return templates.map((t) => this.parseTemplate(t));
+  }
+
+  /**
+   * Get popular tags (stub - returns empty for now)
+   */
+  async getPopularTags(limit: number = 20): Promise<string[]> {
+    const rows = await db('prompt_templates').where('status', 'published').select('tags');
+
+    const tagCounts = new Map<string, number>();
+
+    rows.forEach((row) => {
+      const raw = row.tags as unknown;
+      if (!raw) return;
+      let tags: string[] = [];
+      if (typeof raw === 'string') {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            tags = parsed.filter((t) => typeof t === 'string');
+          }
+        } catch {
+          // fall back: comma separated
+          tags = raw.split(',').map((t) => t.trim()).filter(Boolean);
+        }
+      } else if (Array.isArray(raw)) {
+        tags = raw.filter((t) => typeof t === 'string');
+      }
+
+      tags.forEach((tag) => {
+        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+      });
+    });
+
+    return Array.from(tagCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([tag]) => tag);
+  }
+
+  /**
+   * Rate a template (stub - logs for now)
+   */
+  async rateTemplate(id: string, userId: string, rating: number): Promise<void> {
+    const sanitizedRating = Math.min(Math.max(rating, 1), 5);
+
+    // Upsert rating
+    const existing = await db('prompt_template_ratings').where({ template_id: id, user_id: userId }).first();
+
+    if (existing) {
+      await db('prompt_template_ratings')
+        .where({ template_id: id, user_id: userId })
+        .update({ rating: sanitizedRating, updated_at: new Date() });
+    } else {
+      await db('prompt_template_ratings').insert({
+        id: `${id}-${userId}`,
+        template_id: id,
+        user_id: userId,
+        rating: sanitizedRating,
+        created_at: new Date()
+      });
+    }
+
+    // Recalculate stats
+    const stats = await db('prompt_template_ratings')
+      .where({ template_id: id })
+      .avg<{ avg: number }>('rating as avg')
+      .count<{ count: string }>('* as count')
+      .first() as { avg: number; count: string } | undefined;
+
+    const avgRating = stats?.avg ? Number(stats.avg) : 0;
+    const ratingCount = stats?.count ? Number(stats.count) : 0;
+
+    await db('prompt_templates')
+      .where({ id })
+      .update({
+        avg_rating: avgRating,
+        rating_count: ratingCount,
+        updated_at: new Date()
+      });
+
+    logger.info('[PromptTemplate] Template rated', { templateId: id, userId, rating: sanitizedRating, avgRating, ratingCount });
+  }
+
+  /**
+   * Get template version history (alias for getTemplateVersions)
+   */
+  async getTemplateHistory(id: string): Promise<any[]> {
+    const result = await this.getTemplateVersions(id, { limit: 50 });
+    return result.versions.map(v => ({
+      version: v.version,
+      status: v.status,
+      created_at: v.created_at,
+      created_by: v.created_by
+    }));
   }
 }
 

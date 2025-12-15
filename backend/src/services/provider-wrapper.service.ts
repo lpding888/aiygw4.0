@@ -160,6 +160,9 @@ class ProviderWrapperService {
   };
 
   registerProvider(name: string, provider: Provider, config: Partial<ProviderConfig> = {}) {
+    if (this.wrappers.has(name)) {
+      this.unregisterProvider(name);
+    }
     const fullConfig: ProviderConfig = {
       ...this.defaultConfig,
       ...config,
@@ -176,6 +179,15 @@ class ProviderWrapperService {
     this.providers.set(name, provider);
     this.wrappers.set(name, wrapper);
     logger.info(`[ProviderWrapper] Provider注册成功: ${name}`);
+  }
+
+  unregisterProvider(name: string): boolean {
+    const existed = this.wrappers.delete(name);
+    this.providers.delete(name);
+    if (existed) {
+      logger.info(`[ProviderWrapper] Provider已注销: ${name}`);
+    }
+    return existed;
   }
 
   getWrapper(name: string): ProviderWrapper | null {

@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import knex from 'knex';
-import { knexConfig } from '../src/config/knex-config';
+import { knexConfig } from '../src/config/knex-config.js';
 
 async function main() {
   const userId = process.argv[2];
@@ -14,7 +14,7 @@ async function main() {
   const db = knex(config);
 
   try {
-    console.log(`Connecting to database in ${environment} mode...`);
+    console.log(`Connecting to database in ${String(environment)} mode...`);
     const affected = await db('users').where({ id: userId }).update({ role: 'admin' });
 
     if (affected) {

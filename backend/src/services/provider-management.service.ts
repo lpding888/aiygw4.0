@@ -4,11 +4,14 @@
  * 管理外部服务提供商，支持密钥加密存储和连接测试
  */
 
-const crypto = require('crypto');
-const axios = require('axios');
+import crypto from 'crypto';
+import axios from 'axios';
 import { db as knex } from '../db/index.js';
-const logger = require('../utils/logger');
-const kmsService = require('./kms.service');
+import aiGateway from './ai-gateway.service.js';
+import logger from '../utils/logger.js';
+import kmsService from './kms.service.js';
+import AppError from '../utils/AppError.js';
+import { ERROR_CODES } from '../config/error-codes.js';
 
 interface ProviderConfig {
   id: string;
@@ -16,7 +19,7 @@ interface ProviderConfig {
   type: string;
   baseUrl: string;
   apiKeyId: string;
-  handlerKeyId: string;
+  handlerKeyId?: string;
   weight: number;
   timeoutMs: number;
   maxRetries: number;
@@ -41,7 +44,7 @@ class ProviderManagementService {
     providerData: Partial<ProviderConfig>,
     secrets: {
       apiKey: string;
-      handlerKey: string;
+      handlerKey?: string;
     },
     createdBy: string
   ): Promise<ProviderConfig> {
@@ -54,10 +57,13 @@ class ProviderManagementService {
           secrets.apiKey,
           `provider_${providerId}_api_key`
         );
-        const encryptedHandlerKey = await kmsService.encrypt(
-          secrets.handlerKey,
-          `provider_${providerId}_handler_key`
-        );
+        let encryptedHandlerKey;
+        if (secrets.handlerKey) {
+          encryptedHandlerKey = await kmsService.encrypt(
+            secrets.handlerKey,
+            `provider_${providerId}_handler_key`
+          );
+        }
 
         // 创建供应商配置
         const provider: ProviderConfig = {
@@ -66,7 +72,7 @@ class ProviderManagementService {
           type: providerData.type!,
           baseUrl: providerData.baseUrl!,
           apiKeyId: encryptedApiKey.id,
-          handlerKeyId: encryptedHandlerKey.id,
+          handlerKeyId: encryptedHandlerKey?.id,
           weight: providerData.weight || 1,
           timeoutMs: providerData.timeoutMs || 30000,
           maxRetries: providerData.maxRetries || 3,
@@ -130,10 +136,11 @@ class ProviderManagementService {
 
     try {
       // 获取密钥
-      const [apiKey, handlerKey] = await Promise.all([
-        kmsService.decrypt(provider.apiKeyId),
-        kmsService.decrypt(provider.handlerKeyId)
-      ]);
+      const apiKey = await kmsService.decrypt(provider.apiKeyId);
+      let handlerKey;
+      if (provider.handlerKeyId) {
+        handlerKey = await kmsService.decrypt(provider.handlerKeyId);
+      }
 
       // 执行健康检查
       const response = await axios.get(`${provider.baseUrl}/health`, {
@@ -219,10 +226,16 @@ class ProviderManagementService {
       // 删除相关的密钥
       const provider = await this.getProvider(providerId);
       if (provider) {
-        await Promise.all([
-          kmsService.delete(provider.apiKeyId),
-          kmsService.delete(provider.handlerKeyId)
-        ]);
+        const deleteTasks: Array<Promise<unknown>> = [];
+        if (provider.apiKeyId) {
+          deleteTasks.push(kmsService.deleteKey(provider.apiKeyId, { force: true }));
+        }
+        if (provider.handlerKeyId) {
+          deleteTasks.push(kmsService.deleteKey(provider.handlerKeyId, { force: true }));
+        }
+        if (deleteTasks.length > 0) {
+          await Promise.all(deleteTasks);
+        }
       }
 
       // 软删除供应商配置
@@ -340,6 +353,108 @@ class ProviderManagementService {
       logger.error('获取供应商列表失败:', error);
       return { providers: [], total: 0 };
     }
+  }
+
+  /**
+   * 智能解析Provider示例
+   */
+  async parseProviderExample(
+    example: string
+  ): Promise<Partial<ProviderConfig> & { request_template?: string; header_template?: string }> {
+    try {
+      const systemPrompt = `你是一个API集成专家。你的任务是解析用户提供的cURL命令或API请求示例(JSON)，并提取出集成所需的配置信息。
+      
+请分析以下API请求示例，并返回一个JSON对象，包含以下字段：
+1. name: 猜测的服务商名称 (例如 "Gemini Pro", "OpenAI GPT-4")
+2. type: 服务类型 ("ai", "image", "text", "video")
+3. baseUrl: API的基础URL (例如 "https://generativelanguage.googleapis.com")
+4. config_template: 一个Handlebars格式的请求体模板(JSON字符串)。将用户输入的prompt替换为 {{prompt}}，将图片URL替换为 {{imageUrl}}。保留其他固定参数。
+5. header_template: 一个JSON格式的请求头模板(字符串)。如果API Key在header中，请用 {{apiKey}} 占位。
+6. response_rules: 一个JSON对象，描述如何从响应中提取结果。例如 {"result": "candidates[0].content.parts[0].text"} (使用JSONPath语法)。
+
+注意：
+- 如果是GET请求且参数在URL中，请在config_template中说明。
+- 如果API Key在URL参数中(如 ?key=...)，请在config_template或baseUrl中处理，或者说明。
+- 只返回纯JSON，不要包含Markdown格式化(如 \`\`\`json)。`;
+
+      const response = await aiGateway.chat({
+        model: 'deepseek-chat', // 优先使用DeepSeek
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: example }
+        ],
+        temperature: 0.1 //以此降低幻觉，提高准确性
+      });
+
+      let content = response.choices[0]?.message?.content || '{}';
+      // 清理Markdown代码块标记
+      content = content.replace(/```json\n?|```/g, '');
+
+      const parsed = JSON.parse(content);
+
+      // 简单的映射和校验
+      return {
+        name: parsed.name || 'Unknown Provider',
+        type: parsed.type || 'ai',
+        baseUrl: parsed.baseUrl || '',
+        // 扩展字段，虽然ProviderConfig接口没定义，但Controller可以直接透传
+        ...parsed
+      };
+    } catch (error: any) {
+      logger.warn('智能解析API示例失败，尝试使用正则解析:', error);
+
+      // Fallback: 正则解析
+      try {
+        return this.parseWithRegex(example);
+      } catch (regexError) {
+        logger.error('正则解析也失败了:', regexError);
+        throw AppError.custom(
+          ERROR_CODES.INVALID_PARAMETERS,
+          `解析失败: ${error.message || '无法识别的示例格式'}`,
+          {
+            originalError: error.message,
+            regexError: regexError instanceof Error ? regexError.message : String(regexError)
+          }
+        );
+      }
+    }
+  }
+
+  /**
+   * 正则解析 (Fallback)
+   */
+  private parseWithRegex(example: string): Partial<ProviderConfig> {
+    const result: Partial<ProviderConfig> = {
+      type: 'ai', // 默认为AI
+      name: 'Unknown Provider'
+    };
+
+    // 1. 提取URL
+    const urlMatch = example.match(/https?:\/\/[^\s\\'"]+/);
+    if (urlMatch) {
+      result.baseUrl = urlMatch[0];
+
+      // 简单的名称推断
+      if (result.baseUrl.includes('runninghub')) result.name = 'RunningHub';
+      else if (result.baseUrl.includes('openai')) result.name = 'OpenAI';
+      else if (result.baseUrl.includes('anthropic')) result.name = 'Anthropic';
+      else if (result.baseUrl.includes('midjourney')) result.name = 'Midjourney';
+    }
+
+    // 2. 提取认证方式
+    if (example.match(/Authorization:\s*Bearer/i)) {
+      // Bearer Token
+      // 这里的auth_type其实在ProviderConfig里没定义，但Controller会透传
+      (result as any).auth_type = 'bearer';
+    } else if (example.match(/x-api-key/i) || example.match(/api-key/i)) {
+      // API Key Header
+      (result as any).auth_type = 'api_key';
+    } else {
+      // 默认 API Key
+      (result as any).auth_type = 'api_key';
+    }
+
+    return result;
   }
 
   /**

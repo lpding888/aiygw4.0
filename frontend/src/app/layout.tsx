@@ -34,7 +34,7 @@ export const metadata: Metadata = generateMetadata({
 /**
  * RootLayout - 根布局
  *
- * 艹！使用GPT5工业级架构，支持主题切换和完整的状态管理！
+ * 使用工业级架构，支持主题切换和完整的状态管理！
  * 还加了Web Vitals监控，性能必须管！
  */
 export default function RootLayout({

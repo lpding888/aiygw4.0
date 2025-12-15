@@ -1,17 +1,13 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios';
 import type { AIChatRequest, AIChatResponse } from '@/types';
+export type { APIResponse } from '@/types';
+import { APIResponse } from '@/types';
 import { emitGlobalError } from '@/providers/ErrorProvider';
-
-export interface APIResponse<T = any> {
-  success: boolean;
-  data?: T;
-  total?: number;
-  error?: {
-    code: number;
-    message: string;
-  };
-  message?: string;
-}
+import { AuthService } from '@/services/auth.service';
+import { UserService } from '@/services/user.service';
+import { InviteCodeService } from '@/services/invite-code.service';
+import { CMSService } from '@/services/cms.service';
+import { SystemService } from '@/services/system.service';
 
 type RefreshResp = {
   accessToken?: string;
@@ -49,8 +45,14 @@ function safeCapture(error: any, extra?: Record<string, any>) {
     .catch(() => { });
 }
 
-class APIClient {
-  public client: AxiosInstance; // 艹，改成public让外部服务层可以用！
+export class APIClient {
+  public client: AxiosInstance; // Public for external service usage
+  public auth: AuthService;
+  public user: UserService;
+  public membership: UserService['membership'];
+  public inviteCode: InviteCodeService;
+  public cms: CMSService;
+  public system: SystemService;
 
   constructor(baseURL: string = API_BASE) {
     this.client = axios.create({
@@ -139,12 +141,41 @@ class APIClient {
           code: normalizedError.code,
         });
 
-        // 触发全局错误通知（艹！自动显示错误提示）
+        // 触发全局错误通知（自动显示错误提示）
         emitGlobalError(normalizedError);
 
         return Promise.reject(normalizedError);
       },
     );
+
+    // Initialize Services
+    this.auth = new AuthService(this);
+    this.user = new UserService(this);
+    this.membership = this.user.membership;
+    this.inviteCode = new InviteCodeService(this);
+    this.cms = new CMSService(this);
+    this.system = new SystemService(this);
+  }
+
+  // 通用请求方法 (Wrapper)
+  public get<T = any>(url: string, config?: AxiosRequestConfig): Promise<APIResponse<T>> {
+    return this.client.get(url, config);
+  }
+
+  public post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<APIResponse<T>> {
+    return this.client.post(url, data, config);
+  }
+
+  public put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<APIResponse<T>> {
+    return this.client.put(url, data, config);
+  }
+
+  public delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<APIResponse<T>> {
+    return this.client.delete(url, config);
+  }
+
+  public patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<APIResponse<T>> {
+    return this.client.patch(url, data, config);
   }
 
   private async refresh(refreshToken: string): Promise<string> {
@@ -279,85 +310,6 @@ class APIClient {
     };
   }
 
-  // 认证相关
-  auth = {
-    // ========== 验证码发送 ==========
-    sendCode: (phone: string) =>
-      this.client.post<APIResponse>('/auth/send-code', { phone }),
-
-    sendEmailCode: (email: string, scene?: string) =>
-      this.client.post<APIResponse>('/auth/email/send-code', { email, scene }),
-
-    // ========== 登录接口 ==========
-    loginWithCode: (phone: string, code: string, referrerId?: string | null) =>
-      this.client.post<APIResponse>('/auth/login', {
-        phone,
-        code,
-        referrer_id: referrerId ?? null
-      }),
-
-    login: (phone: string, code: string, referrerId?: string | null) =>
-      this.client.post<APIResponse>('/auth/login', {
-        phone,
-        code,
-        referrer_id: referrerId ?? null
-      }),
-
-    loginWithPassword: (account: string, password: string) =>
-      this.client.post<APIResponse>('/auth/login/password', { account, password }),
-
-    passwordLogin: (account: string, password: string) =>
-      this.client.post<APIResponse>('/auth/login/password', { account, password }),
-
-    loginWithEmailCode: (email: string, code: string, referrerId?: string | null) =>
-      this.client.post<APIResponse>('/auth/email/login', {
-        email,
-        code,
-        referrer_id: referrerId ?? null,
-      }),
-
-    loginWithEmail: (email: string, code: string) =>
-      this.client.post<APIResponse>('/auth/login/email', { email, code }),
-
-    // ========== 注册接口 ==========
-    register: (phone: string, password: string, referrerId?: string | null) =>
-      this.client.post<APIResponse>('/auth/register', {
-        phone,
-        password,
-        referrer_id: referrerId ?? null,
-      }),
-
-    registerWithEmail: (email: string, code: string, password: string, referrerId?: string | null) =>
-      this.client.post<APIResponse>('/auth/email/register', {
-        email,
-        code,
-        password,
-        referrer_id: referrerId ?? null,
-      }),
-
-    wechatLogin: (code: string) =>
-      this.client.post<APIResponse>('/auth/wechat-login', { code }),
-
-    setPassword: (newPassword: string, oldPassword?: string) =>
-      this.client.post<APIResponse>('/auth/set-password', {
-        newPassword,
-        oldPassword,
-      }),
-
-    resetPassword: (params: { phone?: string; email?: string; code: string; newPassword: string }) =>
-      this.client.post<APIResponse>('/auth/reset-password', params),
-
-    me: () => this.client.get<APIResponse>('/auth/me'),
-  };
-
-  // 会员相关
-  membership = {
-    purchase: (channel: string) =>
-      this.client.post<APIResponse>('/membership/purchase', { channel }),
-
-    status: () => this.client.get<APIResponse>('/membership/status'),
-  };
-
   // 任务相关
   task = {
     create: (data: {
@@ -385,11 +337,9 @@ class APIClient {
 
   // 管理相关
   admin = {
-    getUsers: (params: any) =>
-      this.client.get<APIResponse>('/admin/users', { params }),
-
-    updateUser: (userId: string, data: { status: string }) =>
-      this.client.patch<APIResponse>(`/admin/users/${userId}`, data),
+    // Users delegated to UserService
+    getUsers: (params: any) => this.user.admin.getUsers(params),
+    updateUser: (userId: string, data: { status: string }) => this.user.admin.updateUser(userId, data),
 
     // 仪表盘概览
     getOverview: () =>
@@ -401,7 +351,15 @@ class APIClient {
     getFailedTasks: (params: any) =>
       this.client.get<APIResponse>('/admin/failed-tasks', { params }),
 
-    getFeatures: (params?: { search?: string; enabled?: boolean; category?: string; limit?: number; offset?: number }) =>
+    getFeatures: (params?: {
+      search?: string;
+      enabled?: boolean;
+      category?: string;
+      limit?: number;
+      offset?: number;
+      sort_by?: string;
+      sort_order?: 'asc' | 'desc';
+    }) =>
       this.client.get<APIResponse>('/admin/features', { params }),
 
     getFeatureByKey: (featureKey: string) =>
@@ -410,7 +368,7 @@ class APIClient {
     createFeature: (data: any) =>
       this.client.post<APIResponse>('/admin/features', data),
 
-    // Feature Wizard创建（CMS-208）- 艹！专用于向导页面！
+    // Feature Wizard创建（CMS-208）- 专用于向导页面！
     createFeatureFromWizard: (data: {
       feature_id: string;
       display_name: string;
@@ -489,6 +447,26 @@ class APIClient {
     // AI助手
     chatWithAI: (data: AIChatRequest) =>
       this.client.post<APIResponse<AIChatResponse>>('/admin/ai/chat', data),
+
+    // 系统初始化
+    initializeSystem: () =>
+      this.client.post<APIResponse>('/admin/system/init'),
+  };
+
+  adminAiHelper = {
+    getConfig: () => this.client.get<APIResponse>('/admin/ai-helper/config'),
+    saveConfig: (data: {
+      enabled?: boolean;
+      apiUrl?: string | null;
+      apiKey?: string;
+      defaultModel?: string | null;
+      allowedModels?: string[];
+      systemPrompt?: string | null;
+      resetApiKey?: boolean;
+    }) => this.client.post<APIResponse>('/admin/ai-helper/config', data),
+    testConnection: (data?: { apiUrl?: string; apiKey?: string; type?: string; protocol?: string; baseUrl?: string; model?: string }) =>
+      this.client.post<APIResponse>('/admin/ai-helper/test', data),
+    getModels: () => this.client.get<APIResponse>('/admin/ai-helper/models'),
   };
 
   // 素材库相关
@@ -504,10 +482,10 @@ class APIClient {
   pipeline = {
     // Pipeline Schema管理
     getSchemas: (params?: { category?: string; limit?: number; offset?: number }) =>
-      this.client.get<APIResponse>('/admin/pipeline-schemas', { params }),
+      this.get<any>('/admin/pipeline-schemas', { params }),
 
     getSchemaById: (id: string) =>
-      this.client.get<APIResponse>(`/admin/pipeline-schemas/${id}`),
+      this.get<any>(`/admin/pipeline-schemas/${id}`),
 
     createSchema: (data: {
       schema_name: string;
@@ -516,7 +494,7 @@ class APIClient {
       nodes: any[];
       edges: any[];
       metadata?: Record<string, any>;
-    }) => this.client.post<APIResponse>('/admin/pipeline-schemas', data),
+    }) => this.post<any>('/admin/pipeline-schemas', data),
 
     updateSchema: (id: string, data: {
       schema_name?: string;
@@ -525,22 +503,22 @@ class APIClient {
       nodes?: any[];
       edges?: any[];
       metadata?: Record<string, any>;
-    }) => this.client.put<APIResponse>(`/admin/pipeline-schemas/${id}`, data),
+    }) => this.put<any>(`/admin/pipeline-schemas/${id}`, data),
 
     deleteSchema: (id: string) =>
-      this.client.delete<APIResponse>(`/admin/pipeline-schemas/${id}`),
+      this.delete<any>(`/admin/pipeline-schemas/${id}`),
 
     cloneSchema: (id: string, data?: { schema_name?: string }) =>
-      this.client.post<APIResponse>(`/admin/pipeline-schemas/${id}/clone`, data),
+      this.post<any>(`/admin/pipeline-schemas/${id}/clone`, data),
 
     validateSchema: (id: string) =>
-      this.client.post<APIResponse>(`/admin/pipeline-schemas/${id}/validate`),
+      this.post<any>(`/admin/pipeline-schemas/${id}/validate`),
 
     getCategories: () =>
-      this.client.get<APIResponse>('/admin/pipeline-schemas/categories'),
+      this.get<any>('/admin/pipeline-schemas/categories'),
 
     getStats: () =>
-      this.client.get<APIResponse>('/admin/pipeline-schemas/stats'),
+      this.get<any>('/admin/pipeline-schemas/stats'),
 
     // Pipeline Execution管理
     getExecutions: (params?: {
@@ -548,7 +526,7 @@ class APIClient {
       status?: string;
       limit?: number;
       offset?: number;
-    }) => this.client.get<APIResponse>('/admin/pipeline-executions', { params }),
+    }) => this.get<any>('/admin/pipeline-executions', { params }),
 
     getExecution: (id: string) =>
       this.client.get<APIResponse>(`/admin/pipeline-executions/${id}`),
@@ -575,6 +553,32 @@ class APIClient {
       this.client.get<APIResponse>('/admin/pipeline-executions/health'),
   };
 
+  // ============ MCP API ============
+  mcp = {
+    listEndpoints: (params?: { page?: number; limit?: number; enabled?: boolean; healthy?: boolean }) =>
+      this.client.get<APIResponse>('/admin/mcp/endpoints', { params }),
+
+    getEndpoint: (id: string) =>
+      this.client.get<APIResponse>(`/admin/mcp/endpoints/${id}`),
+
+    createEndpoint: (data: {
+      name: string;
+      endpointUrl: string;
+      apiKey?: string;
+      description?: string;
+      protocolVersion?: string;
+    }) => this.client.post<APIResponse>('/admin/mcp/endpoints', data),
+
+    updateEndpoint: (id: string, data: any) =>
+      this.client.put<APIResponse>(`/admin/mcp/endpoints/${id}`, data),
+
+    deleteEndpoint: (id: string) =>
+      this.client.delete<APIResponse>(`/admin/mcp/endpoints/${id}`),
+
+    testEndpoint: (id: string) =>
+      this.client.post<APIResponse>(`/admin/mcp/endpoints/${id}/test`),
+  };
+
   // ============ Provider相关API ============
   provider = {
     // 获取已注册的Provider列表
@@ -589,7 +593,7 @@ class APIClient {
     getHealth: () =>
       this.client.get<APIResponse>('/circuit-breaker/health'),
 
-    // ============ Provider管理API（艹！新增）============
+    // ============ Provider管理API（新增）============
 
     // 列出所有Provider端点
     listProviders: (params?: { limit?: number; offset?: number; auth_type?: string }) =>
@@ -650,6 +654,71 @@ class APIClient {
         name: string;
       };
     }) => this.client.post<APIResponse>('/distribution/withdraw', data),
+  };
+
+  adminPromptTemplates = {
+    list: (params?: { page?: number; limit?: number; status?: string; category?: string; search?: string }) =>
+      this.get<any>('/admin/prompt-templates', { params }),
+
+    get: (id: string) =>
+      this.get<any>(`/admin/prompt-templates/${id}`),
+
+    create: (data: any) =>
+      this.post<any>('/admin/prompt-templates', data),
+
+    update: (id: string, data: any) =>
+      this.put<any>(`/admin/prompt-templates/${id}`, data),
+
+    delete: (id: string) =>
+      this.delete<any>(`/admin/prompt-templates/${id}`),
+
+    publish: (id: string) =>
+      this.post<any>(`/admin/prompt-templates/${id}/publish`),
+
+    getHistory: (id: string) =>
+      this.get<any>(`/admin/prompt-templates/${id}/history`),
+
+    rollback: (id: string, data: { targetVersion: number; reason?: string }) =>
+      this.post<any>(`/admin/prompt-templates/${id}/rollback`, data),
+
+    refreshProtocol: () =>
+      this.post<any>('/admin/prompt-templates/ai-architect/refresh-protocol'),
+
+    getStats: () =>
+      this.get<any>('/admin/prompt-templates/stats'),
+  };
+
+  // ============ AI Architect API ============
+  aiArchitect = {
+    // 生成新的 Pipeline
+    generate: (data: {
+      userRequest: string;
+      category?: string;
+      metadata?: Record<string, any>;
+    }) => this.post<any>('/admin/architect/generate', data),
+
+    // 修改现有 Pipeline
+    modify: (data: {
+      currentPipeline: {
+        version: string;
+        meta: { name: string; description: string };
+        nodes: any[];
+        edges: any[];
+      };
+      modificationRequest: string;
+    }) => this.post<any>('/admin/architect/modify', data),
+
+    // 获取系统提示词预览
+    getSystemPrompt: () =>
+      this.get<any>('/admin/prompt-templates/ai-architect/system-prompt'),
+
+    // 获取修改提示词
+    getModifyPrompt: () =>
+      this.get<any>('/admin/prompt-templates/ai-architect/modify-prompt'),
+
+    // 预览错误反馈
+    previewErrorFeedback: (errorMessage: string) =>
+      this.post<any>('/admin/prompt-templates/ai-architect/preview-error-feedback', { errorMessage }),
   };
 
   adminDistribution = {

@@ -5,14 +5,36 @@
  * 艹！使用GPT5工业级框架重构，代码量从544行减少到240行！
  */
 
-import { useState, useEffect } from 'react';
-import { Button, Space, Tag, Tooltip, Modal, message, Drawer, Form, Input, Select, Card, Row, Col, Spin, Alert } from 'antd';
+import { useState, useEffect, useRef } from 'react';
+import {
+  Button,
+  Space,
+  Tag,
+  Tooltip,
+  Modal,
+  message,
+  Drawer,
+  Form,
+  Input,
+  Select,
+  Card,
+  Row,
+  Col,
+  Spin,
+  Alert,
+  Switch,
+  AutoComplete,
+} from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   ApiOutlined,
   KeyOutlined,
+  BulbOutlined, // 艹！智能解析图标
+  ReloadOutlined,
+  CopyOutlined,
+  RadarChartOutlined, // 能力探测图标
 } from '@ant-design/icons';
 import api from '@/lib/api';
 import type { ColumnType } from 'antd/es/table';
@@ -29,6 +51,7 @@ import {
   Provider,
   ProviderInput,
   QualityTier,
+  ProviderCapabilities,
 } from '@/lib/services/adminProviders';
 
 /**
@@ -75,20 +98,46 @@ const CREDENTIALS_FIELDS_MAP: Record<
   ],
 };
 
+type QuickTestStatus = 'idle' | 'testing' | 'success' | 'error';
+
+interface ModelOption {
+  id: string;
+  object?: string;
+  owned_by?: string;
+  [key: string]: any;
+}
+
+const normalizeModelCatalog = (value: unknown): ModelOption[] => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value as ModelOption[];
+  }
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? (parsed as ModelOption[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
 export default function ProvidersPage() {
   // ========== 新框架：使用useTableData Hook统一管理状态 ==========
   const tableData = useTableData<Provider>({
     fetcher: async (params) => {
+      // useTableData传递的params结构: { page, pageSize, ...filters }
       const response = await adminProviders.list({
-        limit: params.pagination.pageSize,
-        offset: params.pagination.offset,
-        ...(params.filters.auth_type ? { auth_type: params.filters.auth_type } : {}),
+        limit: params.pageSize,
+        offset: (params.page - 1) * params.pageSize,
+        ...(params.auth_type ? { auth_type: params.auth_type } : {}),
       });
 
       // 前端关键词筛选
       let items = response.items;
-      if (params.filters.keyword) {
-        const keyword = params.filters.keyword.toLowerCase();
+      if (params.keyword) {
+        const keyword = params.keyword.toLowerCase();
         items = items.filter(
           (p) =>
             p.provider_name.toLowerCase().includes(keyword) ||
@@ -109,15 +158,39 @@ export default function ProvidersPage() {
   const [drawerMode, setDrawerMode] = useState<'create' | 'edit'>('create');
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [form] = Form.useForm();
+  const authType = Form.useWatch('auth_type', form);
 
   // API Key Modal状态（艹！快速更新API Key专用）
   const [apiKeyModalVisible, setApiKeyModalVisible] = useState(false);
   const [apiKeyProvider, setApiKeyProvider] = useState<Provider | null>(null);
   const [apiKeyForm] = Form.useForm();
 
+  // 智能解析Modal状态
+  const [parserVisible, setParserVisible] = useState(false);
+  const [isParsing, setIsParsing] = useState(false);
+  const [exampleCode, setExampleCode] = useState('');
+
   // Provider健康状态（艹！实时监控Provider健康度）
   const [healthData, setHealthData] = useState<any>(null);
   const [healthLoading, setHealthLoading] = useState(false);
+
+  const [quickTestResult, setQuickTestResult] = useState<{
+    status: QuickTestStatus;
+    message?: string;
+    latency?: number;
+    models: ModelOption[];
+    testedAt?: string;
+  }>({
+    status: 'idle',
+    models: [],
+  });
+  const [autoTestEnabled, setAutoTestEnabled] = useState(true);
+  const autoTestTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+
+  // 模型能力缓存（艹！存储已探测的能力信息）
+  const [capabilitiesMap, setCapabilitiesMap] = useState<Record<string, ProviderCapabilities | null>>({});
+  const [detectingProviders, setDetectingProviders] = useState<Set<string>>(new Set());
 
   /**
    * 加载Provider健康状态
@@ -127,11 +200,14 @@ export default function ProvidersPage() {
       setHealthLoading(true);
       const response = await api.provider.getProviderHealth();
 
-      if (response.data.success && response.data.data) {
-        setHealthData(response.data.data);
+      if ((response as any)?.success && response.data) {
+        setHealthData(response.data);
+      } else {
+        message.warning((response as any)?.message || '获取健康数据失败');
       }
     } catch (error: any) {
       console.error('[ProviderHealth] 加载失败:', error);
+      message.error(error?.message || '获取健康数据失败');
     } finally {
       setHealthLoading(false);
     }
@@ -144,6 +220,25 @@ export default function ProvidersPage() {
     const interval = setInterval(loadProviderHealth, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (autoTestTimerRef.current) {
+        clearTimeout(autoTestTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!drawerVisible && autoTestTimerRef.current) {
+      clearTimeout(autoTestTimerRef.current);
+    }
+    if (!drawerVisible) {
+      setQuickTestResult({ status: 'idle', models: [] });
+      setModelOptions([]);
+    }
+  }, [drawerVisible]);
+
 
   // ========== 新框架：FilterBar配置 ==========
   const filterConfig: FilterConfig[] = [
@@ -196,6 +291,14 @@ export default function ProvidersPage() {
       ),
     },
     {
+      title: '默认模型',
+      dataIndex: 'default_model',
+      key: 'default_model',
+      width: 180,
+      render: (model: string | undefined) =>
+        model ? <Tag color="purple">{model}</Tag> : <Tag color="default">未设置</Tag>,
+    },
+    {
       title: '认证类型',
       dataIndex: 'auth_type',
       key: 'auth_type',
@@ -238,12 +341,69 @@ export default function ProvidersPage() {
       title: '状态',
       dataIndex: 'enabled',
       key: 'enabled',
-      width: 80,
-      render: (enabled: boolean | undefined) => (
-        <Tag color={enabled === false ? 'red' : 'green'}>
-          {enabled === false ? '已禁用' : '已启用'}
-        </Tag>
+      width: 100,
+      render: (enabled: boolean | undefined, record: Provider) => (
+        <Tooltip title={enabled === false ? '点击启用' : '点击禁用'}>
+          <Switch
+            checked={enabled !== false}
+            onChange={(checked) => handleToggle(record.provider_ref, checked)}
+            checkedChildren="启用"
+            unCheckedChildren="禁用"
+          />
+        </Tooltip>
       ),
+    },
+    {
+      title: '模型能力',
+      key: 'capabilities',
+      width: 200,
+      render: (_: any, record: Provider) => {
+        const isLLM = record.provider_ref.startsWith('llm_') ||
+          record.provider_name.toLowerCase().includes('deepseek') ||
+          record.provider_name.toLowerCase().includes('openai') ||
+          record.provider_name.toLowerCase().includes('qwen');
+        if (!isLLM) return <Tag color="default">非LLM</Tag>;
+
+        const caps = capabilitiesMap[record.provider_ref];
+        const isDetecting = detectingProviders.has(record.provider_ref);
+
+        if (isDetecting) {
+          return <Spin size="small" />;
+        }
+
+        if (!caps) {
+          return (
+            <Tooltip title="点击探测能力">
+              <Button
+                size="small"
+                type="link"
+                icon={<RadarChartOutlined />}
+                onClick={() => handleDetectCapabilities(record.provider_ref)}
+              >
+                未探测
+              </Button>
+            </Tooltip>
+          );
+        }
+
+        return (
+          <Space size={2} wrap>
+            {caps.tool_use && <Tag color="blue" style={{ margin: 1 }}>工具</Tag>}
+            {caps.parallel_tool_use && <Tag color="cyan" style={{ margin: 1 }}>并行</Tag>}
+            {caps.vision && <Tag color="green" style={{ margin: 1 }}>视觉</Tag>}
+            {caps.json_mode && <Tag color="purple" style={{ margin: 1 }}>JSON</Tag>}
+            <Tooltip title="重新探测">
+              <Button
+                size="small"
+                type="text"
+                icon={<ReloadOutlined />}
+                onClick={() => handleDetectCapabilities(record.provider_ref)}
+                style={{ padding: 0, height: 'auto' }}
+              />
+            </Tooltip>
+          </Space>
+        );
+      },
     },
     {
       title: '创建时间',
@@ -301,6 +461,8 @@ export default function ProvidersPage() {
     setEditingProvider(null);
     form.resetFields();
     setDrawerVisible(true);
+    setQuickTestResult({ status: 'idle', models: [] });
+    setModelOptions([]);
   };
 
   /**
@@ -325,7 +487,10 @@ export default function ProvidersPage() {
         weight: fullProvider.weight,
         cost_per_1k_tokens: fullProvider.cost_per_1k_tokens,
         enabled: fullProvider.enabled !== undefined ? fullProvider.enabled : true,
+        default_model: fullProvider.default_model || undefined,
       });
+      setQuickTestResult({ status: 'idle', models: [] });
+      setModelOptions(normalizeModelCatalog(fullProvider.model_catalog));
     } catch (error: any) {
       message.error(`加载Provider详情失败: ${error.message}`);
     }
@@ -385,6 +550,81 @@ export default function ProvidersPage() {
   };
 
   /**
+   * 切换Provider启用/禁用状态
+   * 艹！实时开关，立即生效！
+   */
+  const handleToggle = async (providerRef: string, enabled: boolean) => {
+    try {
+      await adminProviders.toggle(providerRef, enabled);
+      message.success(enabled ? 'Provider已启用' : 'Provider已禁用');
+      tableData.refresh();
+    } catch (error: any) {
+      message.error(`操作失败: ${error.message}`);
+      // 刷新数据以恢复开关状态
+      tableData.refresh();
+    }
+  };
+
+  /**
+   * 加载单个Provider的能力信息
+   */
+  const loadCapabilities = async (providerRef: string) => {
+    try {
+      const caps = await adminProviders.getCapabilities(providerRef);
+      setCapabilitiesMap(prev => ({ ...prev, [providerRef]: caps }));
+    } catch (error) {
+      console.warn(`加载能力失败: ${providerRef}`, error);
+    }
+  };
+
+  /**
+   * 手动触发能力探测
+   * 艹！探测 LLM 模型的 tool_use / vision / json_mode 等能力！
+   */
+  const handleDetectCapabilities = async (providerRef: string) => {
+    setDetectingProviders(prev => new Set(prev).add(providerRef));
+    const hide = message.loading(`正在探测 ${providerRef} 的能力...`, 0);
+
+    try {
+      const result = await adminProviders.detectCapabilities(providerRef);
+      hide();
+
+      if (result.success) {
+        message.success(`探测完成 (${result.duration_ms}ms)`);
+        setCapabilitiesMap(prev => ({ ...prev, [providerRef]: result.capabilities as ProviderCapabilities }));
+      } else {
+        message.warning(`部分探测失败: ${result.errors.join(', ')}`);
+        setCapabilitiesMap(prev => ({ ...prev, [providerRef]: result.capabilities as ProviderCapabilities }));
+      }
+    } catch (error: any) {
+      hide();
+      message.error(`探测失败: ${error.message}`);
+    } finally {
+      setDetectingProviders(prev => {
+        const next = new Set(prev);
+        next.delete(providerRef);
+        return next;
+      });
+    }
+  };
+
+  // 页面加载时获取所有 LLM Provider 的能力
+  useEffect(() => {
+    if (tableData.data) {
+      tableData.data.forEach((provider: Provider) => {
+        if (provider.provider_ref.startsWith('llm_') ||
+          provider.provider_name.toLowerCase().includes('deepseek') ||
+          provider.provider_name.toLowerCase().includes('openai') ||
+          provider.provider_name.toLowerCase().includes('qwen')) {
+          if (!capabilitiesMap[provider.provider_ref]) {
+            loadCapabilities(provider.provider_ref);
+          }
+        }
+      });
+    }
+  }, [tableData.data]);
+
+  /**
    * 打开API Key更新Modal
    * 艹！快速更新API Key，不需要填写其他字段！
    */
@@ -428,6 +668,151 @@ export default function ProvidersPage() {
     }
   };
 
+  const buildCredentialPayload = () => {
+    const values = form.getFieldsValue();
+    const authTypeValue = values.auth_type;
+    const credentialFields = CREDENTIALS_FIELDS_MAP[authTypeValue] || [];
+    const credentials: Record<string, any> = {};
+    let missingRequired = false;
+
+    credentialFields.forEach((field) => {
+      const isOptional = field.label.includes('可选');
+      if (!values[field.name]) {
+        if (!isOptional) {
+          missingRequired = true;
+        }
+        return;
+      }
+      credentials[field.name] = values[field.name];
+    });
+
+    return { credentials, missingRequired };
+  };
+
+  const triggerPreviewTest = async (options: { manual?: boolean } = {}) => {
+    const values = form.getFieldsValue();
+    const endpointUrl = typeof values.endpoint_url === 'string' ? values.endpoint_url.trim() : '';
+
+    if (!endpointUrl || !values.auth_type) {
+      if (options.manual) {
+        message.warning('请先填写API端点和认证类型');
+      }
+      return;
+    }
+
+    const { credentials, missingRequired } = buildCredentialPayload();
+    if (missingRequired) {
+      if (options.manual) {
+        message.warning('请填写完整的认证凭证');
+      }
+      return;
+    }
+
+    setQuickTestResult((prev) => ({
+      ...prev,
+      status: 'testing',
+      message: '正在验证凭证...',
+      models: prev.models || [],
+    }));
+
+    try {
+      const response = await adminProviders.previewConfig({
+        endpoint_url: endpointUrl,
+        auth_type: values.auth_type,
+        credentials,
+        provider_name: values.provider_name,
+      });
+
+      const detectedModels = response.models || [];
+      setQuickTestResult({
+        status: response.healthy ? 'success' : 'error',
+        message: response.message,
+        latency: response.latency,
+        models: detectedModels,
+        testedAt: response.tested_at,
+      });
+      if (detectedModels.length > 0) {
+        setModelOptions(detectedModels);
+        if (!form.getFieldValue('default_model')) {
+          form.setFieldsValue({ default_model: detectedModels[0]?.id });
+        }
+      }
+
+      if (options.manual) {
+        if (response.healthy) {
+          message.success(response.message || '密钥校验通过');
+        } else {
+          message.error(response.message || '连接异常');
+        }
+      }
+    } catch (error: any) {
+      setQuickTestResult({
+        status: 'error',
+        message: error.message || '测试失败',
+        models: [],
+      });
+      if (options.manual) {
+        message.error(error.message || '测试失败');
+      }
+    }
+  };
+
+  const scheduleAutoTest = () => {
+    if (!autoTestEnabled || !drawerVisible) return;
+    if (autoTestTimerRef.current) {
+      clearTimeout(autoTestTimerRef.current);
+    }
+    autoTestTimerRef.current = setTimeout(() => {
+      triggerPreviewTest();
+    }, 1200);
+  };
+
+  const handleFormValuesChange = (changedValues: Record<string, unknown>) => {
+    if (changedValues.auth_type) {
+      setQuickTestResult({ status: 'idle', models: [] });
+      setModelOptions([]);
+    }
+
+    const currentAuthType = form.getFieldValue('auth_type');
+    const credentialFieldNames = (CREDENTIALS_FIELDS_MAP[currentAuthType] || []).map((field) => field.name);
+    const shouldTrigger =
+      Object.keys(changedValues).some(
+        (key) => key === 'endpoint_url' || key === 'auth_type' || credentialFieldNames.includes(key)
+      );
+
+    if (shouldTrigger) {
+      scheduleAutoTest();
+    }
+  };
+
+  const handleCopyModel = async (modelId: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(modelId);
+        message.success(`已复制模型 ${modelId}`);
+        return;
+      } catch {
+        // fallthrough to info message
+      }
+    }
+    message.info(`模型ID: ${modelId}`);
+  };
+
+  const handleSelectModel = (modelId: string) => {
+    form.setFieldsValue({ default_model: modelId });
+    message.success(`已选择模型 ${modelId}`);
+  };
+
+  const handleAutoTestToggle = (checked: boolean) => {
+    setAutoTestEnabled(checked);
+    if (!checked && autoTestTimerRef.current) {
+      clearTimeout(autoTestTimerRef.current);
+    }
+    if (checked) {
+      scheduleAutoTest();
+    }
+  };
+
   /**
    * 提交表单（创建或更新）
    */
@@ -456,6 +841,8 @@ export default function ProvidersPage() {
         weight: values.weight,
         cost_per_1k_tokens: values.cost_per_1k_tokens,
         enabled: values.enabled !== undefined ? values.enabled : true,
+        default_model: values.default_model || null,
+        model_catalog: modelOptions.length ? modelOptions : null,
       };
 
       if (drawerMode === 'create') {
@@ -468,6 +855,7 @@ export default function ProvidersPage() {
 
       setDrawerVisible(false);
       form.resetFields();
+      setQuickTestResult({ status: 'idle', models: [] });
       tableData.refresh();
     } catch (error: any) {
       if (error.errorFields) {
@@ -483,7 +871,7 @@ export default function ProvidersPage() {
    * 艹！根据认证类型动态显示不同的输入框！
    */
   const renderCredentialFields = () => {
-    const authType = form.getFieldValue('auth_type');
+    // const authType = form.getFieldValue('auth_type'); // 使用 useWatch 获取的 authType
     if (!authType) return null;
 
     const fields = CREDENTIALS_FIELDS_MAP[authType] || [];
@@ -503,6 +891,57 @@ export default function ProvidersPage() {
         />
       </Form.Item>
     ));
+  };
+
+  /**
+   * 智能解析API示例
+   */
+  const handleParseExample = async () => {
+    if (!exampleCode.trim()) {
+      message.warning('请先粘贴代码示例');
+      return;
+    }
+
+    setIsParsing(true);
+    try {
+      // 调用后端解析接口
+      const response = await api.client.post('/admin/providers/parse-example', {
+        example: exampleCode,
+      });
+
+      if (response.data.success) {
+        const config = response.data.data;
+        message.success('解析成功！已自动填充表单');
+
+        // 关闭解析弹窗，打开创建弹窗
+        setParserVisible(false);
+        handleCreate();
+
+        // 自动填充表单
+        // 注意：这里使用了setTimeout来确保Drawer打开后再填充，虽然React状态更新通常够快
+        setTimeout(() => {
+          form.setFieldsValue({
+            provider_name: config.name,
+            provider_ref: config.name?.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.floor(Math.random() * 1000),
+            endpoint_url: config.baseUrl,
+            auth_type: 'api_key', // 默认假设，后续可以让AI判断
+            // 如果有高级字段，这里也可以填充
+          });
+
+          // 如果解析结果包含 request_template 等动态字段，也应该填充
+          // 但目前的表单还没有这些字段，这是下一步"前端界面升级"的后半部分
+        }, 100);
+      } else {
+        const errorMessage =
+          response.data?.error?.message || response.data?.message || '未知错误';
+        message.error(`解析失败：${errorMessage}`);
+      }
+    } catch (error: any) {
+      console.error('智能解析失败', error);
+      message.error('智能解析失败，请检查后端服务');
+    } finally {
+      setIsParsing(false);
+    }
   };
 
   // ========== 渲染UI（新框架组件） ==========
@@ -588,25 +1027,41 @@ export default function ProvidersPage() {
         onFilter={tableData.setFilters}
       />
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-          新建Provider
-        </Button>
+        <Space>
+          <Button
+            icon={<BulbOutlined />}
+            onClick={() => setParserVisible(true)}
+            style={{
+              background: 'linear-gradient(135deg, #E2B0FF 0%, #9F44D3 100%)',
+              color: 'white',
+              border: 'none',
+              boxShadow: '0 4px 10px rgba(159, 68, 211, 0.3)',
+            }}
+          >
+            智能解析 (Beta)
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+            新建Provider
+          </Button>
+        </Space>
       </div>
 
       {/* 新框架：DataTable */}
-      <DataTable
-        columns={columns}
-        dataSource={tableData.data}
-        loading={tableData.loading}
-        rowKey="provider_ref"
-        pagination={{
-          current: tableData.currentPage,
-          pageSize: tableData.pageSize,
-          total: tableData.total,
-          onChange: tableData.onPageChange,
-        }}
-        scroll={{ x: 1200 }}
-      />
+      <div style={{ overflowX: 'auto' }}>
+        <DataTable
+          columns={columns}
+          dataSource={tableData.data}
+          loading={tableData.loading}
+          rowKey="provider_ref"
+          pagination={{
+            current: tableData.currentPage,
+            pageSize: tableData.pageSize,
+            total: tableData.total,
+            onChange: tableData.onPageChange,
+          }}
+          scroll={{ x: 'max-content' }}
+        />
+      </div>
 
       {/* 创建/编辑 Drawer */}
       <Drawer
@@ -626,7 +1081,12 @@ export default function ProvidersPage() {
           </Space>
         }
       >
-        <Form form={form} layout="vertical">
+        <Form
+          name="provider_config_form"
+          form={form}
+          layout="vertical"
+          onValuesChange={handleFormValuesChange}
+        >
           {/* Provider引用ID */}
           <Form.Item
             name="provider_ref"
@@ -692,6 +1152,92 @@ export default function ProvidersPage() {
 
           {/* 动态凭证字段 */}
           {renderCredentialFields()}
+
+          <Card
+            size="small"
+            style={{ marginBottom: 24, background: '#fafafa' }}
+            styles={{ body: { padding: 16 } }}
+          >
+            <Space size="middle" style={{ marginBottom: 12 }} wrap>
+              <Space>
+                <Switch size="small" checked={autoTestEnabled} onChange={handleAutoTestToggle} />
+                <span>自动测试密钥</span>
+              </Space>
+              <Tooltip title="立即验证当前API Key并尝试获取模型列表">
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  loading={quickTestResult.status === 'testing'}
+                  onClick={() => triggerPreviewTest({ manual: true })}
+                >
+                  立即测试
+                </Button>
+              </Tooltip>
+            </Space>
+            {quickTestResult.status === 'idle' && (
+              <Alert type="info" showIcon message="填写端点和凭证后将自动校验密钥" />
+            )}
+            {quickTestResult.status === 'testing' && (
+              <Alert type="info" showIcon message="正在验证密钥..." />
+            )}
+            {quickTestResult.status === 'success' && (
+              <Alert
+                type="success"
+                showIcon
+                message="密钥可用"
+                description={`${quickTestResult.message || ''}${quickTestResult.latency ? ` · 延迟 ${quickTestResult.latency}ms` : ''
+                  }`}
+              />
+            )}
+            {quickTestResult.status === 'error' && (
+              <Alert
+                type="error"
+                showIcon
+                message="密钥不可用"
+                description={quickTestResult.message || '连接失败，请检查端点或API Key'}
+              />
+            )}
+
+            {quickTestResult.models && quickTestResult.models.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ marginBottom: 8, fontWeight: 600 }}>检测到的模型（点击复制ID）</div>
+                <Space size={[8, 8]} wrap>
+                  {quickTestResult.models.map((model) => (
+                    <Tag
+                      color="blue"
+                      key={model.id}
+                      onClick={() => handleSelectModel(model.id)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {model.id}
+                      <CopyOutlined
+                        style={{ marginLeft: 6 }}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleCopyModel(model.id);
+                        }}
+                      />
+                    </Tag>
+                  ))}
+                </Space>
+              </div>
+            )}
+          </Card>
+
+          <Form.Item
+            name="default_model"
+            label="默认模型"
+            extra="保存后作为该Provider的默认模型，可手动输入或选择上方检测到的模型"
+          >
+            <AutoComplete
+              placeholder="例如：deepseek-chat"
+              options={modelOptions.map((model) => ({ value: model.id, label: model.id }))}
+              allowClear
+              filterOption={(inputValue, option) =>
+                (option?.value ?? '').toLowerCase().includes(inputValue.toLowerCase())
+              }
+            />
+          </Form.Item>
 
           {/* 分隔线 */}
           <div style={{ borderTop: '1px solid #f0f0f0', margin: '24px 0' }} />
@@ -776,11 +1322,11 @@ export default function ProvidersPage() {
             name="enabled"
             label="启用状态"
             valuePropName="checked"
+            initialValue={true}
             tooltip="禁用后，该Provider不会被路由选择"
           >
             <Select
               placeholder="选择状态"
-              defaultValue={true}
               options={[
                 { label: '启用', value: true },
                 { label: '禁用', value: false },
@@ -819,6 +1365,7 @@ export default function ProvidersPage() {
         okText="更新"
         cancelText="取消"
         width={500}
+        centered
       >
         <div
           style={{
@@ -860,6 +1407,71 @@ export default function ProvidersPage() {
           <p style={{ margin: 0, color: '#d46b08', fontSize: '12px' }}>
             🔒 API Key将使用AES-256-GCM加密后存储，安全可靠
           </p>
+        </div>
+      </Modal>
+
+      {/* 智能解析Modal */}
+      <Modal
+        title={
+          <Space>
+            <BulbOutlined style={{ color: '#9F44D3' }} />
+            <span style={{ background: 'linear-gradient(135deg, #E2B0FF 0%, #9F44D3 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 'bold' }}>
+              智能API解析器
+            </span>
+          </Space>
+        }
+        open={parserVisible}
+        onCancel={() => setParserVisible(false)}
+        footer={null}
+        width={600}
+        centered
+        styles={{ body: { maxHeight: '80vh', overflowY: 'auto' } }}
+      >
+        <Alert
+          message="粘贴官方文档示例，AI帮您自动配置"
+          description="支持 cURL 命令、Python 代码片段或 JSON 请求体。DeepSeek 将自动提取 URL、参数结构和认证方式。"
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+
+        <Input.TextArea
+          rows={8}
+          placeholder={`例如：\ncurl https://api.openai.com/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer $OPENAI_API_KEY" \\\n  -d '{\n    "model": "gpt-4",\n    "messages": [{"role": "user", "content": "Hello!"}]\n  }'`}
+          value={exampleCode}
+          onChange={(e) => setExampleCode(e.target.value)}
+          style={{ fontFamily: 'monospace', fontSize: '12px', marginBottom: 8 }}
+        />
+
+        <div style={{ marginBottom: 16, display: 'flex', gap: 8 }}>
+          <Button
+            size="small"
+            type="dashed"
+            onClick={() => setExampleCode(`curl https://www.runninghub.cn/task/openapi/create \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -d '{}'`)}
+          >
+            试一试 RunningHub 模板
+          </Button>
+        </div>
+
+        <div style={{ textAlign: 'right' }}>
+          <Button onClick={() => setParserVisible(false)} style={{ marginRight: 8 }}>
+            取消
+          </Button>
+          <Button
+            type="primary"
+            icon={isParsing ? <Spin indicator={<ApiOutlined spin />} /> : <BulbOutlined />}
+            onClick={handleParseExample}
+            loading={isParsing}
+            style={{
+              background: 'linear-gradient(135deg, #9F44D3 0%, #722ED1 100%)',
+              border: 'none',
+            }}
+          >
+            {isParsing ? '正在分析...' : '一键解析'}
+          </Button>
         </div>
       </Modal>
     </div>

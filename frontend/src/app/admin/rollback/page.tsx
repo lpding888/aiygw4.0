@@ -56,7 +56,7 @@ import {
   EyeOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import api from '@/lib/api';
 import type { ColumnsType } from 'antd/es/table';
 import {
   type VersionInfo,

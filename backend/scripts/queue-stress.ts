@@ -1,6 +1,7 @@
-﻿import queueService from '../src/services/queue.service.js';
-import { closeRedis } from '../src/config/redis.js';
-import { db } from '../src/config/database.js';
+﻿import { configManager } from '../src/config/config.manager.js';
+import { initializeDatabase, db } from '../src/config/database.js';
+import { initializeRedis, closeRedis } from '../src/config/redis.js';
+import queueService from '../src/services/queue.service.js';
 
 const [, , queueArg, totalJobsArg, concurrencyArg] = process.argv;
 const queueName = queueArg ?? 'task_processing';
@@ -8,9 +9,32 @@ const totalJobs = Number.parseInt(totalJobsArg ?? '50', 10);
 const concurrency = Number.parseInt(concurrencyArg ?? '5', 10);
 const jobName = '__diagnostic__';
 
+async function initialize() {
+  // 1. 初始化配置管理器
+  await configManager.initialize();
+  console.log('[queue-stress] ConfigManager 初始化完成');
+
+  // 2. 初始化数据库
+  await initializeDatabase();
+  console.log('[queue-stress] Database 初始化完成');
+
+  // 3. 初始化Redis
+  await initializeRedis();
+  console.log('[queue-stress] Redis 初始化完成');
+
+  // 4. 初始化队列服务
+  await queueService.initialize();
+  console.log('[queue-stress] QueueService 初始化完成');
+}
+
 async function main() {
+  // 执行初始化
+  await initialize();
+
   console.log(`[queue-stress] 准备向 ${queueName} 注入 ${totalJobs} 个任务 (并发=${concurrency})`);
-  queueService.registerProcessor(
+
+  // 注意：registerProcessor 需要 await
+  await queueService.registerProcessor(
     queueName,
     jobName,
     async () => {
@@ -18,6 +42,7 @@ async function main() {
     },
     { concurrency }
   );
+  console.log('[queue-stress] 处理器注册完成');
 
   const payloads = Array.from({ length: totalJobs }).map((_, index) => ({
     name: jobName,
@@ -64,5 +89,11 @@ main()
   .finally(async () => {
     await queueService.close().catch(() => undefined);
     await closeRedis().catch(() => undefined);
-    await db.destroy().catch(() => undefined);
+    // 只有在数据库已初始化时才调用destroy
+    try {
+      await db.destroy();
+    } catch {
+      // 忽略未初始化的情况
+    }
   });
+

@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Tag, Button, Modal, message, Space, Avatar } from 'antd';
-import { UserOutlined, StopOutlined, CheckCircleOutlined, CrownOutlined } from '@ant-design/icons';
+import { Tag, Button, Modal, message, Space, Avatar, Tooltip } from 'antd';
+import { UserOutlined, StopOutlined, CheckCircleOutlined, CrownOutlined, EyeOutlined } from '@ant-design/icons';
 import {
   DataTable,
   FilterBar,
@@ -12,6 +12,7 @@ import {
 } from '@/shared/ui/DataTable';
 import { useTableData } from '@/shared/hooks/useTableData';
 import { api } from '@/lib/api';
+import UserDetailDrawer from './components/UserDetailDrawer';
 
 const { confirm } = Modal;
 
@@ -35,6 +36,9 @@ const DEFAULT_FILTERS = {
 };
 
 export default function UsersPage() {
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+
   // ========== 使用useTableData Hook统一管理状态 ==========
   const tableData = useTableData<User>({
     fetcher: async ({ pagination, filters }) => {
@@ -79,6 +83,11 @@ export default function UsersPage() {
     });
   };
 
+  const handleViewUser = (user: User) => {
+    setSelectedUser(user);
+    setDrawerVisible(true);
+  };
+
   // ========== FilterBar配置 ==========
   const filterConfig: FilterConfig[] = [
     {
@@ -119,9 +128,9 @@ export default function UsersPage() {
     {
       title: '用户',
       key: 'user',
-      width: 200,
+      width: 250,
       render: (_: any, record: User) => (
-        <Space>
+        <Space className="cursor-pointer hover:opacity-80 transition-opacity" onClick={() => handleViewUser(record)}>
           <Avatar src={record.avatar} icon={<UserOutlined />} />
           <div>
             <div style={{ fontWeight: 500 }}>{record.nickname || record.username}</div>
@@ -185,13 +194,18 @@ export default function UsersPage() {
       width: 150,
       fixed: 'right',
       render: (_: any, record: User) => (
-        <Button
-          type="link"
-          danger={record.status === 'active'}
-          onClick={() => handleToggleStatus(record)}
-        >
-          {record.status === 'active' ? '封禁' : '解封'}
-        </Button>
+        <Space>
+          <Tooltip title="查看详情">
+            <Button type="text" icon={<EyeOutlined />} onClick={() => handleViewUser(record)} />
+          </Tooltip>
+          <Button
+            type="link"
+            danger={record.status === 'active'}
+            onClick={() => handleToggleStatus(record)}
+          >
+            {record.status === 'active' ? '封禁' : '解封'}
+          </Button>
+        </Space>
       ),
     },
   ];
@@ -222,6 +236,12 @@ export default function UsersPage() {
           onChange: tableData.pagination.goToPage,
         }}
         scroll={{ x: 1200 }}
+      />
+
+      <UserDetailDrawer
+        visible={drawerVisible}
+        onClose={() => setDrawerVisible(false)}
+        user={selectedUser}
       />
     </div>
   );

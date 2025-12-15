@@ -42,9 +42,9 @@ const isTestEnvironment = process.env.NODE_ENV === 'test';
 class TokenService {
   private readonly redis: RedisInstance;
 
-  private readonly accessTokenExpiry = '15m';
+  private readonly accessTokenExpiry = '24h';
 
-  private readonly refreshTokenExpiry = '7d';
+  private readonly refreshTokenExpiry = '30d';
 
   private readonly blacklistTTL = 7 * 24 * 60 * 60; // 7 天
 

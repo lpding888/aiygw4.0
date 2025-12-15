@@ -1,4 +1,5 @@
 declare const providerRegistryService: {
+  initialize: (builtinProviders?: Record<string, unknown>) => Promise<void>;
   getRegisteredProviders: () => any[];
   getAllProviderStates: () => any;
   isProviderRegistered: (name: string) => boolean;

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import COS from 'cos-nodejs-sdk-v5';
 import logger from '../utils/logger.js';
-import taskService from './task.service.js';
+import taskStatusGateway from './task-status.gateway.js';
 import contentAuditService from './contentAudit.service.js';
 
 interface PicOperations {
@@ -78,7 +78,7 @@ class ImageProcessService {
         inputImageUrl,
         useMock: this.useMock
       });
-      await taskService.updateStatus(taskId, 'processing', {});
+      await taskStatusGateway.updateStatus(taskId, 'processing', {});
       let resultUrls: string[];
       if (this.useMock) {
         resultUrls = await this.mockProcessBasicClean(taskId, inputImageUrl);
@@ -96,13 +96,13 @@ class ImageProcessService {
         logger.warn(`[ImageProcessService] 内容审核未通过 taskId=${taskId}`);
         throw new Error('内容审核未通过');
       }
-      await taskService.updateStatus(taskId, 'success', { resultUrls });
+      await taskStatusGateway.updateStatus(taskId, 'success', { resultUrls });
       logger.info(`[ImageProcessService] 基础修图完成 taskId=${taskId} count=${resultUrls.length}`);
       return resultUrls;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '未知错误';
       logger.error(`[ImageProcessService] 基础修图失败: ${message}`, { taskId, error });
-      await taskService.updateStatus(taskId, 'failed', {
+      await taskStatusGateway.updateStatus(taskId, 'failed', {
         errorMessage: message || '图片处理失败'
       });
       throw error;

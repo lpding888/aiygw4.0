@@ -1,0 +1,52 @@
+{
+  "name": "RunningHub AI 模特生成",
+  "type": "GENERIC_HTTP",
+  "description": "调用 RunningHub 官方 API 生成 AI 模特图 (12分镜)",
+  "config": {
+    "req_template": {
+      "method": "POST",
+      "url": "https://www.runninghub.cn/task/openapi/ai-app/run",
+      "headers": {
+        "Content-Type": "application/json",
+        "Host": "www.runninghub.cn"
+      },
+      "body": {
+        "webappId": "1982694711750213634",
+        "apiKey": "{{apiKey}}",
+        "nodeInfoList": [
+          {
+            "nodeId": "103",
+            "fieldName": "text",
+            "fieldValue": "{{prompt}}",
+            "description": "输入提示词"
+          },
+          {
+            "nodeId": "74",
+            "fieldName": "image",
+            "fieldValue": "{{imageUrl}}",
+            "description": "输入图片"
+          }
+        ]
+      },
+      "timeout": 30000,
+      "polling": {
+        "url": "https://www.runninghub.cn/task/openapi/ai-app/run/v1/status/{{data.data.taskId}}",
+        "method": "GET",
+        "headers": {
+          "Authorization": "Bearer {{apiKey}}"
+        },
+        "interval": 3000,
+        "timeout": 300000,
+        "successCondition": "status == 'SUCCESS'",
+        "failCondition": "status == 'FAILED'",
+        "resultPath": "outputs"
+      },
+      "extractPath": "data.taskId"
+    },
+    "variables": {
+      "apiKey": "",
+      "prompt": "",
+      "imageUrl": ""
+    }
+  }
+}

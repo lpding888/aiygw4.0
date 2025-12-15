@@ -56,7 +56,7 @@ import {
   ApiOutlined
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api/client';
+import api from '@/lib/api';
 import { MSWInitializer } from '@/components/MSWInitializer';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -117,7 +117,7 @@ export default function KBStatsPage() {
   const { data: queueStats, isLoading: queueLoading } = useQuery({
     queryKey: ['queue-stats'],
     queryFn: async () => {
-      const response = await api.get('/admin/kb/queue-stats');
+      const response = await api.client.get('/admin/kb/queue-stats');
       return response.data;
     },
     refetchInterval: 5000, // 5秒刷新一次
@@ -127,7 +127,7 @@ export default function KBStatsPage() {
   const { data: systemStats, isLoading: systemLoading } = useQuery({
     queryKey: ['system-stats'],
     queryFn: async () => {
-      const response = await api.get('/admin/kb/system-stats');
+      const response = await api.client.get('/admin/kb/system-stats');
       return response.data;
     },
     refetchInterval: 10000, // 10秒刷新一次
@@ -137,7 +137,7 @@ export default function KBStatsPage() {
   const { data: processingRecords, isLoading: recordsLoading } = useQuery({
     queryKey: ['processing-records'],
     queryFn: async () => {
-      const response = await api.get('/admin/kb/processing-records');
+      const response = await api.client.get('/admin/kb/processing-records');
       return response.data;
     },
     refetchInterval: 3000, // 3秒刷新一次
@@ -146,7 +146,7 @@ export default function KBStatsPage() {
   // 检索测试
   const searchMutation = useMutation({
     mutationFn: async (params: { query: string; topK: number; threshold: number }) => {
-      const response = await api.post('/admin/kb/search', params);
+      const response = await api.client.post('/admin/kb/search', params);
       return response.data;
     },
     onSuccess: (data) => {

@@ -16,6 +16,32 @@ import * as providerEndpointsRepo from '../repositories/providerEndpoints.repo.j
 import type { ProviderEndpoint } from '../repositories/providerEndpoints.repo.js';
 import logger from '../utils/logger.js';
 import { EventEmitter } from 'events';
+import systemConfigService from './systemConfig.service.js';
+
+/**
+ * Embedding请求接口
+ */
+export interface EmbeddingRequest {
+  model: string;
+  input: string | string[];
+}
+
+/**
+ * Embedding响应接口
+ */
+export interface EmbeddingResponse {
+  object: 'list';
+  data: Array<{
+    object: 'embedding';
+    embedding: number[];
+    index: number;
+  }>;
+  model: string;
+  usage: {
+    prompt_tokens: number;
+    total_tokens: number;
+  };
+}
 
 /**
  * Chat消息接口
@@ -109,6 +135,7 @@ class AIGatewayService {
     this.registerAdapter('openai', new OpenAIAdapter());
     this.registerAdapter('anthropic', new AnthropicAdapter());
     this.registerAdapter('buildingai', new BuildingAIAdapter());
+    this.registerAdapter('deepseek', new DeepSeekAdapter()); // Register DeepSeek adapter
   }
 
   /**
@@ -138,7 +165,7 @@ class AIGatewayService {
 
       logger.info(
         `[AIGateway] Chat请求: provider=${provider.provider_ref} ` +
-          `model=${request.model} stream=${request.stream || false}`
+        `model=${request.model} stream=${request.stream || false}`
       );
 
       // 获取适配器
@@ -161,7 +188,7 @@ class AIGatewayService {
 
       logger.info(
         `[AIGateway] Chat响应成功: provider=${provider.provider_ref} ` +
-          `tokens=${adaptedResponse.usage?.total_tokens || 'N/A'}`
+        `tokens=${adaptedResponse.usage?.total_tokens || 'N/A'}`
       );
 
       return adaptedResponse;
@@ -267,17 +294,43 @@ class AIGatewayService {
    * 选择Provider（负载均衡）
    * @private
    */
-  private async selectProvider(_model: string): Promise<ProviderEndpoint> {
-    // 简化实现：选择第一个可用的Provider
-    // 实际项目中应该实现负载均衡、权重选择等策略
-
-    const providers = await providerEndpointsRepo.listProviderEndpoints({});
+  private async selectProvider(model: string): Promise<ProviderEndpoint> {
+    // 1. 获取所有可用Provider
+    let providers = await providerEndpointsRepo.listProviderEndpoints({ enabled: true });
 
     if (providers.length === 0) {
       throw new Error('No available providers');
     }
 
-    // 按权重选择
+    // 2. 根据模型名称过滤Provider
+    // 如果请求的是特定模型（如 deepseek-chat），则优先选择对应的Provider
+    if (model.toLowerCase().includes('deepseek')) {
+      const deepseekProviders = providers.filter((p) =>
+        p.provider_name.toLowerCase().includes('deepseek')
+      );
+      if (deepseekProviders.length > 0) {
+        providers = deepseekProviders;
+      }
+    } else if (model.toLowerCase().includes('gpt') || model.toLowerCase().includes('openai')) {
+      const openaiProviders = providers.filter((p) =>
+        p.provider_name.toLowerCase().includes('openai')
+      );
+      if (openaiProviders.length > 0) {
+        providers = openaiProviders;
+      }
+    } else if (
+      model.toLowerCase().includes('claude') ||
+      model.toLowerCase().includes('anthropic')
+    ) {
+      const anthropicProviders = providers.filter((p) =>
+        p.provider_name.toLowerCase().includes('anthropic')
+      );
+      if (anthropicProviders.length > 0) {
+        providers = anthropicProviders;
+      }
+    }
+
+    // 3. 按权重负载均衡选择
     const totalWeight = providers.reduce((sum, p) => sum + (p.weight ?? 100), 0) || 1;
     let random = Math.random() * totalWeight;
 
@@ -301,7 +354,9 @@ class AIGatewayService {
       ? 'openai'
       : providerName.toLowerCase().includes('anthropic')
         ? 'anthropic'
-        : 'buildingai';
+        : providerName.toLowerCase().includes('deepseek') // Identify DeepSeek providers
+          ? 'deepseek'
+          : 'buildingai';
 
     const adapter = this.adapters.get(providerType);
     if (!adapter) {
@@ -321,11 +376,107 @@ class AIGatewayService {
     const authType = provider.auth_type;
     const credentials = provider.credentials_encrypted as Record<string, unknown> | undefined;
 
-    if (authType === 'bearer' && credentials?.api_key) {
+    // DeepSeek uses API key in Authorization: Bearer header
+    if (provider.provider_name.toLowerCase().includes('deepseek') && credentials?.api_key) {
+      headers['Authorization'] = `Bearer ${credentials.api_key as string}`;
+    } else if (authType === 'bearer' && credentials?.api_key) {
       headers['Authorization'] = `Bearer ${credentials.api_key as string}`;
     }
 
     return headers;
+  }
+
+  /**
+   * 生成向量 (Embeddings)
+   * 支持协议: OpenAI (以及兼容的 Local/OneAPI), Zhipu
+   * 配置来源: SystemConfig (AI_EMBEDDING_*)
+   */
+  async embedDocuments(texts: string[]): Promise<number[][]> {
+    try {
+      // 1. 获取动态配置
+      const config = await systemConfigService.getMultiple([
+        'AI_EMBEDDING_PROTOCOL', // openai | zhipu
+        'AI_EMBEDDING_BASE_URL',
+        'AI_EMBEDDING_API_KEY',
+        'AI_EMBEDDING_MODEL'
+      ]);
+
+      const protocol = (config['AI_EMBEDDING_PROTOCOL'] as string) || 'openai';
+      const baseUrl = (config['AI_EMBEDDING_BASE_URL'] as string) || 'https://api.openai.com/v1';
+      const apiKey = (config['AI_EMBEDDING_API_KEY'] as string) || '';
+      const model = (config['AI_EMBEDDING_MODEL'] as string) || 'text-embedding-3-small';
+
+      if (!apiKey && protocol !== 'local' && protocol !== 'openai') {
+        // local 可能不需要key，openai 肯定需要，但如果用 baseUrl 代理也不一定
+        // 简单日志提示即可
+        logger.warn('[AIGateway] Embedding API Key未配置');
+      }
+
+      logger.info(`[AIGateway] Embedding请求: protocol=${protocol} model=${model} count=${texts.length}`);
+
+      let vectors: number[][] = [];
+
+      if (protocol === 'openai' || protocol === 'local') {
+        vectors = await this.embedOpenAICompatible(texts, baseUrl, apiKey, model);
+      } else if (protocol === 'zhipu') {
+        vectors = await this.embedZhipu(texts, baseUrl, apiKey, model);
+      } else {
+        // 默认尝试 OpenAI 兼容模式
+        vectors = await this.embedOpenAICompatible(texts, baseUrl, apiKey, model);
+      }
+
+      return vectors;
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      logger.error('[AIGateway] Embedding请求失败:', err);
+      throw err;
+    }
+  }
+
+  private async embedOpenAICompatible(
+    texts: string[],
+    baseUrl: string,
+    apiKey: string,
+    model: string
+  ): Promise<number[][]> {
+    // 自动补全 /embeddings 路径 (如果用户只填了 hostname)
+    // 如果已有 /embeddings 结尾则不动
+    // 注意：有些 BaseURL 如 https://api.openai.com/v1 需要拼 /embeddings
+    // 有些如 http://localhost:11434/api/embeddings (Ollama) 可能不同，但这里假设 OpenAI 兼容格式
+    const url = baseUrl.endsWith('/embeddings')
+      ? baseUrl
+      : `${baseUrl.replace(/\/+$/, '')}/embeddings`;
+
+    const response = await axios.post<EmbeddingResponse>(
+      url,
+      { input: texts, model },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        timeout: 60000
+      }
+    );
+
+    if (!response.data?.data) {
+      throw new Error('Invalid embedding response');
+    }
+
+    return response.data.data.sort((a, b) => a.index - b.index).map((item) => item.embedding);
+  }
+
+  private async embedZhipu(
+    texts: string[],
+    baseUrl: string,
+    apiKey: string,
+    model: string
+  ): Promise<number[][]> {
+    const targetUrl = baseUrl && baseUrl !== 'https://api.openai.com/v1'
+      ? baseUrl
+      : 'https://open.bigmodel.cn/api/paas/v4';
+
+    return this.embedOpenAICompatible(texts, targetUrl, apiKey, model);
   }
 }
 
@@ -465,6 +616,40 @@ class BuildingAIAdapter implements ProviderAdapter {
     }
   }
 }
+
+/**
+ * DeepSeek适配器
+ */
+class DeepSeekAdapter implements ProviderAdapter {
+  adaptRequest(request: ChatRequest): Record<string, unknown> {
+    // DeepSeek API 与 OpenAI Chat Completions 基本兼容
+    return {
+      model: request.model,
+      messages: request.messages,
+      temperature: request.temperature,
+      max_tokens: request.max_tokens,
+      top_p: request.top_p,
+      stream: request.stream,
+      tools: request.tools,
+      tool_choice: request.tool_choice,
+      user: request.user
+    };
+  }
+
+  adaptResponse(response: Record<string, unknown>): ChatResponse {
+    return response as unknown as ChatResponse;
+  }
+
+  adaptStreamChunk(chunk: string): ChatResponse | null {
+    try {
+      return JSON.parse(chunk);
+    } catch {
+      return null;
+    }
+  }
+}
+
+// ... (previous code)
 
 // 单例导出
 export const aiGateway = new AIGatewayService();

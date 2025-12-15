@@ -13,10 +13,10 @@ exports.up = async function (knex) {
     return;
   }
 
-  // 检查是否已经有type字段
-  const hasTypeColumn = await knex.schema.hasColumn(tableName, 'type');
-  if (hasTypeColumn) {
-    console.log('✓ provider_endpoints表已包含type字段，跳过');
+  // 检查是否已经有provider_ref字段（如果有则跳过）
+  const hasProviderRefColumn = await knex.schema.hasColumn(tableName, 'provider_ref');
+  if (hasProviderRefColumn) {
+    console.log('✓ provider_endpoints表已包含provider_ref字段，跳过');
     return;
   }
 
@@ -24,7 +24,7 @@ exports.up = async function (knex) {
 
   await knex.schema.alterTable(tableName, (table) => {
     // 添加新字段（nullable，保持向后兼容）
-    table.string('id', 36).nullable().comment('UUID主键（新增）');
+    table.string('provider_ref', 100).nullable().comment('供应商引用ID(llm_openai/llm_claude等)');
     table.string('type', 50).nullable().comment('Provider类型(openai/claude/qwen等)');
     table.text('description').nullable().comment('详细描述');
     table.string('base_url', 500).nullable().comment('API基础URL');
@@ -38,6 +38,7 @@ exports.up = async function (knex) {
     table.integer('created_by').unsigned().nullable().comment('创建者ID');
 
     // 添加索引
+    table.index(['provider_ref']);
     table.index(['enabled']);
     table.index(['status']);
     table.index(['type']);
@@ -51,7 +52,7 @@ exports.down = async function (knex) {
 
   await knex.schema.alterTable(tableName, (table) => {
     // 删除新增的列
-    table.dropColumn('id');
+    table.dropColumn('provider_ref');
     table.dropColumn('type');
     table.dropColumn('description');
     table.dropColumn('base_url');

@@ -4,6 +4,9 @@ import { db } from '../config/database.js';
 import logger from '../utils/logger.js';
 import encryptionUtils from '../utils/encryption.js';
 import { aiGateway } from '../services/ai-gateway.service.js';
+import pipelineSimulationService from '../services/pipelineSimulation.service.js'; // Import new simulation service
+import pipelineExecutionService from '../services/pipelineExecution.service.js';
+import type { SimulationPipeline } from '../services/pipelineSimulation.service.js';
 
 type CountValue = string | number | bigint | null | undefined;
 
@@ -111,18 +114,9 @@ class AdminController {
     this.getDistributorDetail = this.getDistributorDetail.bind(this);
     this.getDistributorReferrals = this.getDistributorReferrals.bind(this);
     this.getDistributorCommissions = this.getDistributorCommissions.bind(this);
-    this.approveDistributor = this.approveDistributor.bind(this);
-    this.getWithdrawals = this.getWithdrawals.bind(this);
-    this.approveWithdrawal = this.approveWithdrawal.bind(this);
-    this.rejectWithdrawal = this.rejectWithdrawal.bind(this);
-    this.getDistributionSettings = this.getDistributionSettings.bind(this);
-    this.updateDistributionSettings = this.updateDistributionSettings.bind(this);
+    this.initializeSystem = this.initializeSystem.bind(this);
+    this.generatePipeline = this.generatePipeline.bind(this);
   }
-
-  /**
-   * 获取用户列表
-   * GET /api/admin/users?limit=10&offset=0&isMember=true
-   */
   async getUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { limit = 20, offset = 0, isMember } = req.query as Record<string, unknown>;
@@ -185,11 +179,11 @@ class AdminController {
     activeMembers: number;
     memberRate: string;
   }> {
-    const totalUsersCount = await fetchCount(db('users'));
-    const memberUsersCount = await fetchCount(db('users').where('isMember', true));
-    const activeMembersCount = await fetchCount(
-      db('users').where('isMember', true).where('quota_expireAt', '>', new Date())
-    );
+    const [totalUsersCount, memberUsersCount, activeMembersCount] = await Promise.all([
+      fetchCount(db('users')),
+      fetchCount(db('users').where('isMember', true)),
+      fetchCount(db('users').where('isMember', true).where('quota_expireAt', '>', new Date()))
+    ]);
 
     return {
       totalUsers: totalUsersCount,
@@ -309,12 +303,13 @@ class AdminController {
     processingTasks: number;
     successRate: string;
   }> {
-    const totalTasksCount = await fetchCount(db('tasks'));
-    const successTasksCount = await fetchCount(db('tasks').where('status', 'success'));
-    const failedTasksCount = await fetchCount(db('tasks').where('status', 'failed'));
-    const processingTasksCount = await fetchCount(
-      db('tasks').whereIn('status', ['pending', 'processing'])
-    );
+    const [totalTasksCount, successTasksCount, failedTasksCount, processingTasksCount] =
+      await Promise.all([
+        fetchCount(db('tasks')),
+        fetchCount(db('tasks').where('status', 'success')),
+        fetchCount(db('tasks').where('status', 'failed')),
+        fetchCount(db('tasks').whereIn('status', ['pending', 'processing']))
+      ]);
 
     return {
       totalTasks: totalTasksCount,
@@ -366,23 +361,27 @@ class AdminController {
    */
   async getOverview(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userStats = await this.getUserStats();
-      const taskStats = await this.getTaskStats();
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
 
-      // 获取订单统计
-      const totalOrders = await fetchCount(db('orders'));
-      const paidOrders = await fetchCount(db('orders').where('status', 'paid'));
+      const [
+        userStats,
+        taskStats,
+        totalOrders,
+        paidOrders,
+        todayUsers,
+        todayTasks
+      ] = await Promise.all([
+        this.getUserStats(),
+        this.getTaskStats(),
+        fetchCount(db('orders')),
+        fetchCount(db('orders').where('status', 'paid')),
+        fetchCount(db('users').where('created_at', '>=', todayStart)),
+        fetchCount(db('tasks').where('created_at', '>=', todayStart))
+      ]);
 
       // 计算总收入(简化,实际应从orders表的amount字段累加)
       const revenue = paidOrders * 99;
-
-      // 今日新增用户
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayUsers = await fetchCount(db('users').where('created_at', '>=', todayStart));
-
-      // 今日新增任务
-      const todayTasks = await fetchCount(db('tasks').where('created_at', '>=', todayStart));
 
       res.json({
         success: true,
@@ -409,12 +408,42 @@ class AdminController {
    * 获取所有功能卡片（包括禁用的,但不包括软删除的）
    * GET /api/admin/features
    */
-  async getFeatures(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getFeatures(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      // 添加分页参数支持
+      const limit = Math.min(Number.parseInt(req.query.limit as string) || 50, 200);
+      const offset = Math.max(Number.parseInt(req.query.offset as string) || 0, 0);
+
+      // 只查询必要字段，提升性能
       const features = await db('feature_definitions')
         .whereNull('deleted_at')
-        .select('*')
-        .orderBy('created_at', 'desc');
+        .select(
+          'id',
+          'feature_id',
+          'feature_key',
+          'name',
+          'display_name',
+          'description',
+          'category',
+          'type',
+          'icon',
+          'is_enabled',
+          'metadata',
+          'allowed_accounts',
+          'created_at',
+          'updated_at'
+        )
+        .orderBy('created_at', 'desc')
+        .limit(limit)
+        .offset(offset);
+
+      // 获取总数
+      const totalResult = await db('feature_definitions')
+        .whereNull('deleted_at')
+        .count('* as count')
+        .first();
+
+      const total = Number.parseInt(totalResult?.count as string) || 0;
 
       // 反序列化 allowed_accounts 为数组
       features.forEach((f) => {
@@ -429,7 +458,14 @@ class AdminController {
 
       res.json({
         success: true,
-        features
+        data: {
+          features,
+          pagination: {
+            total,
+            limit,
+            offset
+          }
+        }
       });
     } catch (error) {
       logAndNext(next, error, '[AdminController] 获取功能列表失败');
@@ -768,6 +804,35 @@ ${context || '无'}
   }
 
   /**
+   * 智能生成Pipeline
+   * POST /api/admin/pipelines/generate
+   */
+  async generatePipeline(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { prompt } = req.body;
+      if (!prompt) {
+        res.status(400).json({
+          success: false,
+          error: { code: 4001, message: '提示词不能为空' }
+        });
+        return;
+      }
+
+      // 动态导入以避免循环依赖
+      const pipelineGeneratorService = (await import('../services/pipelineGenerator.service.js')).default;
+
+      const pipeline = await pipelineGeneratorService.generatePipeline(prompt);
+
+      res.json({
+        success: true,
+        data: pipeline
+      });
+    } catch (error) {
+      logAndNext(next, error, '[AdminController] 智能生成失败');
+    }
+  }
+
+  /**
    * 测试运行Pipeline
    * POST /api/admin/pipelines/test
    */
@@ -783,7 +848,7 @@ ${context || '无'}
         return;
       }
 
-      // 创建临时任务ID
+      // 临时任务ID
       const taskId = `test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const user = req.user as { id?: string } | undefined;
       if (!user?.id) {
@@ -795,69 +860,75 @@ ${context || '无'}
       }
       const userId = user.id;
 
-      // 记录测试任务（可选：存入数据库或仅在内存中运行）
-      // 这里为了简单起见，我们模拟创建一个临时任务记录，以便PipelineEngine可以使用
-      await db('tasks').insert({
-        id: taskId,
-        userId,
-        type: 'test_run',
-        status: 'pending',
-        input: JSON.stringify(input || {}),
-        created_at: new Date(),
-        updated_at: new Date()
-      });
+      // 1. 构建 V1 Protocol Schema
+      // PipelineBuilder 传来的 pipeline 通常包含 nodes/edges 等
+      // 我们需要将其包装成完整的 schema_definition
+      const pipelineSchemaV1 = {
+        version: "1.0",
+        meta: { name: "Test Execution" },
+        nodes: pipeline.nodes,
+        edges: pipeline.edges,
+        config: { max_duration_seconds: 300, concurrency_limit: 1 }
+      };
 
-      // 异步执行Pipeline
-      // 注意：这里我们需要修改PipelineEngine以支持直接传入Pipeline Schema，而不是从数据库读取
-      // 或者我们可以临时创建一个Feature/PipelineSchema记录
-
-      // 方案B：直接调用PipelineEngine的内部方法（需要PipelineEngine支持）
-      // 由于PipelineEngine当前是从数据库读取Schema，我们先创建一个临时的PipelineSchema记录
+      // 2. 插入临时 Schema (使用 schema_definition 字段)
       const tempPipelineId = `temp_schema_${taskId}`;
       await db('pipeline_schemas').insert({
-        pipeline_id: tempPipelineId,
-        steps: JSON.stringify(pipeline.nodes), // 注意：这里简化了，实际上需要转换nodes/edges为steps
+        pipeline_id: tempPipelineId, // Legacy ID 兼容
+        // 使用新引擎的核心字段
+        schema_definition: JSON.stringify(pipelineSchemaV1),
+        schema_version: 1, // 标记为新版 (Integer)
+        // 兼容旧字段（可选，防止非空约束）
+        steps: '[]',
         created_at: new Date(),
         updated_at: new Date()
       });
 
-      // 创建临时Feature
-      const tempFeatureId = `temp_feature_${taskId}`;
-      await db('feature_definitions').insert({
-        feature_id: tempFeatureId,
-        feature_key: tempFeatureId,
-        feature_name: 'Test Run',
-        pipeline_schema_ref: tempPipelineId,
-        quota_cost: 0,
-        created_at: new Date(),
-        updated_at: new Date()
-      });
-
-      // 触发执行
-      // 注意：executePipeline是异步的，我们这里不等待它完成，而是返回taskId
-      // 前端可以通过轮询任务状态来获取结果
-      import('../services/pipelineEngine.service.js').then(async (module) => {
-        const pipelineEngine = module.default;
-        try {
-          await pipelineEngine.executePipeline(taskId, tempFeatureId, input || {});
-        } catch (err) {
-          logger.error(`[TestRun] 执行失败 taskId=${taskId}`, err);
-        } finally {
-          // 清理临时数据 (可选，或者保留用于调试)
-          // await db('feature_definitions').where('feature_id', tempFeatureId).delete();
-          // await db('pipeline_schemas').where('pipeline_id', tempPipelineId).delete();
-        }
-      });
+      // 3. 触发新引擎执行
+      // dispatch 返回 runId
+      const runId = await pipelineExecutionService.dispatch(tempPipelineId, userId, input || {});
 
       res.json({
         success: true,
         data: {
-          taskId,
-          message: '测试任务已启动'
+          taskId: runId, // V2 使用 runId 作为 taskId
+          message: '测试任务已启动 (V2 Engine)'
         }
       });
     } catch (error) {
       logAndNext(next, error, '[AdminController] 测试运行失败');
+    }
+  }
+
+  /**
+   * 模拟运行Pipeline
+   * POST /api/admin/pipelines/simulate
+   */
+  async simulatePipeline(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { pipeline, initialInputs } = req.body;
+
+      // Basic validation
+      if (!pipeline || !pipeline.nodes || !pipeline.edges) {
+        res.status(400).json({
+          success: false,
+          error: { code: 4001, message: '无效的Pipeline配置' }
+        });
+        return;
+      }
+
+      // Call the simulation service
+      const simulationReport = await pipelineSimulationService.simulatePipeline(
+        pipeline as SimulationPipeline,
+        initialInputs || {}
+      );
+
+      res.json({
+        success: true,
+        data: simulationReport
+      });
+    } catch (error) {
+      logAndNext(next, error, '[AdminController] 模拟运行失败');
     }
   }
 
@@ -1539,7 +1610,149 @@ ${context || '无'}
       logAndNext(next, error, '[AdminController] 更新佣金设置失败');
     }
   }
+
+  /**
+   * 系统初始化：注入初始 Provider 配置
+   * POST /api/admin/system/init
+   */
+  async initializeSystem(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      // 检查是否已有数据
+      const existing = await db('provider_configs').count({ count: '*' }).first();
+      const count = existing ? normalizeCount(existing.count) : 0;
+
+      if (count > 0) {
+        res.json({
+          success: true,
+          message: '系统已初始化，无需重复操作',
+          data: { initialized: true }
+        });
+        return;
+      }
+
+      // 插入初始 Provider 配置 (复用 seeds/001_init_provider_configs.cjs 的逻辑)
+      await db('provider_configs').insert([
+        // ========== RunningHub Provider ==========
+        {
+          provider_id: 'runninghub_main',
+          provider_name: 'RunningHub 主服务',
+          type: 'runninghub',
+          description: 'AI 工作流主服务',
+          is_enabled: true,
+          priority: 10,
+          config: JSON.stringify({
+            api_url: 'https://api.runninghub.ai',
+            api_key_ref: 'RUNNING_HUB_API_KEY', // 引用环境变量
+            workflow_id: 'default_workflow',
+            timeout: 30000,
+            retry_count: 3,
+            features: ['image_generation', 'text_processing']
+          }),
+          metadata: JSON.stringify({
+            provider: 'runninghub',
+            version: 'v1',
+            region: 'global'
+          }),
+          created_at: new Date(),
+          updated_at: new Date()
+        },
+
+        // ========== 邮件服务 Provider ==========
+        {
+          provider_id: 'email_smtp_main',
+          provider_name: 'SMTP 邮件服务',
+          type: 'email',
+          description: '邮箱验证码发送服务',
+          is_enabled: true,
+          priority: 10,
+          config: JSON.stringify({
+            host: process.env.SMTP_HOST || 'smtp.example.com',
+            port: parseInt(process.env.SMTP_PORT || '465'),
+            secure: true,
+            auth: {
+              user_ref: 'SMTP_USER', // 引用环境变量
+              pass_ref: 'SMTP_PASSWORD' // 引用环境变量
+            },
+            from: {
+              name: 'AI衣柜',
+              address: process.env.SMTP_FROM || 'noreply@example.com'
+            },
+            timeout: 10000,
+            rate_limit: {
+              max_per_hour: 100,
+              max_per_day: 1000
+            }
+          }),
+          metadata: JSON.stringify({
+            provider: 'smtp',
+            version: 'v1'
+          }),
+          created_at: new Date(),
+          updated_at: new Date()
+        },
+
+        // ========== 腾讯云 SCF Provider ==========
+        {
+          provider_id: 'tencent_scf_main',
+          provider_name: '腾讯云云函数',
+          type: 'scf',
+          description: '图片后处理云函数',
+          is_enabled: false, // 默认禁用，需要配置后启用
+          priority: 20,
+          config: JSON.stringify({
+            region: 'ap-guangzhou',
+            function_name: 'image-post-process',
+            namespace: 'default',
+            secret_id_ref: 'COS_SECRET_ID',
+            secret_key_ref: 'COS_SECRET_KEY',
+            timeout: 60000,
+            memory: 512
+          }),
+          metadata: JSON.stringify({
+            provider: 'tencent_cloud',
+            service: 'scf',
+            version: 'v1'
+          }),
+          created_at: new Date(),
+          updated_at: new Date()
+        },
+
+        // ========== 图片同步处理 Provider ==========
+        {
+          provider_id: 'image_sync_main',
+          provider_name: '同步图片处理',
+          type: 'sync_image',
+          description: '本地同步图片处理服务',
+          is_enabled: true,
+          priority: 30,
+          config: JSON.stringify({
+            max_file_size: 10485760, // 10MB
+            allowed_types: ['image/jpeg', 'image/png', 'image/webp'],
+            quality: 85,
+            max_width: 2048,
+            max_height: 2048,
+            timeout: 5000
+          }),
+          metadata: JSON.stringify({
+            provider: 'local',
+            version: 'v1'
+          }),
+          created_at: new Date(),
+          updated_at: new Date()
+        }
+      ]);
+
+      logger.info('[AdminController] 系统初始化成功：Provider 配置已注入');
+
+      res.json({
+        success: true,
+        message: '系统初始化成功',
+        data: { initialized: true }
+      });
+    } catch (error) {
+      logAndNext(next, error, '[AdminController] 系统初始化失败');
+    }
+  }
 }
 
-const adminController = new AdminController();
-export default adminController;
+export default new AdminController();

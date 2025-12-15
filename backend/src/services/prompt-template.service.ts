@@ -5,9 +5,9 @@
  */
 
 import { db as knex } from '../db/index.js';
-const logger = require('../utils/logger');
-const configCacheService = require('../cache/config-cache');
-const { v4: uuidv4 } = require('uuid');
+import logger from '../utils/logger.js';
+import configCacheService from '../cache/config-cache.js';
+import { v4 as uuidv4 } from 'uuid';
 
 // Knex transaction type - flexible type to handle Knex transaction objects
 type KnexTransaction = unknown;
@@ -1336,6 +1336,126 @@ class PromptTemplateService {
   private async invalidateCache(): Promise<void> {
     await configCacheService.invalidate(this.CACHE_SCOPE);
   }
+
+  // ========== AI Architect 专用方法 ==========
+
+  /**
+   * 获取 AI Architect 系统提示词（带动态节点类型文档）
+   */
+  async getArchitectSystemPrompt(): Promise<string> {
+    try {
+      const systemTemplate = await this.getTemplate('ai_architect_system');
+      const fewShotTemplate = await this.getTemplate('ai_architect_few_shot');
+
+      if (!systemTemplate || !fewShotTemplate) {
+        throw new Error('AI Architect 系统提示词模板未初始化');
+      }
+
+      // 动态注入节点类型文档 - 导入 protocolAnalyzer
+      const { default: protocolAnalyzer } = await import('./protocolAnalyzer.service.js');
+      const nodeDocs = await protocolAnalyzer.generateNodeTypeDocumentation();
+      const supportedTypes = await protocolAnalyzer.getSupportedNodeTypes();
+
+      const variables = {
+        NODE_TYPE_DOCUMENTATION: nodeDocs,
+        SUPPORTED_NODE_TYPES: supportedTypes.join(', ')
+      };
+
+      const systemPrompt = this.replaceVariablesInText(systemTemplate.template, variables);
+      const fewShot = this.replaceVariablesInText(fewShotTemplate.template, variables);
+
+      return `${systemPrompt}\n\n${fewShot}`;
+    } catch (error) {
+      logger.error('[PromptTemplate] 获取 AI Architect 系统提示词失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取修改 Pipeline 的提示词
+   */
+  async getArchitectModifyPrompt(): Promise<string> {
+    try {
+      const template = await this.getTemplate('ai_architect_modify');
+      if (!template) {
+        throw new Error('AI Architect 修改提示词模板未初始化');
+      }
+      return template.template;
+    } catch (error) {
+      logger.error('[PromptTemplate] 获取修改提示词失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 生成错误反馈提示词（用于 Auto-Fix 循环）
+   */
+  async generateErrorFeedback(errorMessage: string): Promise<string> {
+    try {
+      const template = await this.getTemplate('ai_architect_error_feedback');
+      if (!template) {
+        throw new Error('AI Architect 错误反馈模板未初始化');
+      }
+
+      const { default: protocolAnalyzer } = await import('./protocolAnalyzer.service.js');
+      const supportedTypes = await protocolAnalyzer.getSupportedNodeTypes();
+
+      const variables = {
+        ERROR_MESSAGE: errorMessage,
+        SUPPORTED_NODE_TYPES: supportedTypes.join(', ')
+      };
+
+      return this.replaceVariablesInText(template.template, variables);
+    } catch (error) {
+      logger.error('[PromptTemplate] 生成错误反馈失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 刷新 Protocol 文档（当 Protocol 更新时调用）
+   */
+  async refreshProtocolDocumentation(userId: string): Promise<void> {
+    try {
+      logger.info('[PromptTemplate] 刷新 Protocol 文档...');
+
+      // 重新分析 Protocol
+      const { default: protocolAnalyzer } = await import('./protocolAnalyzer.service.js');
+      await protocolAnalyzer.getAnalysis();
+
+      // 更新系统提示词的元数据
+      const systemTemplate = await this.getTemplate('ai_architect_system');
+      if (systemTemplate && systemTemplate.metadata) {
+        const metadata = typeof systemTemplate.metadata === 'string'
+          ? JSON.parse(systemTemplate.metadata)
+          : systemTemplate.metadata;
+        (metadata as any).last_protocol_sync = new Date().toISOString();
+
+        await this.updateTemplate(
+          systemTemplate.id,
+          { metadata: metadata as any },
+          userId
+        );
+      }
+
+      logger.info('[PromptTemplate] Protocol 文档刷新成功');
+    } catch (error) {
+      logger.error('[PromptTemplate] 刷新 Protocol 文档失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 替换文本中的变量
+   */
+  private replaceVariablesInText(text: string, variables: Record<string, string>): string {
+    let result = text;
+    for (const [key, value] of Object.entries(variables)) {
+      const placeholder = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+      result = result.replace(placeholder, value);
+    }
+    return result;
+  }
 }
 
 const promptTemplateService = new PromptTemplateService();
@@ -1356,5 +1476,11 @@ export const rollbackTemplate = promptTemplateService.rollbackTemplate.bind(prom
 export const previewTemplate = promptTemplateService.previewTemplate.bind(promptTemplateService);
 export const rateTemplate = promptTemplateService.rateTemplate.bind(promptTemplateService);
 export const deleteTemplate = promptTemplateService.deleteTemplate.bind(promptTemplateService);
+
+// AI Architect 专用方法
+export const getArchitectSystemPrompt = promptTemplateService.getArchitectSystemPrompt.bind(promptTemplateService);
+export const getArchitectModifyPrompt = promptTemplateService.getArchitectModifyPrompt.bind(promptTemplateService);
+export const generateErrorFeedback = promptTemplateService.generateErrorFeedback.bind(promptTemplateService);
+export const refreshProtocolDocumentation = promptTemplateService.refreshProtocolDocumentation.bind(promptTemplateService);
 
 export default promptTemplateService;

@@ -32,6 +32,12 @@ export enum NodeType {
   LOOP = 'LOOP',
   PARALLEL = 'PARALLEL',
 
+  // 智能 Agent
+  AGENT = 'AGENT',
+
+  // 外部集成
+  HTTP_API = 'HTTP_API',
+
   // 输入输出
   INPUT = 'INPUT',
   OUTPUT = 'OUTPUT'

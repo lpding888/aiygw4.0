@@ -14,6 +14,7 @@ import crypto from 'crypto';
 import { db } from '../config/database.js';
 import tokenService, { TokenPair, UserForToken } from './token.service.js';
 import logger from '../utils/logger.js';
+import smsService from './sms.service.js';
 import * as userRepo from '../repositories/users.repo.js';
 import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
@@ -179,14 +180,7 @@ class AuthService implements AuthProvider {
    * 艹，生产环境要对接腾讯云短信！
    */
   private async sendSMS(phone: string, code: string): Promise<void> {
-    // 开发环境直接打印
-    if (process.env.NODE_ENV !== 'production') {
-      logger.info(`[SMS] 发送验证码到 ${phone}: ${code}`);
-      return;
-    }
-
-    // TODO: 生产环境对接腾讯云短信服务
-    logger.info(`[SMS] 发送验证码到 ${phone}: ${code}`);
+    await smsService.sendVerificationCode(phone, code);
   }
 
   /**
@@ -224,8 +218,14 @@ class AuthService implements AuthProvider {
 
         // 如果有推荐人，绑定推荐关系
         if (referrerId) {
-          // TODO: 调用distribution service绑定推荐关系
-          logger.info(`[AuthService] 推荐关系绑定尝试: referrerId=${referrerId}, userId=${userId}`);
+          try {
+            const distributionService = (await import('./distribution.service.js')).default;
+            await distributionService.bindReferralRelationship(trx, referrerId, userId);
+            logger.info(`[AuthService] 推荐关系绑定成功: referrerId=${referrerId}, userId=${userId}`);
+          } catch (bindError) {
+            // 推荐关系绑定失败不应阻止用户注册
+            logger.warn(`[AuthService] 推荐关系绑定失败,但用户注册继续: referrerId=${referrerId}, userId=${userId}`, bindError);
+          }
         }
 
         logger.info(
